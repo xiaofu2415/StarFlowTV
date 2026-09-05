@@ -6,6 +6,7 @@ public enum PlaybackEvent {
     HTTP_403,
     HTTP_404,
     HTTP_410,
+    PLAYBACK_ERROR,
     PLAYBACK_STARTED,
     PROBE_SUCCESS
 }

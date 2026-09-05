@@ -30,6 +30,17 @@ public final class FailoverPolicyTest {
     }
 
     @Test
+    public void repeatStallWithinFiveMinutesFailsOverEvenAfterPlaybackRecovered() {
+        FailoverState state = new FailoverState(4);
+        assertEquals(FailoverDecision.RETRY_CURRENT,
+                policy.onEvent(PlaybackEvent.NO_DATA_8_SECONDS, state, 1_000L));
+        policy.onEvent(PlaybackEvent.PLAYBACK_STARTED, state, 2_000L);
+
+        assertEquals(FailoverDecision.TRY_NEXT,
+                policy.onEvent(PlaybackEvent.NO_DATA_8_SECONDS, state, 4 * 60_000L));
+    }
+
+    @Test
     public void terminalHttpErrorsFailOverImmediately() {
         for (PlaybackEvent event : new PlaybackEvent[]{
                 PlaybackEvent.HTTP_403, PlaybackEvent.HTTP_404, PlaybackEvent.HTTP_410}) {

@@ -9,6 +9,7 @@ import android.animation.IntEvaluator;
 import android.animation.ObjectAnimator;
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.CountDownTimer;
@@ -46,6 +47,8 @@ import com.github.tvbox.osc.bean.LiveEpgDate;
 import com.github.tvbox.osc.bean.LivePlayerManager;
 import com.github.tvbox.osc.bean.LiveSettingGroup;
 import com.github.tvbox.osc.bean.LiveSettingItem;
+import com.github.tvbox.osc.navigation.LiveKeyAction;
+import com.github.tvbox.osc.navigation.LiveKeyMapper;
 import com.github.tvbox.osc.player.controller.LiveController;
 import com.github.tvbox.osc.ui.adapter.LiveChannelGroupAdapter;
 import com.github.tvbox.osc.ui.adapter.LiveChannelItemAdapter;
@@ -248,6 +251,9 @@ public class LivePlayActivity extends BaseActivity {
     // 遥控器数字键输入的要切换的频道号码
     private int selectedChannelNumber = 0;
     private TextView tvSelectedChannel;
+    private TextView vodEntry;
+    private final LiveKeyMapper liveKeyMapper = new LiveKeyMapper();
+    private boolean longPressHandled = false;
 
 
     @Override
@@ -328,6 +334,8 @@ public class LivePlayActivity extends BaseActivity {
         iv_play = findViewById(R.id.iv_play);
 
         tvSelectedChannel = findViewById(R.id.tv_selected_channel);
+        vodEntry = findViewById(R.id.starflow_vod_entry);
+        vodEntry.setOnClickListener(view -> openVodHome());
 
         if(show){
             backcontroller.setVisibility(View.VISIBLE);
@@ -1223,6 +1231,7 @@ public class LivePlayActivity extends BaseActivity {
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         int keyCode = event.getKeyCode();
+        boolean menuVisible = isListOrSettingLayoutVisible();
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
             if (tvLeftChannelListLayout.getVisibility() == View.VISIBLE) {
                 if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && isFocusInView(mChannelGroupView)) {
@@ -1242,68 +1251,91 @@ public class LivePlayActivity extends BaseActivity {
                     return true;
                 }
             }
-            if (keyCode == KeyEvent.KEYCODE_MENU || keyCode == KeyEvent.KEYCODE_INFO || keyCode == KeyEvent.KEYCODE_HELP) {
-                showSettingGroup();
-            } else if (!isListOrSettingLayoutVisible()) {
-                switch (keyCode) {
-                    case KeyEvent.KEYCODE_DPAD_UP:
-                        if (Hawk.get(HawkConfig.LIVE_CHANNEL_REVERSE, false))
-                            playNext();
-                        else
-                            playPrevious();
-                        break;
-                    case KeyEvent.KEYCODE_DPAD_DOWN:
-                        if (Hawk.get(HawkConfig.LIVE_CHANNEL_REVERSE, false))
-                            playPrevious();
-                        else
-                            playNext();
-                        break;
-                    case KeyEvent.KEYCODE_DPAD_LEFT:
-                        if(isBack){
-                            showProgressBars(true);
-                        }else{
-                            playPreSource();
-                        }
-                        break;
-                    case KeyEvent.KEYCODE_DPAD_RIGHT:
-                        if(isBack){
-                            showProgressBars(true);
-                        }else{
-                            playNextSource();
-                        }
-                        break;
-                    case KeyEvent.KEYCODE_DPAD_CENTER:
-                    case KeyEvent.KEYCODE_ENTER:
-                    case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
-                        break;
-                    default:
-                        if (keyCode >= KeyEvent.KEYCODE_0 && keyCode <= KeyEvent.KEYCODE_9) {
-                            keyCode -= KeyEvent.KEYCODE_0;
-                        } else if ( keyCode >= KeyEvent.KEYCODE_NUMPAD_0 && keyCode <= KeyEvent.KEYCODE_NUMPAD_9) {
-                            keyCode -= KeyEvent.KEYCODE_NUMPAD_0;
-                        } else {
-                            break;
-                        }
-                        numericKeyDown(keyCode);
+            if (!menuVisible) {
+                if (keyCode >= KeyEvent.KEYCODE_0 && keyCode <= KeyEvent.KEYCODE_9) {
+                    numericKeyDown(keyCode - KeyEvent.KEYCODE_0);
+                    return true;
+                }
+                if (keyCode >= KeyEvent.KEYCODE_NUMPAD_0 && keyCode <= KeyEvent.KEYCODE_NUMPAD_9) {
+                    numericKeyDown(keyCode - KeyEvent.KEYCODE_NUMPAD_0);
+                    return true;
+                }
+                LiveKeyAction action = liveKeyMapper.map(keyCode, false);
+                if (action != LiveKeyAction.OPEN_CHANNELS && handleLiveKeyAction(action)) {
+                    return true;
                 }
             }
         } else if (event.getAction() == KeyEvent.ACTION_UP) {
-            if (!isListOrSettingLayoutVisible()) {
-                if ((keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) && event.getRepeatCount() == 0) {
-                    showChannelList();
+            boolean isConfirm = keyCode == KeyEvent.KEYCODE_DPAD_CENTER
+                    || keyCode == KeyEvent.KEYCODE_ENTER
+                    || keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE;
+            if (isConfirm) {
+                cancelLongPress();
+                if (longPressHandled) {
+                    longPressHandled = false;
+                    return true;
                 }
+            }
+            if (!menuVisible && event.getRepeatCount() == 0
+                    && handleLiveKeyAction(liveKeyMapper.map(keyCode, false))) {
+                return true;
             }
         }
         return super.dispatchKeyEvent(event);
     }
 
+    private boolean handleLiveKeyAction(LiveKeyAction action) {
+        switch (action) {
+            case CHANNEL_PREVIOUS:
+                if (Hawk.get(HawkConfig.LIVE_CHANNEL_REVERSE, false)) playNext();
+                else playPrevious();
+                return true;
+            case CHANNEL_NEXT:
+                if (Hawk.get(HawkConfig.LIVE_CHANNEL_REVERSE, false)) playPrevious();
+                else playNext();
+                return true;
+            case LINE_PREVIOUS:
+                if (isBack) showProgressBars(true);
+                else playPreSource();
+                return true;
+            case LINE_NEXT:
+                if (isBack) showProgressBars(true);
+                else playNextSource();
+                return true;
+            case OPEN_CHANNELS:
+                showChannelList();
+                return true;
+            case OPEN_SETTINGS:
+                showSettingGroup();
+                return true;
+            case OPEN_VOD:
+                openVodHome();
+                return true;
+            case BACK:
+                onBackPressed();
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private void openVodHome() {
+        Intent intent = new Intent(this, HomeActivity.class);
+        intent.putExtra(HomeActivity.EXTRA_RECOVERY_MODE, true);
+        startActivity(intent);
+    }
+
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if ((keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) && event.getRepeatCount() == 0) {
+        if (!isListOrSettingLayoutVisible()
+                && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+                && event.getRepeatCount() == 0) {
             mLongPressRunnable = new Runnable() {
                 @Override
                 public void run() {
-                    showSettingGroup(); //实现长按调出菜单
+                    mLongPressRunnable = null;
+                    longPressHandled = true;
+                    openVodHome();
                 }
             };
             mmHandler.postDelayed(mLongPressRunnable, LONG_PRESS_DELAY);
@@ -1314,12 +1346,16 @@ public class LivePlayActivity extends BaseActivity {
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) {
-            if (mLongPressRunnable != null) {
-                mmHandler.removeCallbacks(mLongPressRunnable);
-                mLongPressRunnable = null;
-            }
+            cancelLongPress();
         }
         return super.onKeyUp(keyCode, event);
+    }
+
+    private void cancelLongPress() {
+        if (mLongPressRunnable != null) {
+            mmHandler.removeCallbacks(mLongPressRunnable);
+            mLongPressRunnable = null;
+        }
     }
 
     @Override

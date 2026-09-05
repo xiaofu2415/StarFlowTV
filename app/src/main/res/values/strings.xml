@@ -2,6 +2,8 @@
     <!--  app名称   -->
     <string name="app_name">星流电视</string>
     <string name="starflow_vod_entry">影视 · 长按确定键</string>
+    <string name="live_source_exhausted">线路暂不可用，已请求更新配置</string>
+    <string name="live_source_locked_failure">当前线路已锁定，请手动切换线路</string>
     <string name="_00_00_00_00">00:00 | 00:00</string>
     <string name="_1024_x_768">[ 1024 x 768 ]</string>
     <string name="http">http://</string>

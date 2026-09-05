@@ -4,7 +4,7 @@ android {
     compileSdkVersion 33
 
     defaultConfig {
-        applicationId 'com.github.tvbox.osc.jun'
+        applicationId 'tv.starflow.player'
         targetSdkVersion 28
         versionCode 1
         versionName '1.0.0'
@@ -26,7 +26,7 @@ android {
     productFlavors {
         java {
             dimension "mode"
-            minSdkVersion 19
+            minSdkVersion 23
             ndk {
                 //noinspection ChromeOsAbiSupport
                 abiFilters 'armeabi-v7a', 'arm64-v8a'
@@ -35,7 +35,7 @@ android {
         }
         java32 {
             dimension "mode"
-            minSdkVersion 19
+            minSdkVersion 23
             ndk {
                 //noinspection ChromeOsAbiSupport
                 abiFilters 'armeabi-v7a'
@@ -44,7 +44,7 @@ android {
         }
         java64 {
             dimension "mode"
-            minSdkVersion 21
+            minSdkVersion 23
             ndk {
                 abiFilters 'arm64-v8a'
             }
@@ -52,7 +52,7 @@ android {
         }
         python {
             dimension "mode"
-            minSdkVersion 19
+            minSdkVersion 23
             ndk {
                 //noinspection ChromeOsAbiSupport
                 abiFilters 'armeabi-v7a', 'arm64-v8a'
@@ -61,7 +61,7 @@ android {
         }
         python32 {
             dimension "mode"
-            minSdkVersion 19
+            minSdkVersion 23
             ndk {
                 //noinspection ChromeOsAbiSupport
                 abiFilters 'armeabi-v7a'
@@ -70,7 +70,7 @@ android {
         }
         python64 {
             dimension "mode"
-            minSdkVersion 21
+            minSdkVersion 23
             ndk {
                 abiFilters 'arm64-v8a'
             }
@@ -116,7 +116,7 @@ android {
         variant.outputs.configureEach { output ->
             def flavorNames = variant.productFlavors.collect { it.name }.join('-')
             // 构建自定义文件名
-            def fileName = "TVBox_${variant.buildType.name}-${flavorNames}.apk"
+            def fileName = "StarFlowTV-${variant.versionName}-${flavorNames}-${variant.buildType.name}.apk"
             outputFileName = fileName
         }
     }

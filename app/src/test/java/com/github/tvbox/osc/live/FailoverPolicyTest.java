@@ -39,6 +39,12 @@ public final class FailoverPolicyTest {
     }
 
     @Test
+    public void genericPlaybackErrorFailsOverImmediately() {
+        assertEquals(FailoverDecision.TRY_NEXT,
+                policy.onEvent(PlaybackEvent.PLAYBACK_ERROR, new FailoverState(4), 1_000L));
+    }
+
+    @Test
     public void threeFailuresInThirtyMinutesOpenCircuitForTwoHours() {
         FailoverState state = new FailoverState(4);
         policy.onEvent(PlaybackEvent.HTTP_404, state, 1_000L);

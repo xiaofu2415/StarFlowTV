@@ -1,3690 +1,3 @@
-package com.github.tvbox.osc.ui.activity;
-
-import static xyz.doikki.videoplayer.util.PlayerUtils.safeTimeMs;
-
-import android.Manifest;
-import android.animation.Animator;
-import android.animation.AnimatorListenerAdapter;
-import android.animation.IntEvaluator;
-import android.animation.ObjectAnimator;
-import android.annotation.SuppressLint;
-import android.content.Context;
-import android.content.Intent;
-import android.graphics.Bitmap;
-import android.net.Uri;
-import android.os.CountDownTimer;
-import android.os.Handler;
-import android.text.TextUtils;
-import android.util.Base64;
-import android.view.Gravity;
-import android.view.KeyEvent;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.FrameLayout;
-import android.widget.ImageView;
-import android.widget.LinearLayout;
-import android.widget.RelativeLayout;
-import android.widget.SeekBar;
-import android.widget.TextView;
-import android.widget.Toast;
-
-import androidx.annotation.NonNull;
-import androidx.core.content.ContextCompat;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
-
-import com.chad.library.adapter.base.BaseQuickAdapter;
-import com.github.catvod.crawler.Spider;
-import com.github.tvbox.osc.R;
-import com.github.tvbox.osc.api.ApiConfig;
-import com.github.tvbox.osc.base.App;
-import com.github.tvbox.osc.base.BaseActivity;
-import com.github.tvbox.osc.bean.Epginfo;
-import com.github.tvbox.osc.bean.LiveChannelGroup;
-import com.github.tvbox.osc.bean.LiveChannelItem;
-import com.github.tvbox.osc.bean.LiveDayListGroup;
-import com.github.tvbox.osc.bean.LiveEpgDate;
-import com.github.tvbox.osc.bean.LivePlayerManager;
-import com.github.tvbox.osc.bean.LiveSettingGroup;
-import com.github.tvbox.osc.bean.LiveSettingItem;
-import com.github.tvbox.osc.live.FailoverDecision;
-import com.github.tvbox.osc.live.FailoverPolicy;
-import com.github.tvbox.osc.live.FailoverState;
-import com.github.tvbox.osc.live.PlaybackEvent;
-import com.github.tvbox.osc.navigation.LiveKeyAction;
-import com.github.tvbox.osc.navigation.LiveKeyMapper;
-import com.github.tvbox.osc.player.controller.LiveController;
-import com.github.tvbox.osc.ui.adapter.LiveChannelGroupAdapter;
-import com.github.tvbox.osc.ui.adapter.LiveChannelItemAdapter;
-import com.github.tvbox.osc.ui.adapter.LiveEpgAdapter;
-import com.github.tvbox.osc.ui.adapter.LiveEpgDateAdapter;
-import com.github.tvbox.osc.ui.adapter.LiveSettingGroupAdapter;
-import com.github.tvbox.osc.ui.adapter.LiveSettingItemAdapter;
-import com.github.tvbox.osc.ui.adapter.MyEpgAdapter;
-import com.github.tvbox.osc.ui.dialog.LivePasswordDialog;
-import com.github.tvbox.osc.ui.tv.widget.ViewObj;
-import com.github.tvbox.osc.util.DefaultConfig;
-import com.github.tvbox.osc.util.EpgUtil;
-import com.github.tvbox.osc.util.FastClickCheckUtil;
-import com.github.tvbox.osc.util.HawkConfig;
-import com.github.tvbox.osc.util.LOG;
-import com.github.tvbox.osc.util.OkGoHelper;
-import com.github.tvbox.osc.util.PlayerHelper;
-import com.github.tvbox.osc.util.HistoryHelper;
-import com.github.tvbox.osc.util.live.TxtSubscribe;
-import com.google.gson.JsonArray;
-import org.apache.commons.lang3.StringUtils;
-
-import com.google.gson.JsonObject;
-import com.lzy.okgo.OkGo;
-import com.lzy.okgo.callback.AbsCallback;
-import com.lzy.okgo.model.Response;
-import com.orhanobut.hawk.Hawk;
-import com.owen.tvrecyclerview.widget.TvRecyclerView;
-import com.owen.tvrecyclerview.widget.V7LinearLayoutManager;
-
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
-import org.xml.sax.InputSource;
-
-import java.io.IOException;
-import java.io.StringReader;
-import java.net.URLEncoder;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Hashtable;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.TimeZone;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-
-import xyz.doikki.videoplayer.exo.ExoMediaSourceHelper;
-import xyz.doikki.videoplayer.player.VideoView;
-
-/**
- * @author pj567
- * @date :2021/1/12
- * @description:
- */
-public class LivePlayActivity extends BaseActivity {
-    public static Context context;
-    private VideoView<xyz.doikki.videoplayer.player.AbstractPlayer> mVideoView;
-    private View switchChannelSnapshotOverlay;
-    private ImageView switchChannelSnapshotImage;
-    private TextView tvChannelInfo;
-    private TextView tvTime;
-    private TextView tvNetSpeed;
-    private TextView tvResolution;
-    private LinearLayout tvLeftChannelListLayout;
-    private TvRecyclerView mChannelGroupView;
-    private TvRecyclerView mLiveChannelView;
-    private LiveChannelGroupAdapter liveChannelGroupAdapter;
-    private LiveChannelItemAdapter liveChannelItemAdapter;
-
-    private LinearLayout tvRightSettingLayout;
-    private TvRecyclerView mSettingGroupView;
-    private TvRecyclerView mSettingItemView;
-    private LiveSettingGroupAdapter liveSettingGroupAdapter;
-    private LiveSettingItemAdapter liveSettingItemAdapter;
-    private List<LiveSettingGroup> liveSettingGroupList = new ArrayList<>();
-
-    public static  int currentChannelGroupIndex = 0;
-    private Handler mHandler = new Handler();
-    private int resolutionInfoRetryCount = 0;
-    private boolean resolutionInfoPending = false;
-    private boolean exitingLivePlay = false;
-    private static final long EPG_LOAD_DELAY = 1200L;
-    private static final int RESOLUTION_INFO_MAX_RETRY = 10;
-    private static final long RESOLUTION_INFO_RETRY_DELAY = 300L;
-    private static final long RESOLUTION_INFO_HIDE_DELAY = 3000L;
-    private static final String DEFAULT_EPG_ADDRESS = "http://epg.51zmt.top:8000/api/diyp/?ch={name}&date={date}";
-    private static final Pattern CATCHUP_TOKEN_PATTERN = Pattern.compile("(\\$?\\{[^}]*\\})");
-    private static final Pattern CATCHUP_TAG_PATTERN = Pattern.compile("\\{([^}]*)\\}");
-    private final Runnable mLoadEpgRun = new Runnable() {
-        @Override
-        public void run() {
-            if (channel_Name != null && liveEpgDateAdapter != null && liveEpgDateAdapter.getSelectedIndex() >= 0) {
-                getEpg(new Date());
-            }
-        }
-    };
-    private boolean firstLiveEpgLoad = true;
-
-    private List<LiveChannelGroup> liveChannelGroupList = new ArrayList<>();
-    private int currentLiveChannelIndex = -1;
-    private int currentLiveLookBackIndex = -1;
-    private int currentLiveChangeSourceTimes = 0;
-    private boolean allowLiveSwitchPlayer = true;
-    private LiveChannelItem currentLiveChannelItem = null;
-    private String pendingLiveRefreshChannelName = null;
-    private int pendingLiveRefreshSourceIndex = -1;
-    private boolean refreshingLiveChannelList = false;
-    private int liveConfigRequestId = 0;
-    private final FailoverPolicy failoverPolicy = new FailoverPolicy();
-    private FailoverState failoverState = new FailoverState(0);
-    private PlaybackEvent pendingFailoverEvent = PlaybackEvent.PLAYBACK_ERROR;
-    private boolean currentPlaybackStarted = false;
-    private LivePlayerManager livePlayerManager = new LivePlayerManager();
-    private ArrayList<Integer> channelGroupPasswordConfirmed = new ArrayList<>();
-
-//EPG   by é¾
-    private static LiveChannelItem  channel_Name = null;
-    private static Hashtable<String, ArrayList<Epginfo>> hsEpg = new Hashtable<>();
-    private CountDownTimer countDownTimer;
-//    private CountDownTimer countDownTimerRightTop;
-    private View ll_right_top_loading;
-    private View ll_right_top_huikan;
-    private View divLoadEpg;
-    private View divLoadEpgDivider;
-    private View divLoadEpgleft;
-    private LinearLayout divEpg;
-    RelativeLayout ll_epg;
-    TextView tv_channelnum;
-    TextView tip_chname;
-    TextView tip_epg1;
-    TextView  tip_epg2;
-    TextView tv_srcinfo;
-    TextView tv_curepg_left;
-    TextView tv_nextepg_left;
-    private MyEpgAdapter myAdapter;
-    private TextView tv_right_top_tipnetspeed;
-    private TextView tv_right_top_channel_name;
-    private TextView tv_right_top_epg_name;
-    private TextView tv_right_top_type;
-    private ImageView iv_circle_bg;
-    private TextView tv_shownum ;
-    private TextView txtNoEpg ;
-    private ImageView iv_back_bg;
-
-    private ObjectAnimator objectAnimator;
-    public String epgStringAddress ="";
-
-    private TvRecyclerView mEpgDateGridView;
-    private TvRecyclerView mRightEpgList;
-    private LiveEpgDateAdapter liveEpgDateAdapter;
-    private LiveEpgAdapter epgListAdapter;
-
-    private List<LiveDayListGroup> liveDayList = new ArrayList<>();
-
-
-    //laodao 7day replay
-    public static SimpleDateFormat formatDate = new SimpleDateFormat("yyyy-MM-dd");
-    public static SimpleDateFormat formatDate1 = new SimpleDateFormat("MM-dd");
-    public static String day = formatDate.format(new Date());
-    public static Date nowday = new Date();
-
-    private boolean isSHIYI = false;
-    private boolean isBack = false;
-    private static int shiyi_time_c;//æ—¶ç§»æ—¶é—´å·®å€¼
-    public static String playUrl;
-    //kenson
-    private ImageView imgLiveIcon;
-    private FrameLayout liveIconNullBg;
-    private TextView liveIconNullText;
-    SimpleDateFormat timeFormat = new SimpleDateFormat("yyyy-MM-dd");
-    private View backcontroller;
-    private CountDownTimer countDownTimer3;
-    private final int videoWidth = 1920;
-    private final int videoHeight = 1080;
-    private TextView tv_currentpos;
-    private TextView tv_duration;
-    private SeekBar sBar;
-    private View iv_playpause;
-    private View iv_play;
-    private  boolean show = false;
-    private static final int postTimeout = 6000;
-
-    // é¥æ§å™¨æ•°å­—é”®è¾“å…¥çš„è¦åˆ‡æ¢çš„é¢‘é“å·ç 
-    private int selectedChannelNumber = 0;
-    private TextView tvSelectedChannel;
-    private TextView vodEntry;
-    private final LiveKeyMapper liveKeyMapper = new LiveKeyMapper();
-    private boolean longPressHandled = false;
-
-
-    @Override
-    protected int getLayoutResID() {
-        return R.layout.activity_live_play;
-    }
-
-    @Override
-    protected void init() {
-        context = this;
-        epgStringAddress = getConfiguredEpgAddress();
-
-        setLoadSir(findViewById(R.id.live_root));
-        mVideoView = findViewById(R.id.mVideoView);
-        switchChannelSnapshotOverlay = findViewById(R.id.switchChannelSnapshotOverlay);
-        switchChannelSnapshotImage = findViewById(R.id.switchChannelSnapshotImage);
-
-        tvLeftChannelListLayout = findViewById(R.id.tvLeftChannnelListLayout);
-        mChannelGroupView = findViewById(R.id.mGroupGridView);
-        mLiveChannelView = findViewById(R.id.mChannelGridView);
-        tvRightSettingLayout = findViewById(R.id.tvRightSettingLayout);
-        mSettingGroupView = findViewById(R.id.mSettingGroupView);
-        mSettingItemView = findViewById(R.id.mSettingItemView);
-        tvChannelInfo = findViewById(R.id.tvChannel);
-        tvTime = findViewById(R.id.tvTime);
-        tvNetSpeed = findViewById(R.id.tvNetSpeed);
-        tvResolution = findViewById(R.id.tvResolution);
-
-        //EPG  findViewById  by é¾
-        tip_chname = (TextView)  findViewById(R.id.tv_channel_bar_name);//åº•éƒ¨åç§°
-        tv_channelnum = (TextView) findViewById(R.id.tv_channel_bottom_number); //åº•éƒ¨æ•°å­—
-        tip_epg1 = (TextView) findViewById(R.id.tv_current_program_time);//åº•éƒ¨EPGå½“å‰èŠ‚ç›®ä¿¡æ¯
-        tip_epg2 = (TextView) findViewById(R.id.tv_next_program_time);//åº•éƒ¨EPGå½“ä¸‹ä¸ªèŠ‚ç›®ä¿¡æ¯
-        tv_srcinfo = (TextView) findViewById(R.id.tv_source);//çº¿è·¯çŠ¶æ€
-        tv_curepg_left = (TextView) findViewById(R.id.tv_current_program);//å½“å‰èŠ‚ç›®
-        tv_nextepg_left= (TextView) findViewById(R.id.tv_next_program);//ä¸‹ä¸€èŠ‚ç›®
-        ll_epg = (RelativeLayout) findViewById(R.id.ll_epg);
-//        tv_right_top_tipnetspeed = (TextView)findViewById(R.id.tv_right_top_tipnetspeed);
-        tv_right_top_channel_name = (TextView)findViewById(R.id.tv_right_top_channel_name);
-        tv_right_top_epg_name = (TextView)findViewById(R.id.tv_right_top_epg_name);
-//        tv_right_top_type = (TextView)findViewById(R.id.tv_right_top_type);
-        iv_circle_bg = (ImageView) findViewById(R.id.iv_circle_bg);
-        iv_back_bg = (ImageView) findViewById(R.id.iv_back_bg);
-        tv_shownum = (TextView) findViewById(R.id.tv_shownum);
-        txtNoEpg = (TextView) findViewById(R.id.txtNoEpg);
-        ll_right_top_loading = findViewById(R.id.ll_right_top_loading);
-        ll_right_top_huikan = findViewById(R.id.ll_right_top_huikan);
-        divLoadEpg = (View) findViewById(R.id.divLoadEpg);
-        divLoadEpgDivider = findViewById(R.id.divLoadEpgDivider);
-        divLoadEpgleft = (View) findViewById(R.id.divLoadEpgleft);
-        divEpg = (LinearLayout) findViewById(R.id.divEPG);
-        //å³ä¸Šè§’å›¾ç‰‡æ—‹è½¬
-        objectAnimator = ObjectAnimator.ofFloat(iv_circle_bg,"rotation", 360.0f);
-        objectAnimator.setDuration(postTimeout);
-        objectAnimator.setRepeatCount(-1);
-        objectAnimator.start();
-
-        //laodao 7day replay
-        mEpgDateGridView = findViewById(R.id.mEpgDateGridView);
-        Hawk.put(HawkConfig.NOW_DATE, formatDate.format(new Date()));
-        day=formatDate.format(new Date());
-        nowday=new Date();
-
-        mRightEpgList = (TvRecyclerView) findViewById(R.id.lv_epg);
-        //EPGé¢‘é“åç§°
-        imgLiveIcon = findViewById(R.id.img_live_icon);
-        liveIconNullBg = findViewById(R.id.live_icon_null_bg);
-        liveIconNullText = findViewById(R.id.live_icon_null_text);
-        imgLiveIcon.setVisibility(View.INVISIBLE);
-        liveIconNullText.setVisibility(View.INVISIBLE);
-        liveIconNullBg.setVisibility(View.INVISIBLE);
-
-        sBar = (SeekBar) findViewById(R.id.pb_progressbar);
-        tv_currentpos = (TextView) findViewById(R.id.tv_currentpos);
-        backcontroller = (View) findViewById(R.id.backcontroller);
-        tv_duration = (TextView) findViewById(R.id.tv_duration);
-        iv_playpause = findViewById(R.id.iv_playpause);
-        iv_play = findViewById(R.id.iv_play);
-
-        tvSelectedChannel = findViewById(R.id.tv_selected_channel);
-        vodEntry = findViewById(R.id.starflow_vod_entry);
-        vodEntry.setOnClickListener(view -> openVodHome());
-
-        if(show){
-            backcontroller.setVisibility(View.VISIBLE);
-            ll_epg.setVisibility(View.GONE);
-
-        }else{
-            backcontroller.setVisibility(View.GONE);
-            ll_epg.setVisibility(View.VISIBLE);
-        }
-
-
-        iv_play.setOnClickListener(new View.OnClickListener() {
-
-            @Override
-            public void onClick(View arg0) {
-                mVideoView.start();
-                iv_play.setVisibility(View.INVISIBLE);
-                countDownTimer.start();
-                iv_playpause.setBackground(ContextCompat.getDrawable(LivePlayActivity.context, R.drawable.vod_pause));
-            }
-        });
-
-        iv_playpause.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View arg0) {
-                if(mVideoView.isPlaying()){
-                    mVideoView.pause();
-                    countDownTimer.cancel();
-                    iv_play.setVisibility(View.VISIBLE);
-                    iv_playpause.setBackground(ContextCompat.getDrawable(LivePlayActivity.context, R.drawable.icon_play));
-                }else{
-                    mVideoView.start();
-                    iv_play.setVisibility(View.INVISIBLE);
-                    countDownTimer.start();
-                    iv_playpause.setBackground(ContextCompat.getDrawable(LivePlayActivity.context, R.drawable.vod_pause));
-                }
-            }
-        });
-        sBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-
-
-            @Override
-            public void onStopTrackingTouch(SeekBar arg0) {
-
-            }
-
-            @Override
-            public void onStartTrackingTouch(SeekBar arg0) {
-
-            }
-
-            @Override
-            public void onProgressChanged(SeekBar sb, int progress, boolean fromuser) {
-                if (!fromuser) {
-                    return;
-                }
-                if(countDownTimer!=null){
-                    mVideoView.seekTo(progress);
-                    countDownTimer.cancel();
-                    countDownTimer.start();
-                }
-            }
-
-
-        });
-        sBar.setOnKeyListener(new View.OnKeyListener() {
-            @Override
-            public boolean onKey(View arg0, int keycode, KeyEvent event) {
-                if(event.getAction()==KeyEvent.ACTION_DOWN){
-                    if(keycode==KeyEvent.KEYCODE_DPAD_CENTER||keycode==KeyEvent.KEYCODE_ENTER){
-                        if(mVideoView.isPlaying()){
-                            mVideoView.pause();
-                            countDownTimer.cancel();
-                            iv_play.setVisibility(View.VISIBLE);
-                            iv_playpause.setBackground(ContextCompat.getDrawable(LivePlayActivity.context, R.drawable.icon_play));
-                        }else{
-                            mVideoView.start();
-                            iv_play.setVisibility(View.INVISIBLE);
-                            countDownTimer.start();
-                            iv_playpause.setBackground(ContextCompat.getDrawable(LivePlayActivity.context, R.drawable.vod_pause));
-                        }
-                    }
-                }
-                return false;
-            }
-        });
-        initEpgDateView();
-        initEpgListView();
-        initDayList();
-        initVideoView();
-        initChannelGroupView();
-        initLiveChannelView();
-        initSettingGroupView();
-        initSettingItemView();
-        initLiveChannelList();
-        initLiveSettingGroupList();
-        Hawk.put(HawkConfig.PLAYER_IS_LIVE,true);
-    }
-    //è·å–EPGå¹¶å­˜å‚¨ // ç™¾å·epg  DIYP epg   51zmt epg ------- è‡ªå»ºEPGæ ¼å¼è¾“å‡ºæ ¼å¼è¯·å‚è€ƒ 51zmt
-    private List<Epginfo> epgdata = new ArrayList<>();
-
-    private void showEpg(Date date, ArrayList<Epginfo> arrayList) {
-        boolean hasEpg = arrayList != null && arrayList.size() > 0;
-        updateEpgPanelState(hasEpg);
-        if (hasEpg) {
-            epgdata = arrayList;
-            epgListAdapter.CanBack(currentLiveChannelItem.getinclude_back());
-            epgListAdapter.setNewData(epgdata);
-            updateCurrentEpgSelectedIndex();
-        }
-    }
-
-    private int findCurrentEpgIndex(List<Epginfo> epgList) {
-        if (epgList == null || epgList.isEmpty()) return -1;
-        Date now = new Date();
-        for (int i = epgList.size() - 1; i >= 0; i--) {
-            Epginfo epgInfo = epgList.get(i);
-            if (epgInfo == null || epgInfo.startdateTime == null || epgInfo.enddateTime == null) {
-                continue;
-            }
-            Date endDateTime = epgInfo.enddateTime;
-            if (!endDateTime.after(epgInfo.startdateTime)) {
-                Calendar calendar = Calendar.getInstance();
-                calendar.setTime(endDateTime);
-                calendar.add(Calendar.DAY_OF_MONTH, 1);
-                endDateTime = calendar.getTime();
-            }
-            if (!now.before(epgInfo.startdateTime) && now.before(endDateTime)) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    private int getCurrentEpgIndexOrSelected() {
-        int epgIndex = findCurrentEpgIndex(epgListAdapter.getData());
-        if (epgIndex >= 0) return epgIndex;
-        epgIndex = epgListAdapter.getSelectedIndex();
-        if (epgIndex >= 0 && epgIndex < epgListAdapter.getData().size()) return epgIndex;
-        return 0;
-    }
-
-    private void updateCurrentEpgSelectedIndex() {
-        if (epgListAdapter == null || epgListAdapter.getData() == null || epgListAdapter.getData().isEmpty()) return;
-        int epgIndex = findCurrentEpgIndex(epgListAdapter.getData());
-        if (epgIndex >= 0) {
-            epgListAdapter.setSelectedEpgIndex(epgIndex);
-        }
-    }
-
-    private void syncCurrentEpgSelection(boolean focus) {
-        if (mRightEpgList == null || epgListAdapter == null || epgListAdapter.getData() == null || epgListAdapter.getData().isEmpty()) return;
-        int epgIndex = getCurrentEpgIndexOrSelected();
-        mRightEpgList.setSelectedPosition(epgIndex);
-        mRightEpgList.setSelection(epgIndex);
-        epgListAdapter.setSelectedEpgIndex(epgIndex);
-        if (focus) {
-            epgListAdapter.setFocusedEpgIndex(epgIndex);
-            focusEpgPosition(epgIndex);
-        } else {
-            mRightEpgList.post(new Runnable() {
-                @Override
-                public void run() {
-                    mRightEpgList.smoothScrollToPosition(epgIndex);
-                }
-            });
-        }
-    }
-
-    private void updateEpgPanelState(boolean hasEpg) {
-        if (hasEpg) {
-            txtNoEpg.setVisibility(View.GONE);
-            mRightEpgList.setVisibility(View.VISIBLE);
-            divLoadEpgDivider.setVisibility(View.VISIBLE);
-            if (divEpg.getVisibility() != View.VISIBLE) {
-                divLoadEpg.setVisibility(View.VISIBLE);
-                divLoadEpgleft.setVisibility(View.GONE);
-            }
-        } else {
-            epgdata = new ArrayList<>();
-            epgListAdapter.setNewData(epgdata);
-            txtNoEpg.setVisibility(View.GONE);
-            mRightEpgList.setVisibility(View.GONE);
-            divEpg.setVisibility(View.GONE);
-            divLoadEpg.setVisibility(View.GONE);
-            divLoadEpgDivider.setVisibility(View.GONE);
-            divLoadEpgleft.setVisibility(View.GONE);
-            mChannelGroupView.setVisibility(View.VISIBLE);
-        }
-    }
-
-    private String getFirstPartBeforeSpace(String str) {
-        if (str == null || str.isEmpty()) {
-            return str;
-        }
-        int spaceIndex = str.indexOf(' ');
-        if (spaceIndex == -1) {
-            return str;
-        } else {
-            return str.substring(0, spaceIndex);
-        }
-    }
-
-    public void getEpg(Date date) {
-        String channelName = channel_Name.getChannelName();
-        String channelNameReal = normalizeEpgChannelName(getFirstPartBeforeSpace(channelName));
-        @SuppressLint("SimpleDateFormat") SimpleDateFormat timeFormat = new SimpleDateFormat("yyyy-MM-dd");
-        timeFormat.setTimeZone(TimeZone.getTimeZone("GMT+8:00"));
-        String epgTagName = channelNameReal;
-        if (logoUrl==null || logoUrl.isEmpty()){
-            String[] epgInfo = EpgUtil.getEpgInfo(channelNameReal);
-            if (epgInfo != null && !epgInfo[1].isEmpty()) {
-                epgTagName = epgInfo[1];
-            }
-            updateChannelIcon(channelName, epgInfo == null ? null : epgInfo[0]);
-        }else if(logoUrl.equals("false")){
-            updateChannelIcon(channelName, null);
-        }else {
-            String logo= logoUrl.replace("{name}",epgTagName);
-            updateChannelIcon(channelName, logo);
-        }
-        final String finalEpgTagName = epgTagName;
-        epgListAdapter.CanBack(currentLiveChannelItem.getinclude_back());
-        if (!hasEpgAddress()) {
-            updateEpgPanelState(false);
-            return;
-        }
-        ArrayList<String> epgQueryNames = buildEpgQueryNames(channelName, channelNameReal, finalEpgTagName);
-        String url;
-        url = buildEpgUrl(epgStringAddress, epgQueryNames.get(0), date, timeFormat);
-
-        String savedEpgKey = channelName + "_" + Objects.requireNonNull(liveEpgDateAdapter.getItem(liveEpgDateAdapter.getSelectedIndex())).getDatePresented();
-        if (hsEpg.containsKey(savedEpgKey)){
-            showEpg(date, hsEpg.get(savedEpgKey));
-            showBottomEpg();
-            return;
-        }
-        updateEpgPanelState(false);
-        requestEpg(url, date, channelNameReal, finalEpgTagName, savedEpgKey, epgQueryNames, timeFormat, 0);
-    }
-
-    private String buildEpgUrl(String address, String epgTagName, Date date, SimpleDateFormat timeFormat) {
-        if (address.contains("{name}") || address.contains("{date}")) {
-            return address.replace("{name}", encodeEpgParam(epgTagName)).replace("{date}", timeFormat.format(date));
-        } else if(isXmlEpgAddress(address)){
-            return address;
-        }else {
-            return address + (address.contains("?") ? "&" : "?") + "ch=" + encodeEpgParam(epgTagName) + "&date=" + timeFormat.format(date);
-        }
-    }
-
-    private String encodeEpgParam(String value) {
-        try {
-            return URLEncoder.encode(value == null ? "" : value, "UTF-8").replace("+", "%20");
-        } catch (Exception e) {
-            return value == null ? "" : value;
-        }
-    }
-
-    private ArrayList<String> buildEpgQueryNames(String channelName, String channelNameReal, String epgTagName) {
-        ArrayList<String> queryNames = new ArrayList<>();
-        addEpgQueryName(queryNames, epgTagName);
-        addEpgQueryName(queryNames, channelNameReal);
-        addEpgQueryName(queryNames, normalizeEpgChannelName(getFirstPartBeforeSpace(channelName)));
-        addEpgQueryName(queryNames, getFirstPartBeforeSpace(channelName));
-        addEpgQueryName(queryNames, channelName);
-        if (queryNames.isEmpty()) {
-            queryNames.add("");
-        }
-        return queryNames;
-    }
-
-    private void addEpgQueryName(ArrayList<String> queryNames, String name) {
-        if (name == null) return;
-        String trimName = name.trim();
-        if (trimName.isEmpty() || queryNames.contains(trimName)) return;
-        queryNames.add(trimName);
-    }
-
-    private String getConfiguredEpgAddress() {
-        String userEpgAddress = Hawk.get(HawkConfig.EPG_URL, "");
-        if (userEpgAddress != null && userEpgAddress.trim().length() >= 5) {
-            return userEpgAddress.trim();
-        }
-        return DEFAULT_EPG_ADDRESS;
-    }
-
-    private boolean hasEpgAddress() {
-        return epgStringAddress != null && !epgStringAddress.trim().isEmpty();
-    }
-
-    private void requestEpg(String url, Date date, String channelNameReal, String finalEpgTagName, String savedEpgKey,
-                            ArrayList<String> epgQueryNames, SimpleDateFormat timeFormat, int queryIndex) {
-        okhttp3.OkHttpClient client = OkGoHelper.getDefaultClient();
-        if (client == null) client = com.github.catvod.net.OkHttp.client();
-        client.newCall(new okhttp3.Request.Builder().url(url).build()).enqueue(new okhttp3.Callback() {
-            @Override
-            public void onFailure(okhttp3.Call call, IOException e) {
-                mHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        onEpgRequestFailure(date, channelNameReal, finalEpgTagName, savedEpgKey, epgQueryNames, timeFormat, queryIndex);
-                    }
-                });
-            }
-
-            @Override
-            public void onResponse(okhttp3.Call call, okhttp3.Response response) throws IOException {
-                if (response.code() != 200) {
-                    response.close();
-                    mHandler.post(new Runnable() {
-                        @Override
-                        public void run() {
-                            onEpgRequestFailure(date, channelNameReal, finalEpgTagName, savedEpgKey, epgQueryNames, timeFormat, queryIndex);
-                        }
-                    });
-                    return;
-                }
-                final String body;
-                try {
-                    body = response.body() != null ? response.body().string() : "";
-                } finally {
-                    response.close();
-                }
-                mHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        onEpgRequestResponse(body, date, channelNameReal, finalEpgTagName, savedEpgKey, epgQueryNames, timeFormat, queryIndex);
-                    }
-                });
-            }
-        });
-    }
-
-    private void onEpgRequestFailure(Date date, String channelNameReal, String finalEpgTagName, String savedEpgKey,
-                                     ArrayList<String> epgQueryNames, SimpleDateFormat timeFormat, int queryIndex) {
-        if (!isCurrentEpgRequest(savedEpgKey)) return;
-        if (requestNextEpgQueryName(date, channelNameReal, finalEpgTagName, savedEpgKey, epgQueryNames, timeFormat, queryIndex)) {
-            return;
-        }
-        if (requestDefaultEpgOnFailure(date, channelNameReal, finalEpgTagName, savedEpgKey, epgQueryNames, timeFormat, queryIndex)) {
-            return;
-        }
-        updateEpgPanelState(false);
-//        showEpg(date, new ArrayList<>());
-//        showBottomEpg();
-    }
-
-    private void onEpgRequestResponse(String paramString, Date date, String channelNameReal, String finalEpgTagName,
-                                      String savedEpgKey, ArrayList<String> epgQueryNames, SimpleDateFormat timeFormat, int queryIndex) {
-        if (!isCurrentEpgRequest(savedEpgKey)) return;
-        if (paramString == null || paramString.trim().isEmpty()) {
-            updateEpgPanelState(false);
-            return;
-        }
-        LOG.i("echo-epgTagName:" + channelNameReal);
-        ArrayList<Epginfo> arrayList = new ArrayList<Epginfo>();
-        try {
-            if (isXmlEpgResponse(paramString)) {
-                arrayList = parseXmlEpg(paramString, finalEpgTagName, date);
-            } else if (paramString.contains("epg_data") || paramString.trim().startsWith("{")) {
-                arrayList = parseJsonEpg(paramString, date);
-            }
-
-        } catch (JSONException jSONException) {
-            jSONException.printStackTrace();
-        }
-        if (arrayList.isEmpty() && requestNextEpgQueryName(date, channelNameReal, finalEpgTagName, savedEpgKey, epgQueryNames, timeFormat, queryIndex)) {
-            return;
-        }
-        hsEpg.put(savedEpgKey, arrayList);
-        if (!isCurrentEpgRequest(savedEpgKey)) return;
-        showEpg(date, arrayList);
-        showBottomEpg();
-    }
-
-    private boolean requestDefaultEpgOnFailure(Date date, String channelNameReal, String finalEpgTagName, String savedEpgKey,
-                                               ArrayList<String> epgQueryNames, SimpleDateFormat timeFormat, int queryIndex) {
-        if (DEFAULT_EPG_ADDRESS.equals(epgStringAddress) || epgQueryNames == null || queryIndex >= epgQueryNames.size()) {
-            return false;
-        }
-        String fallbackUrl = buildEpgUrl(DEFAULT_EPG_ADDRESS, epgQueryNames.get(0), date, timeFormat);
-        LOG.i("echo-epg fallback default address");
-        requestEpg(fallbackUrl, date, channelNameReal, finalEpgTagName, savedEpgKey, epgQueryNames, timeFormat, epgQueryNames.size());
-        return true;
-    }
-
-    private boolean requestNextEpgQueryName(Date date, String channelNameReal, String finalEpgTagName, String savedEpgKey,
-                                            ArrayList<String> epgQueryNames, SimpleDateFormat timeFormat, int queryIndex) {
-        if (!isTemplateEpgAddress(epgStringAddress) || epgQueryNames == null || queryIndex + 1 >= epgQueryNames.size()) {
-            return false;
-        }
-        int nextIndex = queryIndex + 1;
-        String nextUrl = buildEpgUrl(epgStringAddress, epgQueryNames.get(nextIndex), date, timeFormat);
-        LOG.i("echo-epg retry query name:" + epgQueryNames.get(nextIndex));
-        requestEpg(nextUrl, date, channelNameReal, finalEpgTagName, savedEpgKey, epgQueryNames, timeFormat, nextIndex);
-        return true;
-    }
-
-    private boolean isTemplateEpgAddress(String address) {
-        return address != null && (address.contains("{name}") || address.contains("{date}"));
-    }
-
-    private boolean isCurrentEpgRequest(String savedEpgKey) {
-        if (channel_Name == null || liveEpgDateAdapter == null || liveEpgDateAdapter.getSelectedIndex() < 0) return false;
-        String currentEpgKey = channel_Name.getChannelName() + "_" + Objects.requireNonNull(liveEpgDateAdapter.getItem(liveEpgDateAdapter.getSelectedIndex())).getDatePresented();
-        return savedEpgKey.equals(currentEpgKey);
-    }
-
-    //æ˜¾ç¤ºåº•éƒ¨EPG
-    private boolean isXmlEpgAddress(String address) {
-        if (address == null) {
-            return false;
-        }
-        String lowerAddress = address.toLowerCase(Locale.ROOT);
-        int queryIndex = lowerAddress.indexOf("?");
-        if (queryIndex >= 0) {
-            lowerAddress = lowerAddress.substring(0, queryIndex);
-        }
-        return lowerAddress.endsWith(".xml");
-    }
-
-    private boolean isXmlEpgResponse(String response) {
-        if (response == null) {
-            return false;
-        }
-        String trimResponse = response.trim();
-        return trimResponse.startsWith("<?xml") || trimResponse.startsWith("<tv") || trimResponse.contains("<programme");
-    }
-
-    private ArrayList<Epginfo> parseJsonEpg(String response, Date date) throws JSONException {
-        ArrayList<Epginfo> epgList = new ArrayList<>();
-        JSONObject jsonObject = new JSONObject(response);
-        String channelName = jsonObject.optString("channel_name", jsonObject.optString("channel", ""));
-        if (isUnavailableEpgText(channelName)) {
-            return epgList;
-        }
-        JSONArray epgArray = findJsonEpgArray(jsonObject);
-        if (epgArray == null) {
-            return epgList;
-        }
-        for (int i = 0; i < epgArray.length(); i++) {
-            JSONObject item = epgArray.optJSONObject(i);
-            if (item == null) {
-                continue;
-            }
-            String title = cleanEpgTitle(item.optString("title", item.optString("name", "")));
-            if (TextUtils.isEmpty(title) || isUnavailableEpgText(title)) {
-                continue;
-            }
-            String startText = item.optString("start", item.optString("start_time", item.optString("starttime", "")));
-            String endText = item.optString("end", item.optString("end_time", item.optString("endtime", "")));
-            Date startDate = parseJsonEpgDate(date, startText);
-            Date endDate = parseJsonEpgDate(date, endText);
-            if (startDate == null || endDate == null) {
-                continue;
-            }
-            if (!endDate.after(startDate)) {
-                endDate = new Date(endDate.getTime() + TimeUnit.DAYS.toMillis(1));
-            }
-            epgList.add(createXmlEpgInfo(date, title, startDate, endDate, epgList.size()));
-        }
-        return epgList;
-    }
-
-    private JSONArray findJsonEpgArray(JSONObject jsonObject) {
-        JSONArray epgArray = jsonObject.optJSONArray("epg_data");
-        if (epgArray != null) return epgArray;
-        epgArray = jsonObject.optJSONArray("data");
-        if (epgArray != null) return epgArray;
-        epgArray = jsonObject.optJSONArray("list");
-        if (epgArray != null) return epgArray;
-        JSONObject dataObject = jsonObject.optJSONObject("data");
-        if (dataObject != null) {
-            epgArray = dataObject.optJSONArray("epg_data");
-            if (epgArray != null) return epgArray;
-            epgArray = dataObject.optJSONArray("list");
-        }
-        return epgArray;
-    }
-
-    private Date parseJsonEpgDate(Date date, String timeText) {
-        if (timeText == null || timeText.trim().isEmpty()) {
-            return null;
-        }
-        String trimText = timeText.trim();
-        String[] fullPatterns = new String[]{"yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd HH:mm"};
-        for (String pattern : fullPatterns) {
-            try {
-                SimpleDateFormat dateFormat = new SimpleDateFormat(pattern, Locale.getDefault());
-                dateFormat.setTimeZone(TimeZone.getTimeZone("GMT+8:00"));
-                return dateFormat.parse(trimText);
-            } catch (ParseException ignored) {
-            }
-        }
-        SimpleDateFormat dayFormat = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
-        dayFormat.setTimeZone(TimeZone.getTimeZone("GMT+8:00"));
-        String dayText = dayFormat.format(date);
-        String[] timePatterns = new String[]{"HH:mm:ss", "HH:mm"};
-        for (String pattern : timePatterns) {
-            try {
-                SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd " + pattern, Locale.getDefault());
-                dateFormat.setTimeZone(TimeZone.getTimeZone("GMT+8:00"));
-                return dateFormat.parse(dayText + " " + trimText);
-            } catch (ParseException ignored) {
-            }
-        }
-        return null;
-    }
-
-    private String cleanEpgTitle(String title) {
-        if (title == null) {
-            return "";
-        }
-        return title.replace(" --å…è´¹ä½¿ç”¨", "")
-                .replace("--å…è´¹ä½¿ç”¨", "")
-                .trim();
-    }
-
-    private boolean isUnavailableEpgText(String text) {
-        return text != null && (text.contains("æœªæä¾›") || text.contains("æš‚æ— "));
-    }
-
-    private String normalizeEpgChannelName(String channelName) {
-        if (channelName == null) {
-            return "";
-        }
-        String trimName = channelName.trim();
-        String compactName = trimName.replace("-", "").replace(" ", "");
-        Matcher cctvMatcher = Pattern.compile("(?i)^(CCTV\\d+(?:\\+|K)?)(?:[\\u4e00-\\u9fa5].*|$)").matcher(compactName);
-        if (cctvMatcher.matches()) {
-            return cctvMatcher.group(1).toUpperCase(Locale.ROOT);
-        }
-        if (compactName.toUpperCase(Locale.ROOT).startsWith("CCTV")) {
-            return compactName.toUpperCase(Locale.ROOT);
-        }
-        return trimName;
-    }
-
-    private ArrayList<Epginfo> parseXmlEpg(String xml, String channelName, Date date) {
-        ArrayList<Epginfo> epgList = new ArrayList<>();
-        try {
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            factory.setIgnoringComments(true);
-            factory.setCoalescing(true);
-            try {
-                factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
-                factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
-                factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
-            } catch (Exception ignored) {
-            }
-            DocumentBuilder builder = factory.newDocumentBuilder();
-            builder.setEntityResolver((publicId, systemId) -> new InputSource(new StringReader("")));
-            Document document = builder.parse(new InputSource(new StringReader(xml)));
-            document.getDocumentElement().normalize();
-
-            String targetName = normalizeEpgChannelName(channelName);
-            ArrayList<String> channelIds = new ArrayList<>();
-            NodeList channelNodes = document.getElementsByTagName("channel");
-            for (int i = 0; i < channelNodes.getLength(); i++) {
-                Node channelNode = channelNodes.item(i);
-                if (channelNode.getNodeType() != Node.ELEMENT_NODE) {
-                    continue;
-                }
-                Element channelElement = (Element) channelNode;
-                String channelId = channelElement.getAttribute("id");
-                if (targetName.equals(normalizeEpgChannelName(channelId))) {
-                    channelIds.add(channelId);
-                    continue;
-                }
-                NodeList displayNameNodes = channelElement.getElementsByTagName("display-name");
-                for (int j = 0; j < displayNameNodes.getLength(); j++) {
-                    String displayName = displayNameNodes.item(j).getTextContent();
-                    if (targetName.equals(normalizeEpgChannelName(displayName))) {
-                        channelIds.add(channelId);
-                        break;
-                    }
-                }
-            }
-
-            Date dayStart = getDayStart(date);
-            Date dayEnd = new Date(dayStart.getTime() + TimeUnit.DAYS.toMillis(1));
-            NodeList programmeNodes = document.getElementsByTagName("programme");
-            for (int i = 0; i < programmeNodes.getLength(); i++) {
-                Node programmeNode = programmeNodes.item(i);
-                if (programmeNode.getNodeType() != Node.ELEMENT_NODE) {
-                    continue;
-                }
-                Element programmeElement = (Element) programmeNode;
-                String programmeChannel = programmeElement.getAttribute("channel");
-                if (!channelIds.contains(programmeChannel) && !targetName.equals(normalizeEpgChannelName(programmeChannel))) {
-                    continue;
-                }
-
-                Date startDate = parseXmlTvDate(programmeElement.getAttribute("start"));
-                Date endDate = parseXmlTvDate(programmeElement.getAttribute("stop"));
-                if (startDate == null || endDate == null || !endDate.after(startDate)) {
-                    continue;
-                }
-                if (!startDate.before(dayEnd) || !endDate.after(dayStart)) {
-                    continue;
-                }
-
-                String title = "";
-                NodeList titleNodes = programmeElement.getElementsByTagName("title");
-                if (titleNodes.getLength() > 0) {
-                    title = titleNodes.item(0).getTextContent();
-                }
-                epgList.add(createXmlEpgInfo(date, title, startDate, endDate, epgList.size()));
-            }
-        } catch (Exception exception) {
-            exception.printStackTrace();
-        }
-        return epgList;
-    }
-
-    private Date getDayStart(Date date) throws ParseException {
-        SimpleDateFormat dayFormat = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
-        dayFormat.setTimeZone(TimeZone.getTimeZone("GMT+8:00"));
-        return dayFormat.parse(dayFormat.format(date));
-    }
-
-    private Date parseXmlTvDate(String dateText) {
-        if (dateText == null || dateText.trim().isEmpty()) {
-            return null;
-        }
-        String trimDate = dateText.trim();
-        try {
-            return new SimpleDateFormat("yyyyMMddHHmmss Z", Locale.getDefault()).parse(trimDate);
-        } catch (ParseException ignored) {
-        }
-        try {
-            SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMMddHHmmss", Locale.getDefault());
-            dateFormat.setTimeZone(TimeZone.getTimeZone("GMT+8:00"));
-            return dateFormat.parse(trimDate);
-        } catch (ParseException ignored) {
-        }
-        return null;
-    }
-
-    private Epginfo createXmlEpgInfo(Date epgDate, String title, Date startDate, Date endDate, int index) {
-        SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
-        Epginfo epgInfo = new Epginfo(epgDate, title, epgDate, timeFormat.format(startDate), timeFormat.format(endDate), index);
-        epgInfo.startdateTime = startDate;
-        epgInfo.enddateTime = endDate;
-        epgInfo.start = timeFormat.format(startDate);
-        epgInfo.end = timeFormat.format(endDate);
-        epgInfo.originStart = epgInfo.start;
-        epgInfo.originEnd = epgInfo.end;
-        epgInfo.datestart = Integer.parseInt(epgInfo.start.replace(":", ""));
-        epgInfo.dateend = Integer.parseInt(epgInfo.end.replace(":", ""));
-        return epgInfo;
-    }
-
-    @SuppressLint("SetTextI18n")
-    private void showBottomEpg() {
-        if (isSHIYI){
-            return;
-        }
-        if (channel_Name.getChannelName() != null) {
-            tip_chname.setText(channel_Name.getChannelName());
-            tv_channelnum.setText("" + channel_Name.getChannelNum());
-            TextView tv_current_program_name = findViewById(R.id.tv_current_program_name);
-            TextView tv_next_program_name = findViewById(R.id.tv_next_program_name);
-            setDefaultBottomEpg(tv_current_program_name, tv_next_program_name);
-            String savedEpgKey = channel_Name.getChannelName() + "_" + Objects.requireNonNull(liveEpgDateAdapter.getItem(liveEpgDateAdapter.getSelectedIndex())).getDatePresented();
-
-            if (hsEpg.containsKey(savedEpgKey)) {
-                ArrayList<Epginfo> arrayList = hsEpg.get(savedEpgKey);
-                if (arrayList != null && arrayList.size() > 0) {
-                    Date date = new Date();
-                    int size = arrayList.size() - 1;
-                    boolean hasInfo = false;
-                    while (size >= 0) {
-                        if (date.after((arrayList.get(size)).startdateTime) & date.before((arrayList.get(size)).enddateTime)) {
-                            tip_epg1.setText((arrayList.get(size)).start + "-" + (arrayList.get(size)).end);
-                            tv_current_program_name.setText((arrayList.get(size)).title);
-                            if (size != arrayList.size() - 1) {
-                                tip_epg2.setText((arrayList.get(size + 1)).start + "-" + (arrayList.get(size + 1)).end);
-                                tv_next_program_name.setText((arrayList.get(size + 1)).title);
-                            } else {
-                                tip_epg2.setText((arrayList.get(size)).end+"-23:59");
-                                tv_next_program_name.setText("ç²¾å½©èŠ‚ç›®-æš‚æ— èŠ‚ç›®é¢„å‘Šä¿¡æ¯");
-                            }
-                            hasInfo=true;
-                            break;
-                        } else {
-                            size--;
-                        }
-                    }
-                }
-                epgListAdapter.CanBack(currentLiveChannelItem.getinclude_back());
-                epgListAdapter.setNewData(arrayList);
-                updateEpgPanelState(arrayList != null && arrayList.size() > 0);
-            } else {
-                updateEpgPanelState(false);
-            }
-
-            if (countDownTimer != null) {
-                countDownTimer.cancel();
-            }
-            if(!tip_epg1.getText().equals("æš‚æ— ä¿¡æ¯")){
-                ll_right_top_loading.setVisibility(View.VISIBLE);
-                ll_epg.setVisibility(View.VISIBLE);
-                countDownTimer = new CountDownTimer(postTimeout, 1000) {//åº•éƒ¨epgéšè—æ—¶é—´è®¾å®š
-                    public void onTick(long j) {
-                    }
-                    public void onFinish() {
-                        ll_right_top_loading.setVisibility(View.GONE);
-                        ll_right_top_huikan.setVisibility(View.GONE);
-                        ll_epg.setVisibility(View.GONE);
-                    }
-                };
-                countDownTimer.start();
-            }else {
-                ll_right_top_loading.setVisibility(View.GONE);
-                ll_right_top_huikan.setVisibility(View.GONE);
-                ll_epg.setVisibility(View.GONE);
-            }
-            if (channel_Name == null || channel_Name.getSourceNum() <= 0) {
-                ((TextView) findViewById(R.id.tv_source)).setText("1/1");
-            } else {
-                ((TextView) findViewById(R.id.tv_source)).setText("çº¿è·¯" + (channel_Name.getSourceIndex() + 1) + "/" + channel_Name.getSourceNum());
-            }
-            tv_right_top_channel_name.setText(channel_Name.getChannelName());
-            tv_right_top_epg_name.setText(channel_Name.getChannelName());
-        }
-    }
-
-    private void setDefaultBottomEpg(TextView currentProgramName, TextView nextProgramName) {
-        TimeZone timeZone = TimeZone.getTimeZone("GMT+8:00");
-        Calendar currentStart = Calendar.getInstance(timeZone);
-        currentStart.set(Calendar.MINUTE, 0);
-        currentStart.set(Calendar.SECOND, 0);
-        currentStart.set(Calendar.MILLISECOND, 0);
-        Calendar currentEnd = (Calendar) currentStart.clone();
-        currentEnd.add(Calendar.MINUTE, 59);
-        Calendar nextStart = (Calendar) currentEnd.clone();
-        nextStart.add(Calendar.MINUTE, 1);
-        Calendar nextEnd = (Calendar) nextStart.clone();
-        nextEnd.add(Calendar.MINUTE, 59);
-
-        SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
-        timeFormat.setTimeZone(timeZone);
-        tip_epg1.setText(timeFormat.format(currentStart.getTime()) + "-" + timeFormat.format(currentEnd.getTime()));
-        currentProgramName.setText("ç²¾å½©èŠ‚ç›®");
-        tip_epg2.setText(timeFormat.format(nextStart.getTime()) + "-" + timeFormat.format(nextEnd.getTime()));
-        nextProgramName.setText("æš‚æ— èŠ‚ç›®é¢„å‘Šä¿¡æ¯");
-    }
-
-    private void updateCurrentChannelIcon() {
-        if (channel_Name == null || channel_Name.getChannelName() == null) {
-            return;
-        }
-        String channelName = channel_Name.getChannelName();
-        String channelNameReal = normalizeEpgChannelName(getFirstPartBeforeSpace(channelName));
-        String epgTagName = channelNameReal;
-        String iconUrl = null;
-        if (!channel_Name.getChannelLogo().isEmpty()) {
-            iconUrl = channel_Name.getChannelLogo();
-        } else if (logoUrl == null || logoUrl.isEmpty()) {
-            String[] epgInfo = EpgUtil.getEpgInfo(channelNameReal);
-            if (epgInfo != null) {
-                iconUrl = epgInfo[0];
-                if (!epgInfo[1].isEmpty()) {
-                    epgTagName = epgInfo[1];
-                }
-            }
-        } else if (!logoUrl.equals("false")) {
-            iconUrl = logoUrl.replace("{name}", epgTagName);
-        }
-        updateChannelIcon(channelName, iconUrl);
-    }
-
-    @SuppressLint("SetTextI18n")
-    private void updateChannelIcon(String channelName, String logoUrl) {
-        if (channel_Name == null || channel_Name.getChannelName() == null || !channel_Name.getChannelName().equals(channelName)) {
-            return;
-        }
-        if (StringUtils.isEmpty(logoUrl)) {
-            imgLiveIcon.setImageDrawable(null);
-            liveIconNullBg.setVisibility(View.VISIBLE);
-            liveIconNullText.setVisibility(View.VISIBLE);
-            imgLiveIcon.setVisibility(View.INVISIBLE);
-            liveIconNullText.setText("" + channel_Name.getChannelNum());
-        } else {
-            imgLiveIcon.setVisibility(View.VISIBLE);
-            com.github.tvbox.osc.util.ImgUtil.load(DefaultConfig.checkReplaceProxy(logoUrl), imgLiveIcon, 1, 0, 0, channel_Name.getChannelName(), ImageView.ScaleType.CENTER_INSIDE);
-            liveIconNullBg.setVisibility(View.INVISIBLE);
-            liveIconNullText.setVisibility(View.INVISIBLE);
-        }
-    }
-
-
-    //é¢‘é“åˆ—è¡¨
-    @SuppressLint("NotifyDataSetChanged")
-    public  void divLoadEpgRight(View view) {
-        if (epgListAdapter.getData() == null || epgListAdapter.getData().isEmpty()) {
-            updateEpgPanelState(false);
-            return;
-        }
-        mHandler.removeCallbacks(mHideChannelListRun);
-        mHandler.postDelayed(mHideChannelListRun, postTimeout);
-        mChannelGroupView.setVisibility(View.GONE);
-        divEpg.setVisibility(View.VISIBLE);
-        mRightEpgList.setVisibility(View.VISIBLE);
-        divLoadEpgleft.setVisibility(View.VISIBLE);
-        divLoadEpg.setVisibility(View.GONE);
-        liveChannelItemAdapter.setFocusedChannelIndex(-1);
-        epgListAdapter.notifyDataSetChanged();
-        mRightEpgList.post(new Runnable() {
-            @Override
-            public void run() {
-                focusCurrentEpgInMenu();
-            }
-        });
-    }
-    //é¢‘é“åˆ—è¡¨
-    public  void divLoadEpgLeft(View view) {
-        mHandler.removeCallbacks(mHideChannelListRun);
-        mHandler.postDelayed(mHideChannelListRun, postTimeout);
-        mChannelGroupView.setVisibility(View.VISIBLE);
-        divEpg.setVisibility(View.GONE);
-        divLoadEpgleft.setVisibility(View.GONE);
-        divLoadEpg.setVisibility(View.VISIBLE);
-        focusCurrentChannelInMenu();
-    }
-
-
-    @Override
-    public void onBackPressed() {
-        if (tvLeftChannelListLayout.getVisibility() == View.VISIBLE) {
-            mHandler.removeCallbacks(mHideChannelListRun);
-            mHandler.post(mHideChannelListRun);
-        } else if (tvRightSettingLayout.getVisibility() == View.VISIBLE) {
-            mHandler.removeCallbacks(mHideSettingLayoutRun);
-            mHandler.post(mHideSettingLayoutRun);
-        } else if( backcontroller.getVisibility() == View.VISIBLE){ //
-            backcontroller.setVisibility(View.GONE);
-        }else if(isBack){
-            isBack= false;
-            playPreSource();
-        }else {
-            mHandler.removeCallbacks(mConnectTimeoutChangeSourceRun);
-            mHandler.removeCallbacks(mUpdateNetSpeedRun);
-            exitingLivePlay = true;
-            super.onBackPressed();
-        }
-    }
-
-    private final Runnable mPlaySelectedChannel = new Runnable() {
-        @Override
-        public void run() {
-            int channelNumber = selectedChannelNumber;
-            selectedChannelNumber = 0;
-            int currentTotal = 0;
-            int groupIndex = 0;
-            int channelIndex = -1;
-            for (LiveChannelGroup group : liveChannelGroupList) {
-                int groupChannelCount = group.getLiveChannels().size();
-                if (currentTotal + groupChannelCount >= channelNumber) {
-                    channelIndex = channelNumber - currentTotal - 1; // è½¬æ¢ä¸º0-basedç´¢å¼•
-                    break;
-                }
-                currentTotal += groupChannelCount;
-                groupIndex++;
-            }
-            tvSelectedChannel.setVisibility(View.INVISIBLE);
-            tvSelectedChannel.setText("");
-            if(channelIndex>=0){
-                loadChannelGroupDataAndPlay(groupIndex,channelIndex);
-            }else {
-                playChannel(currentChannelGroupIndex, currentLiveChannelIndex, false);
-            }
-        }
-    };
-
-    @SuppressLint("SetTextI18n")
-    private void numericKeyDown(int digit) {
-        selectedChannelNumber = selectedChannelNumber * 10 + digit;
-        tvSelectedChannel.setText(Integer.toString(selectedChannelNumber));
-        ll_right_top_loading.setVisibility(View.GONE);
-        ll_right_top_huikan.setVisibility(View.GONE);
-        tvSelectedChannel.setVisibility(View.VISIBLE);
-
-        mHandler.removeCallbacks(mPlaySelectedChannel);
-        mHandler.postDelayed(mPlaySelectedChannel, 2500);
-    }
-
-    private final Handler mmHandler = new Handler();
-    private Runnable mLongPressRunnable;
-    private static final long LONG_PRESS_DELAY = 800;
-    @Override
-    public boolean dispatchKeyEvent(KeyEvent event) {
-        int keyCode = event.getKeyCode();
-        boolean menuVisible = isListOrSettingLayoutVisible();
-        if (event.getAction() == KeyEvent.ACTION_DOWN) {
-            if (tvLeftChannelListLayout.getVisibility() == View.VISIBLE) {
-                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && isFocusInView(mChannelGroupView)) {
-                    focusChannelFromSelectedGroup();
-                    return true;
-                }
-                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && isFocusInView(mLiveChannelView)) {
-                    divLoadEpgRight(null);
-                    return true;
-                }
-                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && isFocusInView(mRightEpgList)) {
-                    divLoadEpgLeft(null);
-                    return true;
-                }
-                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && !isFocusInView(mLiveChannelView) && !isFocusInView(mRightEpgList)) {
-                    focusCurrentGroupInMenu();
-                    return true;
-                }
-            }
-            if (!menuVisible) {
-                if (keyCode >= KeyEvent.KEYCODE_0 && keyCode <= KeyEvent.KEYCODE_9) {
-                    numericKeyDown(keyCode - KeyEvent.KEYCODE_0);
-                    return true;
-                }
-                if (keyCode >= KeyEvent.KEYCODE_NUMPAD_0 && keyCode <= KeyEvent.KEYCODE_NUMPAD_9) {
-                    numericKeyDown(keyCode - KeyEvent.KEYCODE_NUMPAD_0);
-                    return true;
-                }
-                LiveKeyAction action = liveKeyMapper.map(keyCode, false);
-                if (action != LiveKeyAction.OPEN_CHANNELS && handleLiveKeyAction(action)) {
-                    return true;
-                }
-            }
-        } else if (event.getAction() == KeyEvent.ACTION_UP) {
-            boolean isConfirm = keyCode == KeyEvent.KEYCODE_DPAD_CENTER
-                    || keyCode == KeyEvent.KEYCODE_ENTER
-                    || keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE;
-            if (isConfirm) {
-                cancelLongPress();
-                if (longPressHandled) {
-                    longPressHandled = false;
-                    return true;
-                }
-            }
-            if (!menuVisible && event.getRepeatCount() == 0
-                    && handleLiveKeyAction(liveKeyMapper.map(keyCode, false))) {
-                return true;
-            }
-        }
-        return super.dispatchKeyEvent(event);
-    }
-
-    private boolean handleLiveKeyAction(LiveKeyAction action) {
-        switch (action) {
-            case CHANNEL_PREVIOUS:
-                if (Hawk.get(HawkConfig.LIVE_CHANNEL_REVERSE, false)) playNext();
-                else playPrevious();
-                return true;
-            case CHANNEL_NEXT:
-                if (Hawk.get(HawkConfig.LIVE_CHANNEL_REVERSE, false)) playPrevious();
-                else playNext();
-                return true;
-            case LINE_PREVIOUS:
-                if (isBack) showProgressBars(true);
-                else playPreSource();
-                return true;
-            case LINE_NEXT:
-                if (isBack) showProgressBars(true);
-                else playNextSource();
-                return true;
-            case OPEN_CHANNELS:
-                showChannelList();
-                return true;
-            case OPEN_SETTINGS:
-                showSettingGroup();
-                return true;
-            case OPEN_VOD:
-                openVodHome();
-                return true;
-            case BACK:
-                onBackPressed();
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    private void openVodHome() {
-        Intent intent = new Intent(this, HomeActivity.class);
-        intent.putExtra(HomeActivity.EXTRA_RECOVERY_MODE, true);
-        startActivity(intent);
-    }
-
-    @Override
-    public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (!isListOrSettingLayoutVisible()
-                && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
-                && event.getRepeatCount() == 0) {
-            mLongPressRunnable = new Runnable() {
-                @Override
-                public void run() {
-                    mLongPressRunnable = null;
-                    longPressHandled = true;
-                    openVodHome();
-                }
-            };
-            mmHandler.postDelayed(mLongPressRunnable, LONG_PRESS_DELAY);
-        }
-        return super.onKeyDown(keyCode, event);
-    }
-
-    @Override
-    public boolean onKeyUp(int keyCode, KeyEvent event) {
-        if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) {
-            cancelLongPress();
-        }
-        return super.onKeyUp(keyCode, event);
-    }
-
-    private void cancelLongPress() {
-        if (mLongPressRunnable != null) {
-            mmHandler.removeCallbacks(mLongPressRunnable);
-            mLongPressRunnable = null;
-        }
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        exitingLivePlay = false;
-        if (mVideoView != null) {
-            mVideoView.resume();
-        }
-    }
-
-
-    @Override
-    protected void onPause() {
-        super.onPause();
-        if (mVideoView != null && !exitingLivePlay) {
-            mVideoView.pause();
-        }
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        Hawk.put(HawkConfig.PLAYER_IS_LIVE, false);
-        hideSwitchChannelSnapshot();
-        if (mVideoView != null) {
-            mVideoView.release();
-            mVideoView = null;
-        }
-        mHandler.removeCallbacks(mLoadEpgRun);
-        mHandler.removeCallbacks(mUpdateResolutionInfoRun);
-        mHandler.removeCallbacks(mHideResolutionInfoRun);
-    }
-
-    private void showChannelList() {
-        if (tvRightSettingLayout.getVisibility() == View.VISIBLE) {
-            mHandler.removeCallbacks(mHideSettingLayoutRun);
-            mHandler.post(mHideSettingLayoutRun);
-            return;
-        }
-        if(liveChannelGroupList.isEmpty()) return;
-        if (tvLeftChannelListLayout.getVisibility() == View.INVISIBLE) {
-            if(currentLiveLookBackIndex>-1){
-                mRightEpgList.setSelectedPosition(currentLiveLookBackIndex);
-                mRightEpgList.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        mRightEpgList.smoothScrollToPosition(currentLiveLookBackIndex);
-                    }
-                });
-            }
-            refreshChannelList(currentChannelGroupIndex);
-
-            mHandler.postDelayed(mFocusCurrentChannelAndShowChannelList, 50);
-        }
-        else {
-            mHandler.removeCallbacks(mHideChannelListRun);
-            mHandler.post(mHideChannelListRun);
-        }
-    }
-
-    private int mLastChannelGroupIndex = -1;
-    private List<LiveChannelItem> mLastChannelList = new ArrayList<>();
-
-    private void refreshChannelList(int currentChannelGroupIndex) {
-        List<LiveChannelItem> newChannels = getLiveChannels(currentChannelGroupIndex);
-        // 2. åˆ¤æ–­æ•°æ®æ˜¯å¦å˜åŒ–
-        if (currentChannelGroupIndex == mLastChannelGroupIndex
-                && isSameData(newChannels, mLastChannelList)) {
-            return; // æ•°æ®æœªå˜åŒ–ï¼Œè·³è¿‡åˆ·æ–° è§£å†³éƒ¨åˆ†ç›´æ’­é¢‘é“è¿‡å¤šæ—¶å¡é¡¿
-        }
-        if (currentLiveChannelIndex > -1){
-            mLiveChannelView.scrollToPosition(currentLiveChannelIndex);
-            mLiveChannelView.setSelection(currentLiveChannelIndex);
-        }
-        mChannelGroupView.scrollToPosition(currentChannelGroupIndex);
-        mChannelGroupView.setSelection(currentChannelGroupIndex);
-        mLastChannelGroupIndex = currentChannelGroupIndex;
-        mLastChannelList = new ArrayList<>(newChannels);
-        liveChannelItemAdapter.setNewData(newChannels);
-    }
-
-    // å¯¹æ¯”ä¸¤ä¸ªåˆ—è¡¨å†…å®¹æ˜¯å¦ç›¸åŒ
-    private boolean isSameData(List<LiveChannelItem> list1, List<LiveChannelItem> list2) {
-//        return list1.size() == list2.size();
-        if (list1 == list2) return true;
-        if (list1 == null || list2 == null || list1.size() != list2.size()) return false;
-        for (int i = 0; i < list1.size(); i++) {
-            if (!list1.get(i).equals(list2.get(i))) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private Runnable mFocusCurrentChannelAndShowChannelList = new Runnable() {
-        @Override
-        public void run() {
-            if (mChannelGroupView.isScrolling() || mLiveChannelView.isScrolling() || mChannelGroupView.isComputingLayout() || mLiveChannelView.isComputingLayout()) {
-                mHandler.postDelayed(this, 100);
-            } else {
-                tvLeftChannelListLayout.setVisibility(View.VISIBLE);
-                focusCurrentChannelInMenu();
-                ViewObj viewObj = new ViewObj(tvLeftChannelListLayout, (ViewGroup.MarginLayoutParams) tvLeftChannelListLayout.getLayoutParams());
-                ObjectAnimator animator = ObjectAnimator.ofObject(viewObj, "marginLeft", new IntEvaluator(), -tvLeftChannelListLayout.getLayoutParams().width, 0);
-                animator.setDuration(200);
-                animator.addListener(new AnimatorListenerAdapter() {
-                    @Override
-                    public void onAnimationEnd(Animator animation) {
-                        super.onAnimationEnd(animation);
-                        focusCurrentChannelInMenu();
-                        mHandler.removeCallbacks(mHideChannelListRun);
-                        mHandler.postDelayed(mHideChannelListRun, postTimeout);
-                    }
-                });
-                animator.start();
-            }
-        }
-    };
-
-    private boolean isFocusInView(View view) {
-        View focused = getCurrentFocus();
-        return focused != null && view != null && (focused == view || isChildOf(view, focused));
-    }
-
-    private boolean isChildOf(View parent, View child) {
-        View current = child;
-        while (current != null) {
-            if (current == parent) return true;
-            if (!(current.getParent() instanceof View)) return false;
-            current = (View) current.getParent();
-        }
-        return false;
-    }
-
-    private void focusRecyclerPosition(TvRecyclerView recyclerView, int position) {
-        if (recyclerView == null || position < 0) return;
-        recyclerView.scrollToPosition(position);
-        recyclerView.setSelection(position);
-        requestRecyclerItemFocus(recyclerView, position, 0);
-    }
-
-    private void focusCurrentGroupInMenu() {
-        if (currentChannelGroupIndex < 0) return;
-        mChannelGroupView.setVisibility(View.VISIBLE);
-        divEpg.setVisibility(View.GONE);
-        divLoadEpgleft.setVisibility(View.GONE);
-        divLoadEpg.setVisibility(epgListAdapter != null && epgListAdapter.getData() != null && !epgListAdapter.getData().isEmpty() ? View.VISIBLE : View.GONE);
-        liveChannelGroupAdapter.setSelectedGroupIndex(currentChannelGroupIndex);
-        liveChannelItemAdapter.setSelectedChannelIndex(currentLiveChannelIndex);
-        liveChannelGroupAdapter.setFocusedGroupIndex(currentChannelGroupIndex);
-        liveChannelItemAdapter.setFocusedChannelIndex(-1);
-        epgListAdapter.setFocusedEpgIndex(-1);
-        mLiveChannelView.clearFocus();
-        mRightEpgList.clearFocus();
-        focusRecyclerPosition(mChannelGroupView, currentChannelGroupIndex);
-    }
-
-    private void focusEpgPosition(int position) {
-        if (mRightEpgList == null || position < 0) return;
-        RecyclerView.LayoutManager layoutManager = mRightEpgList.getLayoutManager();
-        if (layoutManager instanceof LinearLayoutManager) {
-            int offset = Math.max(0, (mRightEpgList.getHeight() - getResources().getDimensionPixelSize(R.dimen.ts_100)) / 2);
-            ((LinearLayoutManager) layoutManager).scrollToPositionWithOffset(position, offset);
-        } else {
-            mRightEpgList.scrollToPosition(position);
-        }
-        mRightEpgList.setSelection(position);
-        requestRecyclerItemFocus(mRightEpgList, position, 0);
-    }
-
-    private void requestRecyclerItemFocus(TvRecyclerView recyclerView, int position, int retryCount) {
-        recyclerView.post(new Runnable() {
-            @Override
-            public void run() {
-                RecyclerView.ViewHolder holder = recyclerView.findViewHolderForAdapterPosition(position);
-                if (holder != null) {
-                    holder.itemView.requestFocus();
-                } else if (retryCount < 3) {
-                    requestRecyclerItemFocus(recyclerView, position, retryCount + 1);
-                }
-            }
-        });
-    }
-
-    private void focusCurrentChannelInMenu() {
-        if (currentChannelGroupIndex < 0 || currentLiveChannelIndex < 0) return;
-        if (liveChannelGroupAdapter.getSelectedGroupIndex() != currentChannelGroupIndex) {
-            liveChannelGroupAdapter.setSelectedGroupIndex(currentChannelGroupIndex);
-            liveChannelItemAdapter.setNewData(getLiveChannels(currentChannelGroupIndex));
-            mLastChannelGroupIndex = currentChannelGroupIndex;
-            mLastChannelList = new ArrayList<>(getLiveChannels(currentChannelGroupIndex));
-        }
-        liveChannelGroupAdapter.setFocusedGroupIndex(-1);
-        liveChannelItemAdapter.setSelectedChannelIndex(currentLiveChannelIndex);
-        liveChannelItemAdapter.setFocusedChannelIndex(currentLiveChannelIndex);
-        focusRecyclerPosition(mLiveChannelView, currentLiveChannelIndex);
-    }
-
-    private void focusChannelFromSelectedGroup() {
-        int groupIndex = liveChannelGroupAdapter.getSelectedGroupIndex();
-        if (groupIndex < 0) groupIndex = currentChannelGroupIndex;
-        if (groupIndex < 0 || groupIndex >= liveChannelGroupList.size()) return;
-        if (isNeedInputPassword(groupIndex)) {
-            showPasswordDialog(groupIndex, -1);
-            return;
-        }
-        if (mChannelGroupView.getVisibility() != View.VISIBLE) return;
-        int channelIndex = groupIndex == currentChannelGroupIndex && currentLiveChannelIndex >= 0 ? currentLiveChannelIndex : 0;
-        liveChannelItemAdapter.setNewData(getLiveChannels(groupIndex));
-        liveChannelGroupAdapter.setSelectedGroupIndex(groupIndex);
-        liveChannelGroupAdapter.setFocusedGroupIndex(-1);
-        liveChannelItemAdapter.setSelectedChannelIndex(groupIndex == currentChannelGroupIndex ? currentLiveChannelIndex : -1);
-        liveChannelItemAdapter.setFocusedChannelIndex(channelIndex);
-        focusRecyclerPosition(mLiveChannelView, channelIndex);
-    }
-
-    private void focusCurrentEpgInMenu() {
-        if (mRightEpgList == null || epgListAdapter == null || epgListAdapter.getData() == null || epgListAdapter.getData().isEmpty()) return;
-        syncCurrentEpgSelection(true);
-    }
-
-    private Runnable mHideChannelListRun = new Runnable() {
-        @Override
-        public void run() {
-            ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) tvLeftChannelListLayout.getLayoutParams();
-            if (tvLeftChannelListLayout.getVisibility() == View.VISIBLE) {
-                ViewObj viewObj = new ViewObj(tvLeftChannelListLayout, params);
-                ObjectAnimator animator = ObjectAnimator.ofObject(viewObj, "marginLeft", new IntEvaluator(), 0, -tvLeftChannelListLayout.getLayoutParams().width);
-                animator.setDuration(200);
-                animator.addListener(new AnimatorListenerAdapter() {
-                    @Override
-                    public void onAnimationEnd(Animator animation) {
-                        super.onAnimationEnd(animation);
-                        tvLeftChannelListLayout.setVisibility(View.INVISIBLE);
-                    }
-                });
-                animator.start();
-            }
-        }
-    };
-
-    private void showChannelInfo() {
-        tvChannelInfo.setText(String.format(Locale.getDefault(), "%d %s %s(%d/%d)", currentLiveChannelItem.getChannelNum(),
-                currentLiveChannelItem.getChannelName(), currentLiveChannelItem.getSourceName(),
-                currentLiveChannelItem.getSourceIndex() + 1, currentLiveChannelItem.getSourceNum()));
-
-        FrameLayout.LayoutParams lParams = new FrameLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        if (tvRightSettingLayout.getVisibility() == View.VISIBLE) {
-            lParams.gravity = Gravity.LEFT;
-            lParams.leftMargin = 60;
-            lParams.topMargin = 30;
-        } else {
-            lParams.gravity = Gravity.RIGHT;
-            lParams.rightMargin = 60;
-            lParams.topMargin = 30;
-        }
-        tvChannelInfo.setLayoutParams(lParams);
-
-        tvChannelInfo.setVisibility(View.VISIBLE);
-        mHandler.removeCallbacks(mHideChannelInfoRun);
-        mHandler.postDelayed(mHideChannelInfoRun, 3000);
-    }
-
-    private Runnable mHideChannelInfoRun = new Runnable() {
-        @Override
-        public void run() {
-            tvChannelInfo.setVisibility(View.INVISIBLE);
-        }
-    };
-
-    private JsonObject catchup=null;
-    private String logoUrl=null;
-    private void initLiveObj(){
-        catchup = null;
-        logoUrl = null;
-        int position=ApiConfig.getLiveGroupIndex();
-        JsonArray live_groups=Hawk.get(HawkConfig.LIVE_GROUP_LIST,new JsonArray());
-        if (live_groups == null || live_groups.size() == 0 || position < 0 || position >= live_groups.size()) {
-            return;
-        }
-        JsonObject livesOBJ = live_groups.get(position).getAsJsonObject();
-        String type = livesOBJ.has("type")?livesOBJ.get("type").getAsString():"0";
-
-        if(livesOBJ.has("catchup") && livesOBJ.get("catchup").isJsonObject()){
-            catchup = livesOBJ.getAsJsonObject("catchup");
-            LOG.i("echo-catchup :"+ catchup.toString());
-        }
-        if(livesOBJ.has("logo")){
-            logoUrl = livesOBJ.get("logo").getAsString();
-        }
-        if(type.equals("3")){
-            String py_jar="";
-            if(livesOBJ.has("jar")){
-                py_jar=livesOBJ.has("jar")?livesOBJ.get("jar").getAsString():"";
-
-            }else if(livesOBJ.has("api")){
-                py_jar=livesOBJ.has("api")?livesOBJ.get("api").getAsString():"";
-//                String ext = livesOBJ.has("ext")?livesOBJ.get("ext").getAsJsonObject().toString():"";
-                String ext="";
-                if(livesOBJ.has("ext") && (livesOBJ.get("ext").isJsonObject() || livesOBJ.get("ext").isJsonArray())){
-                    ext=livesOBJ.get("ext").toString();
-                }else {
-                    ext= DefaultConfig.safeJsonString(livesOBJ, "ext", "");
-                }
-                LOG.i("echo-ext:"+ext);
-                if(!ext.isEmpty())py_jar=py_jar+"?extend="+ext;
-            }
-            ApiConfig.get().setLiveJar(py_jar);
-        }
-    }
-
-    private HashMap<String,String> liveWebHeader()
-    {
-        return Hawk.get(HawkConfig.LIVE_WEB_HEADER);
-    }
-
-    private HashMap<String, String> liveChannelHeader() {
-        if (currentLiveChannelItem == null) return liveWebHeader();
-        HashMap<String, String> header = new HashMap<>();
-        HashMap<String, String> liveHeader = liveWebHeader();
-        if (liveHeader != null) header.putAll(liveHeader);
-        if (currentLiveChannelItem.getHeaders() != null) {
-            header.putAll(currentLiveChannelItem.getHeaders());
-        }
-        if (!currentLiveChannelItem.getChannelFormat().isEmpty()) {
-            header.put(ExoMediaSourceHelper.HEADER_FORMAT, currentLiveChannelItem.getChannelFormat());
-        }
-        if (header.isEmpty()) return null;
-        return header;
-    }
-
-    private boolean currentChannelHasCatchup() {
-        return currentLiveChannelItem != null && hasCatchupSource(currentLiveChannelItem.getChannelCatchup());
-    }
-
-    private JsonObject currentCatchup() {
-        if (currentChannelHasCatchup()) return currentLiveChannelItem.getChannelCatchup();
-        return catchup;
-    }
-
-    private String getCatchupValue(JsonObject catchupObj, String key) {
-        if (catchupObj == null || !catchupObj.has(key) || catchupObj.get(key).isJsonNull()) return "";
-        try {
-            return catchupObj.get(key).getAsString();
-        } catch (Throwable ignored) {
-            return "";
-        }
-    }
-
-    private boolean hasCatchupSource(JsonObject catchupObj) {
-        return !TextUtils.isEmpty(getCatchupValue(catchupObj, "source"));
-    }
-
-    private boolean canCurrentChannelCatchup() {
-        if (currentLiveChannelItem == null) return false;
-        String url = currentLiveChannelItem.getUrl();
-        JsonObject catchupObj = currentCatchup();
-        if (hasCatchupSource(catchupObj)) {
-            String regex = getCatchupValue(catchupObj, "regex");
-            if (TextUtils.isEmpty(regex)) return true;
-            try {
-                return url.contains(regex) || Pattern.compile(regex).matcher(url).find();
-            } catch (Throwable ignored) {
-                return false;
-            }
-        }
-        return url.contains("/PLTV/");
-    }
-
-    private String buildCatchupUrl(String url, Epginfo epg) {
-        if (TextUtils.isEmpty(url) || epg == null || epg.startdateTime == null || epg.enddateTime == null) return "";
-        JsonObject catchupObj = currentCatchup();
-        if (hasCatchupSource(catchupObj)) {
-            return formatCatchupUrl(url, catchupObj, epg);
-        }
-        if (!url.contains("/PLTV/")) return "";
-        String source = "?playseek=" + formatCatchupTime(epg.startdateTime, "yyyyMMddHHmmss")
-                + "-" + formatCatchupTime(epg.enddateTime, "yyyyMMddHHmmss");
-        return appendCatchupUrl(url, "/PLTV/,/TVOD/", source);
-    }
-
-    private String formatCatchupUrl(String url, JsonObject catchupObj, Epginfo epg) {
-        String source = formatCatchupSource(getCatchupValue(catchupObj, "source"), epg);
-        if ("default".equalsIgnoreCase(getCatchupValue(catchupObj, "type"))) return source;
-        return appendCatchupUrl(url, getCatchupValue(catchupObj, "replace"), source);
-    }
-
-    private String appendCatchupUrl(String url, String replace, String source) {
-        String replayUrl = url;
-        String[] parts = replace.split(",", 2);
-        if (parts.length == 2 && !TextUtils.isEmpty(parts[0])) {
-            try {
-                replayUrl = replayUrl.replaceAll(parts[0], parts[1]);
-            } catch (Throwable ignored) {
-            }
-        }
-        int queryIndex = replayUrl.indexOf('?');
-        if (queryIndex >= 0 && queryIndex < replayUrl.length() - 1) source = source.replace("?", "&");
-        return replayUrl + source;
-    }
-
-    private String formatCatchupSource(String source, Epginfo epg) {
-        Matcher matcher = CATCHUP_TOKEN_PATTERN.matcher(source);
-        StringBuffer result = new StringBuffer();
-        while (matcher.find()) {
-            matcher.appendReplacement(result, Matcher.quoteReplacement(formatCatchupToken(matcher.group(1), epg)));
-        }
-        matcher.appendTail(result);
-        return result.toString();
-    }
-
-    private String formatCatchupToken(String token, Epginfo epg) {
-        Matcher matcher = CATCHUP_TAG_PATTERN.matcher(token);
-        if (!matcher.find()) return "";
-        String tag = matcher.group(1);
-        if (tag.startsWith("utcend:")) return String.valueOf(epg.enddateTime.getTime() / 1000);
-        if (tag.startsWith("utc:")) return String.valueOf(epg.startdateTime.getTime() / 1000);
-        int bracketIndex = tag.indexOf(')');
-        if (tag.startsWith("(b") && bracketIndex >= 0) return formatCatchupTime(epg.startdateTime, tag.substring(bracketIndex + 1));
-        if (tag.startsWith("(e") && bracketIndex >= 0) return formatCatchupTime(epg.enddateTime, tag.substring(bracketIndex + 1));
-        return "";
-    }
-
-    private String formatCatchupTime(Date time, String pattern) {
-        if ("timestamp".equals(pattern)) return String.valueOf(time.getTime() / 1000);
-        try {
-            return new SimpleDateFormat(pattern, Locale.getDefault()).format(time);
-        } catch (IllegalArgumentException ignored) {
-            return "";
-        }
-    }
-
-    private int getCatchupDurationSeconds(Epginfo epg) {
-        if (epg == null || epg.startdateTime == null || epg.enddateTime == null) return 0;
-        long duration = Math.max(0, epg.enddateTime.getTime() - epg.startdateTime.getTime()) / 1000;
-        return duration > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) duration;
-    }
-
-    private void showSwitchChannelSnapshot() {
-        if (switchChannelSnapshotImage != null && mVideoView != null) {
-            Bitmap bitmap = null;
-            try {
-                bitmap = mVideoView.doScreenShot();
-            } catch (Throwable ignored) {
-            }
-            if (bitmap != null) {
-                switchChannelSnapshotImage.setImageBitmap(bitmap);
-                switchChannelSnapshotImage.setVisibility(View.VISIBLE);
-            } else {
-                switchChannelSnapshotImage.setImageBitmap(null);
-                switchChannelSnapshotImage.setVisibility(View.GONE);
-            }
-        }
-        if (switchChannelSnapshotOverlay != null) {
-            switchChannelSnapshotOverlay.setVisibility(View.VISIBLE);
-        }
-    }
-
-    private void hideSwitchChannelSnapshot() {
-        if (switchChannelSnapshotOverlay != null) {
-            switchChannelSnapshotOverlay.setVisibility(View.GONE);
-        }
-        if (switchChannelSnapshotImage != null) {
-            switchChannelSnapshotImage.setImageBitmap(null);
-            switchChannelSnapshotImage.setVisibility(View.GONE);
-        }
-    }
-
-    private boolean playChannel(int channelGroupIndex, int liveChannelIndex, boolean changeSource) {
-        if ((channelGroupIndex == currentChannelGroupIndex && liveChannelIndex == currentLiveChannelIndex && !changeSource)
-                || (changeSource && currentLiveChannelItem.getSourceNum() == 1)) {
-           // showChannelInfo();
-            return true;
-        }
-        ArrayList<LiveChannelItem> groupChannels = getLiveChannels(channelGroupIndex);
-        if (groupChannels == null || groupChannels.isEmpty() || liveChannelIndex < 0 || liveChannelIndex >= groupChannels.size()) {
-            return false;
-        }
-        boolean showPreviousFrame = currentLiveChannelItem != null && mVideoView != null && mVideoView.isPlaying();
-        int previousLivePlayerType = livePlayerManager.getLivePlayerType();
-        allowLiveSwitchPlayer = true;
-        if (!changeSource) {
-            currentChannelGroupIndex = channelGroupIndex;
-            currentLiveChannelIndex = liveChannelIndex;
-            currentLiveChannelItem = getLiveChannels(currentChannelGroupIndex).get(currentLiveChannelIndex);
-            Hawk.put(HawkConfig.LIVE_CHANNEL, currentLiveChannelItem.getChannelName());
-            failoverState = new FailoverState(currentLiveChannelItem.getSourceNum());
-        } else {
-            failoverState.recordSwitch(System.currentTimeMillis());
-        }
-
-        currentPlaybackStarted = false;
-
-        channel_Name = currentLiveChannelItem;
-        currentLiveLookBackIndex=-1;
-        epgListAdapter.setSelectedEpgIndex(-1);
-        isSHIYI=false;
-        isBack = false;
-        if (canCurrentChannelCatchup()) {
-            currentLiveChannelItem.setinclude_back(true);
-        }else {
-            currentLiveChannelItem.setinclude_back(false);
-        }
-        updateCurrentChannelIcon();
-        showBottomEpg();
-        backcontroller.setVisibility(View.GONE);
-        ll_right_top_huikan.setVisibility(View.GONE);
-        if(mVideoView!=null){
-            if(liveChannelHeader()!=null)LOG.i("echo-"+liveChannelHeader().toString());
-            boolean reusePlayer = canReusePlayer(previousLivePlayerType);
-            boolean keepExoFrame = reusePlayer && previousLivePlayerType == 2;
-            if (showPreviousFrame && !keepExoFrame) {
-                showSwitchChannelSnapshot();
-            } else {
-                hideSwitchChannelSnapshot();
-            }
-            String liveUrl = currentLiveChannelItem.getUrl();
-            if (reusePlayer) {
-                mVideoView.setUrl(liveUrl, liveChannelHeader());
-                mVideoView.replay(true);
-            } else {
-                mVideoView.release();
-                mVideoView.setUrl(liveUrl,liveChannelHeader());
-                mVideoView.start();
-            }
-            showResolutionAfterChannelSwitch();
-        }
-        loadEpgAfterChannelStarted();
-        return true;
-    }
-
-    private boolean canReusePlayer(int previousLivePlayerType) {
-        int currentLivePlayerType = livePlayerManager.getLivePlayerType();
-        return mVideoView != null
-                && mVideoView.getCurrentPlayState() != VideoView.STATE_IDLE
-                && previousLivePlayerType == currentLivePlayerType;
-    }
-
-    private void loadEpgAfterChannelStarted() {
-        mHandler.removeCallbacks(mLoadEpgRun);
-        if (!hasEpgAddress()) {
-            updateEpgPanelState(false);
-            return;
-        }
-        if (hasCurrentEpgCache()) {
-            firstLiveEpgLoad = false;
-            return;
-        }
-        if (firstLiveEpgLoad) {
-            firstLiveEpgLoad = false;
-            mHandler.postDelayed(mLoadEpgRun, EPG_LOAD_DELAY);
-        } else {
-            getEpg(new Date());
-        }
-    }
-
-    private boolean hasCurrentEpgCache() {
-        if (channel_Name == null || liveEpgDateAdapter == null || liveEpgDateAdapter.getSelectedIndex() < 0) return false;
-        String currentEpgKey = channel_Name.getChannelName() + "_" + Objects.requireNonNull(liveEpgDateAdapter.getItem(liveEpgDateAdapter.getSelectedIndex())).getDatePresented();
-        return hsEpg.containsKey(currentEpgKey);
-    }
-
-    private void playNext() {
-        if (!isCurrentLiveChannelValid()) return;
-        Integer[] groupChannelIndex = getNextChannel(1);
-        playChannel(groupChannelIndex[0], groupChannelIndex[1], false);
-    }
-
-    private void playPrevious() {
-        if (!isCurrentLiveChannelValid()) return;
-        Integer[] groupChannelIndex = getNextChannel(-1);
-        playChannel(groupChannelIndex[0], groupChannelIndex[1], false);
-    }
-
-    public void playPreSource() {
-        if (!isCurrentLiveChannelValid()) return;
-        failoverState.setUserLocked(true);
-        currentLiveChannelItem.preSource();
-        playChannel(currentChannelGroupIndex, currentLiveChannelIndex, true);
-    }
-
-    public void playNextSource() {
-        if (!isCurrentLiveChannelValid()) return;
-        failoverState.setUserLocked(true);
-        currentLiveChannelItem.nextSource();
-        playChannel(currentChannelGroupIndex, currentLiveChannelIndex, true);
-    }
-
-    //æ˜¾ç¤ºè®¾ç½®åˆ—è¡¨
-    private void showSettingGroup() {
-        if (tvLeftChannelListLayout.getVisibility() == View.VISIBLE) {
-            mHandler.removeCallbacks(mHideChannelListRun);
-            mHandler.post(mHideChannelListRun);
-        }
-        if (tvRightSettingLayout.getVisibility() == View.INVISIBLE) {
-            //é‡æ–°è½½å…¥é»˜è®¤çŠ¶æ€
-            ApiConfig.get().refreshLiveApiHistoryItems();
-            loadCurrentSourceList();
-            liveSettingGroupAdapter.setNewData(getVisibleLiveSettingGroupList());
-            liveSettingGroupAdapter.setSelectedGroupIndex(-1);
-            int settingGroupIndex = getDefaultSettingGroupIndex();
-            selectSettingGroup(settingGroupIndex, false);
-            int settingGroupPosition = liveSettingGroupAdapter.findPositionByGroupIndex(settingGroupIndex);
-            mSettingGroupView.scrollToPosition(settingGroupPosition < 0 ? 0 : settingGroupPosition);
-            int settingItemIndex = currentLiveChannelItem == null ? 0 : currentLiveChannelItem.getSourceIndex();
-            if (liveSettingItemAdapter.getData().isEmpty() || settingItemIndex < 0 || settingItemIndex >= liveSettingItemAdapter.getData().size()) {
-                settingItemIndex = 0;
-            }
-            mSettingItemView.scrollToPosition(settingItemIndex);
-            mHandler.postDelayed(mFocusAndShowSettingGroup, 50);
-        } else {
-            mHandler.removeCallbacks(mHideSettingLayoutRun);
-            mHandler.post(mHideSettingLayoutRun);
-        }
-    }
-
-    private Runnable mFocusAndShowSettingGroup = new Runnable() {
-        @Override
-        public void run() {
-            if (mSettingGroupView.isScrolling() || mSettingItemView.isScrolling() || mSettingGroupView.isComputingLayout() || mSettingItemView.isComputingLayout()) {
-                mHandler.postDelayed(this, 100);
-            } else {
-                int settingGroupIndex = getDefaultSettingGroupIndex();
-                int settingGroupPosition = liveSettingGroupAdapter.findPositionByGroupIndex(settingGroupIndex);
-                RecyclerView.ViewHolder holder = mSettingGroupView.findViewHolderForAdapterPosition(settingGroupPosition < 0 ? 0 : settingGroupPosition);
-                if (holder != null)
-                    holder.itemView.requestFocus();
-                tvRightSettingLayout.setVisibility(View.VISIBLE);
-                ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) tvRightSettingLayout.getLayoutParams();
-                if (tvRightSettingLayout.getVisibility() == View.VISIBLE) {
-                    ViewObj viewObj = new ViewObj(tvRightSettingLayout, params);
-                    ObjectAnimator animator = ObjectAnimator.ofObject(viewObj, "marginRight", new IntEvaluator(), -tvRightSettingLayout.getLayoutParams().width, livePanelEdgeMargin());
-                    animator.setDuration(200);
-                    animator.addListener(new AnimatorListenerAdapter() {
-                        @Override
-                        public void onAnimationEnd(Animator animation) {
-                            super.onAnimationEnd(animation);
-                            mHandler.postDelayed(mHideSettingLayoutRun, postTimeout);
-                        }
-                    });
-                    animator.start();
-                }
-            }
-        }
-    };
-
-    private Runnable mHideSettingLayoutRun = new Runnable() {
-        @Override
-        public void run() {
-            ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) tvRightSettingLayout.getLayoutParams();
-            if (tvRightSettingLayout.getVisibility() == View.VISIBLE) {
-                ViewObj viewObj = new ViewObj(tvRightSettingLayout, params);
-                ObjectAnimator animator = ObjectAnimator.ofObject(viewObj, "marginRight", new IntEvaluator(), params.rightMargin, -tvRightSettingLayout.getLayoutParams().width);
-                animator.setDuration(200);
-                animator.addListener(new AnimatorListenerAdapter() {
-                    @Override
-                    public void onAnimationEnd(Animator animation) {
-                        super.onAnimationEnd(animation);
-                        tvRightSettingLayout.setVisibility(View.INVISIBLE);
-                        liveSettingGroupAdapter.setSelectedGroupIndex(-1);
-                    }
-                });
-                animator.start();
-            }
-        }
-    };
-
-    private int livePanelEdgeMargin() {
-        return 0;
-    }
-
-    //laodao 7å¤©Epgæ•°æ®ç»‘å®šå’Œå±•ç¤º
-    private void initEpgListView() {
-        mRightEpgList.setHasFixedSize(true);
-        mRightEpgList.setLayoutManager(new V7LinearLayoutManager(this.mContext, 1, false));
-        epgListAdapter = new LiveEpgAdapter();
-        mRightEpgList.setAdapter(epgListAdapter);
-
-        mRightEpgList.addOnScrollListener(new RecyclerView.OnScrollListener() {
-            @Override
-            public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
-                super.onScrollStateChanged(recyclerView, newState);
-                mHandler.removeCallbacks(mHideChannelListRun);
-                mHandler.postDelayed(mHideChannelListRun, postTimeout);
-            }
-        });
-        //ç”µè§†
-        mRightEpgList.setOnItemListener(new TvRecyclerView.OnItemListener() {
-            @Override
-            public void onItemPreSelected(TvRecyclerView parent, View itemView, int position) {
-                epgListAdapter.setFocusedEpgIndex(-1);
-            }
-
-            @Override
-            public void onItemSelected(TvRecyclerView parent, View itemView, int position) {
-                mHandler.removeCallbacks(mHideChannelListRun);
-                mHandler.postDelayed(mHideChannelListRun, postTimeout);
-                epgListAdapter.setFocusedEpgIndex(position);
-            }
-
-            @SuppressLint("NotifyDataSetChanged")
-            @Override
-            public void onItemClick(TvRecyclerView parent, View itemView, int position) {
-                if(position==currentLiveLookBackIndex)return;
-                Date date = liveEpgDateAdapter.getSelectedIndex() < 0 ? new Date() :
-                        liveEpgDateAdapter.getData().get(liveEpgDateAdapter.getSelectedIndex()).getDateParamVal();
-                Epginfo selectedData = epgListAdapter.getItem(position);
-                if (selectedData == null || selectedData.startdateTime == null || selectedData.enddateTime == null) return;
-                Date now = new Date();
-                if(new Date().compareTo(selectedData.startdateTime) < 0){
-                    return;
-                }
-                if (now.after(selectedData.enddateTime) && !canCurrentChannelCatchup()) return;
-                currentLiveLookBackIndex=position;
-                epgListAdapter.setSelectedEpgIndex(position);
-                if (now.compareTo(selectedData.startdateTime) >= 0 && now.compareTo(selectedData.enddateTime) <= 0) {
-                    mVideoView.release();
-                    isSHIYI = false;
-                    mVideoView.setUrl(currentLiveChannelItem.getUrl(),liveChannelHeader());
-                    mVideoView.start();
-                    epgListAdapter.setShiyiSelection(-1, false,timeFormat.format(date));
-                    epgListAdapter.notifyDataSetChanged();
-                    showProgressBars(false);
-                    return;
-                }
-                String shiyiUrl = currentLiveChannelItem.getUrl();
-                if (now.compareTo(selectedData.startdateTime) < 0) {
-
-                } else if (canCurrentChannelCatchup()) {
-                    mHandler.removeCallbacks(mHideChannelListRun);
-                    mHandler.postDelayed(mHideChannelListRun, 100);
-                    mVideoView.release();
-                    isSHIYI = true;
-                    //mCanSeek=true;
-                    shiyiUrl = buildCatchupUrl(shiyiUrl, selectedData);
-                    if (TextUtils.isEmpty(shiyiUrl)) return;
-                    LOG.i("echo-å›çœ‹åœ°å€playUrl :"+ shiyiUrl);
-                    playUrl = shiyiUrl;
-
-                    mVideoView.setUrl(playUrl,liveChannelHeader());
-                    mVideoView.start();
-                    epgListAdapter.setShiyiSelection(position, true, timeFormat.format(date));
-                    epgListAdapter.notifyDataSetChanged();
-                    mRightEpgList.setSelectedPosition(position);
-                    mRightEpgList.post(new Runnable() {
-                        @Override
-                        public void run() {
-                            mRightEpgList.smoothScrollToPosition(position);
-                        }
-                    });
-                    shiyi_time_c = getCatchupDurationSeconds(selectedData);
-                    ViewGroup.LayoutParams lp =  iv_play.getLayoutParams();
-                    lp.width=videoHeight/7;
-                    lp.height=videoHeight/7;
-                    sBar = (SeekBar) findViewById(R.id.pb_progressbar);
-                    sBar.setMax(safeTimeMs((long) shiyi_time_c * 1000));
-                    sBar.setProgress(safeTimeMs(mVideoView.getCurrentPosition()));
-                    tv_currentpos.setText(durationToString(safeTimeMs(mVideoView.getCurrentPosition())));
-                    tv_duration.setText(durationToString(safeTimeMs((long) shiyi_time_c * 1000)));
-                    showProgressBars(true);
-                    isBack = true;
-                }
-            }
-        });
-
-        //æ‰‹æœº/æ¨¡æ‹Ÿå™¨
-        epgListAdapter.setOnItemClickListener(new BaseQuickAdapter.OnItemClickListener() {
-            @SuppressLint("NotifyDataSetChanged")
-            @Override
-            public void onItemClick(BaseQuickAdapter adapter, View view, int position) {
-                if(position==currentLiveLookBackIndex)return;
-                Date date = liveEpgDateAdapter.getSelectedIndex() < 0 ? new Date() :
-                        liveEpgDateAdapter.getData().get(liveEpgDateAdapter.getSelectedIndex()).getDateParamVal();
-                Epginfo selectedData = epgListAdapter.getItem(position);
-                if (selectedData == null || selectedData.startdateTime == null || selectedData.enddateTime == null) return;
-                Date now = new Date();
-                if(new Date().compareTo(selectedData.startdateTime) < 0){
-                    return;
-                }
-                if (now.after(selectedData.enddateTime) && !canCurrentChannelCatchup()) return;
-                currentLiveLookBackIndex=position;
-                epgListAdapter.setSelectedEpgIndex(position);
-                if (now.compareTo(selectedData.startdateTime) >= 0 && now.compareTo(selectedData.enddateTime) <= 0) {
-                    mVideoView.release();
-                    isSHIYI = false;
-                    mVideoView.setUrl(currentLiveChannelItem.getUrl(),liveChannelHeader());
-                    mVideoView.start();
-                    epgListAdapter.setShiyiSelection(-1, false,timeFormat.format(date));
-                    epgListAdapter.notifyDataSetChanged();
-                    showProgressBars(false);
-                    return;
-                }
-                String shiyiUrl = currentLiveChannelItem.getUrl();
-                if (now.compareTo(selectedData.startdateTime) < 0) {
-
-                } else if (canCurrentChannelCatchup()) {
-                    mHandler.removeCallbacks(mHideChannelListRun);
-                    mHandler.postDelayed(mHideChannelListRun, 100);
-                    mVideoView.release();
-                    isSHIYI = true;
-                    //mCanSeek=true;
-                    shiyiUrl = buildCatchupUrl(shiyiUrl, selectedData);
-                    if (TextUtils.isEmpty(shiyiUrl)) return;
-                    LOG.i("echo-å›çœ‹åœ°å€playUrl :"+ shiyiUrl);
-                    playUrl = shiyiUrl;
-                    if(liveChannelHeader()!=null)LOG.i("echo-liveWebHeader :"+ liveChannelHeader().toString());
-                    mVideoView.setUrl(playUrl,liveChannelHeader());
-                    mVideoView.start();
-                    epgListAdapter.setShiyiSelection(position, true,timeFormat.format(date));
-                    epgListAdapter.notifyDataSetChanged();
-                    mRightEpgList.setSelectedPosition(position);
-                    mRightEpgList.post(new Runnable() {
-                        @Override
-                        public void run() {
-                            mRightEpgList.smoothScrollToPosition(position);
-                        }
-                    });
-                    shiyi_time_c = getCatchupDurationSeconds(selectedData);
-                    ViewGroup.LayoutParams lp =  iv_play.getLayoutParams();
-                    lp.width=videoHeight/7;
-                    lp.height=videoHeight/7;
-                    sBar = (SeekBar) findViewById(R.id.pb_progressbar);
-                    sBar.setMax(safeTimeMs((long) shiyi_time_c * 1000));
-                    sBar.setProgress(safeTimeMs(mVideoView.getCurrentPosition()));
-                   // long dd = mVideoView.getDuration();
-                    tv_currentpos.setText(durationToString(safeTimeMs(mVideoView.getCurrentPosition())));
-                    tv_duration.setText(durationToString(safeTimeMs((long) shiyi_time_c * 1000)));
-                    showProgressBars(true);
-                    isBack = true;
-                }
-            }
-        });
-    }
-    //laoda ç”Ÿæˆ7å¤©å›æ”¾æ—¥æœŸåˆ—è¡¨æ•°æ®
-    private void initDayList() {
-        liveDayList.clear();
-//        Date firstday = new Date(nowday.getTime() - 2 * 24 * 60 * 60 * 1000);
-//        for (int i = 0; i < 1; i++) {
-//            LiveDayListGroup daylist = new LiveDayListGroup();
-//            Date newday= new Date(firstday.getTime() + i * 24 * 60 * 60 * 1000);
-//            String day = formatDate1.format(newday);
-//            LOG.i("echo-date"+day);
-//            daylist.setGroupIndex(i);
-//            daylist.setGroupName(day);
-//            liveDayList.add(daylist);
-//        }
-
-        LiveDayListGroup daylist = new LiveDayListGroup();
-        Date newday= new Date((nowday.getTime()));
-        String day = formatDate1.format(newday);
-        LOG.i("echo-date"+day);
-        daylist.setGroupIndex(0);
-        daylist.setGroupName(day);
-        liveDayList.add(daylist);
-    }
-    //kens 7å¤©å›æ”¾æ•°æ®ç»‘å®šå’Œå±•ç¤º
-    private void initEpgDateView() {
-//        return;
-        mEpgDateGridView.setHasFixedSize(true);
-        mEpgDateGridView.setLayoutManager(new V7LinearLayoutManager(this.mContext, 1, false));
-        liveEpgDateAdapter = new LiveEpgDateAdapter();
-        Calendar calendar = Calendar.getInstance();
-        calendar.setTime(new Date());
-        @SuppressLint("SimpleDateFormat") SimpleDateFormat datePresentFormat = new SimpleDateFormat("MM-dd");
-        calendar.add(Calendar.DAY_OF_MONTH, 0);
-        for (int i = 0; i < 1; i++) {
-            Date dateIns = calendar.getTime();
-            LiveEpgDate epgDate = new LiveEpgDate();
-            epgDate.setIndex(i);
-            epgDate.setDatePresented(datePresentFormat.format(dateIns));
-            epgDate.setDateParamVal(dateIns);
-            liveEpgDateAdapter.addData(epgDate);
-//            calendar.add(Calendar.DAY_OF_MONTH, -1);
-        }
-        mEpgDateGridView.setAdapter(liveEpgDateAdapter);
-        mEpgDateGridView.addOnScrollListener(new RecyclerView.OnScrollListener() {
-            @Override
-            public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
-                super.onScrollStateChanged(recyclerView, newState);
-                mHandler.removeCallbacks(mHideChannelListRun);
-                mHandler.postDelayed(mHideChannelListRun, postTimeout);
-            }
-        });
-
-//        //ç”µè§†
-//        mEpgDateGridView.setOnItemListener(new TvRecyclerView.OnItemListener() {
-//            @Override
-//            public void onItemPreSelected(TvRecyclerView parent, View itemView, int position) {
-//                liveEpgDateAdapter.setFocusedIndex(-1);
-//            }
-//
-//            @Override
-//            public void onItemSelected(TvRecyclerView parent, View itemView, int position) {
-//                mHandler.removeCallbacks(mHideChannelListRun);
-//                mHandler.postDelayed(mHideChannelListRun, postTimeout);
-//                liveEpgDateAdapter.setFocusedIndex(position);
-//            }
-//
-//            @Override
-//            public void onItemClick(TvRecyclerView parent, View itemView, int position) {
-//                mHandler.removeCallbacks(mHideChannelListRun);
-//                mHandler.postDelayed(mHideChannelListRun, postTimeout);
-//                liveEpgDateAdapter.setSelectedIndex(position);
-//                getEpg(liveEpgDateAdapter.getData().get(position).getDateParamVal());
-//            }
-//        });
-//
-//        //æ‰‹æœº/æ¨¡æ‹Ÿå™¨
-//        liveEpgDateAdapter.setOnItemClickListener(new BaseQuickAdapter.OnItemClickListener() {
-//            @Override
-//            public void onItemClick(BaseQuickAdapter adapter, View view, int position) {
-//                FastClickCheckUtil.check(view);
-//                mHandler.removeCallbacks(mHideChannelListRun);
-//                mHandler.postDelayed(mHideChannelListRun, postTimeout);
-//                liveEpgDateAdapter.setSelectedIndex(position);
-//                getEpg(liveEpgDateAdapter.getData().get(position).getDateParamVal());
-//            }
-//        });
-        liveEpgDateAdapter.setSelectedIndex(0);
-        mEpgDateGridView.setVisibility(View.GONE);
-    }
-
-
-
-    private void initVideoView() {
-        LiveController controller = new LiveController(this);
-        controller.setListener(new LiveController.LiveControlListener() {
-            @Override
-            public boolean singleTap() {
-                showChannelList();
-                return true;
-            }
-
-            @Override
-            public void longPress() {
-                if(isBack){  //æ‰‹æœºæ¢æºå’Œæ˜¾ç¤ºæ—¶ç§»æ§åˆ¶æ 
-                    showProgressBars(true);
-                }else{
-                    showSettingGroup();
-                }
-            }
-
-            @Override
-            public void playStateChanged(int playState) {
-                mHandler.removeCallbacks(mConnectTimeoutChangeSourceRun);
-                switch (playState) {
-                    case VideoView.STATE_IDLE:
-                        // ç©ºé—²çŠ¶æ€ï¼šæ’­æ”¾å™¨å¤„äºç©ºé—²ï¼Œå°šæœªå¼€å§‹æ’­æ”¾ã€‚ä¸€èˆ¬ä¸éœ€è¦è‡ªåŠ¨æ¢æºã€‚
-                    case VideoView.STATE_PAUSED:
-                        // æš‚åœçŠ¶æ€ï¼šæ’­æ”¾è¢«æš‚åœï¼Œé€šå¸¸æ˜¯ç”¨æˆ·æ“ä½œï¼Œä¸è§¦å‘è‡ªåŠ¨æ¢æº
-                        break;
-                    case VideoView.STATE_PREPARED:
-                        // å‡†å¤‡å°±ç»ªï¼šæ’­æ”¾å™¨å·²ç»åŠ è½½å¥½åª’ä½“æ•°æ®ï¼Œä½†å°šæœªå¼€å§‹æ’­æ”¾ã€‚
-                    case VideoView.STATE_BUFFERED:
-                        pendingFailoverEvent = currentPlaybackStarted
-                                ? PlaybackEvent.NO_DATA_8_SECONDS
-                                : PlaybackEvent.NO_FIRST_FRAME_10_SECONDS;
-                        mHandler.postDelayed(mConnectTimeoutChangeSourceRun,
-                                currentPlaybackStarted ? 8_000L : 10_000L);
-                        break;
-                    case VideoView.STATE_PLAYING:
-                        // æ’­æ”¾çŠ¶æ€ï¼šå½“æ’­æ”¾å™¨ç¼“å†²å®Œæˆæˆ–æ­£åœ¨æ­£å¸¸æ’­æ”¾æ—¶ï¼Œè¡¨æ˜å½“å‰æºæ˜¯å¯ç”¨çš„ï¼Œ
-                        hideSwitchChannelSnapshot();
-                        if (resolutionInfoPending) {
-                            resolutionInfoRetryCount = 0;
-                            mHandler.removeCallbacks(mUpdateResolutionInfoRun);
-                            mHandler.post(mUpdateResolutionInfoRun);
-                        }
-                        currentLiveChangeSourceTimes = 0;
-                        allowLiveSwitchPlayer = true;
-                        currentPlaybackStarted = true;
-                        failoverPolicy.onEvent(PlaybackEvent.PLAYBACK_STARTED,
-                                failoverState, System.currentTimeMillis());
-                        break;
-                    case VideoView.STATE_ERROR:
-                    case VideoView.STATE_PLAYBACK_COMPLETED:
-                        // é”™è¯¯æˆ–æ’­æ”¾ç»“æŸçŠ¶æ€ï¼šæ’­æ”¾å™¨é‡åˆ°é”™è¯¯æˆ–æ’­æ”¾å®Œæ¯•æ—¶ï¼Œ
-                        // é€šç”¨æ’­æ”¾å™¨å›è°ƒæ— æ³•å¯é æå– HTTP çŠ¶æ€ç ï¼ŒæŒ‰é€šç”¨å¤±è´¥å¤„ç†ã€‚
-                        hideSwitchChannelSnapshot();
-                        pendingFailoverEvent = PlaybackEvent.PLAYBACK_ERROR;
-                        mHandler.post(mConnectTimeoutChangeSourceRun);
-                        break;
-                    case VideoView.STATE_PREPARING:
-                        pendingFailoverEvent = PlaybackEvent.NO_FIRST_FRAME_10_SECONDS;
-                        mHandler.postDelayed(mConnectTimeoutChangeSourceRun, 10_000L);
-                        break;
-                    case VideoView.STATE_BUFFERING:
-                        pendingFailoverEvent = currentPlaybackStarted
-                                ? PlaybackEvent.NO_DATA_8_SECONDS
-                                : PlaybackEvent.NO_FIRST_FRAME_10_SECONDS;
-                        mHandler.postDelayed(mConnectTimeoutChangeSourceRun,
-                                currentPlaybackStarted ? 8_000L : 10_000L);
-                        break;
-                    default:
-                        LOG.i("echo-Unexpected live_play state: " + playState);
-                        break;
-                }
-            }
-
-            @Override
-            public void changeSource(int direction) {
-                if (direction > 0)
-                    if(isBack){  //æ‰‹æœºæ¢æºå’Œæ˜¾ç¤ºæ—¶ç§»æ§åˆ¶æ 
-                        showProgressBars(true);
-                    }else{
-                        playNextSource();
-                    }
-                else
-                    playPreSource();
-            }
-        });
-        controller.setCanChangePosition(false);
-        controller.setEnableInNormal(true);
-        controller.setGestureEnabled(true);
-        controller.setDoubleTapTogglePlayEnabled(false);
-        mVideoView.setVideoController(controller);
-        mVideoView.setProgressManager(null);
-    }
-
-    private boolean switchLivePlayerAndReplay() {
-        if (!allowLiveSwitchPlayer || currentLiveChannelItem == null || mVideoView == null) {
-            return false;
-        }
-        mHandler.removeCallbacks(mConnectTimeoutChangeSourceRun);
-        mVideoView.release();
-        if (!livePlayerManager.switchLivePlayer(mVideoView)) {
-            allowLiveSwitchPlayer = false;
-            return false;
-        }
-//        LOG.i("echo-liveAutoRetry switch player and replay current stream");
-        allowLiveSwitchPlayer = false;
-        String retryUrl = isSHIYI && !TextUtils.isEmpty(playUrl) ? playUrl : currentLiveChannelItem.getUrl();
-        mVideoView.setUrl(retryUrl, liveChannelHeader());
-        mVideoView.start();
-        return true;
-    }
-
-    private Runnable mConnectTimeoutChangeSourceRun = new Runnable() {
-        @Override
-        public void run() {
-            if (!isCurrentLiveChannelValid()) return;
-            FailoverDecision decision = failoverPolicy.onEvent(
-                    pendingFailoverEvent, failoverState, System.currentTimeMillis());
-            switch (decision) {
-                case RETRY_CURRENT:
-                    if (!switchLivePlayerAndReplay()) replayCurrentLine();
-                    break;
-                case TRY_NEXT:
-                    currentLiveChannelItem.nextSource();
-                    playChannel(currentChannelGroupIndex, currentLiveChannelIndex, true);
-                    break;
-                case REFRESH_CONFIG:
-                    refreshLiveChannelListAndPlay(currentLiveChannelItem.getChannelName(),
-                            currentLiveChannelItem.getSourceIndex());
-                    break;
-                case SHOW_EXHAUSTED:
-                    hideSwitchChannelSnapshot();
-                    Toast.makeText(LivePlayActivity.this,
-                            R.string.live_source_exhausted, Toast.LENGTH_SHORT).show();
-                    break;
-                case STAY_LOCKED:
-                    Toast.makeText(LivePlayActivity.this,
-                            R.string.live_source_locked_failure, Toast.LENGTH_SHORT).show();
-                    break;
-                case NONE:
-                default:
-                    break;
-            }
-        }
-    };
-
-    private void replayCurrentLine() {
-        if (mVideoView == null || currentLiveChannelItem == null) return;
-        mVideoView.release();
-        String retryUrl = isSHIYI && !TextUtils.isEmpty(playUrl)
-                ? playUrl : currentLiveChannelItem.getUrl();
-        mVideoView.setUrl(retryUrl, liveChannelHeader());
-        mVideoView.start();
-    }
-
-    private void initChannelGroupView() {
-        mChannelGroupView.setHasFixedSize(true);
-        mChannelGroupView.setLayoutManager(new V7LinearLayoutManager(this.mContext, 1, false));
-
-        liveChannelGroupAdapter = new LiveChannelGroupAdapter();
-        mChannelGroupView.setAdapter(liveChannelGroupAdapter);
-        mChannelGroupView.addOnScrollListener(new RecyclerView.OnScrollListener() {
-            @Override
-            public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
-                super.onScrollStateChanged(recyclerView, newState);
-                mHandler.removeCallbacks(mHideChannelListRun);
-                mHandler.postDelayed(mHideChannelListRun, postTimeout);
-            }
-        });
-
-        //ç”µè§†
-        mChannelGroupView.setOnItemListener(new TvRecyclerView.OnItemListener() {
-            @Override
-            public void onItemPreSelected(TvRecyclerView parent, View itemView, int position) {
-            }
-
-            @Override
-            public void onItemSelected(TvRecyclerView parent, View itemView, int position) {
-                selectChannelGroup(position, true, -1);
-            }
-
-            @Override
-            public void onItemClick(TvRecyclerView parent, View itemView, int position) {
-                if (isNeedInputPassword(position)) {
-                    showPasswordDialog(position, -1);
-                }
-            }
-        });
-
-        //æ‰‹æœº/æ¨¡æ‹Ÿå™¨
-        liveChannelGroupAdapter.setOnItemClickListener(new BaseQuickAdapter.OnItemClickListener() {
-            @Override
-            public void onItemClick(BaseQuickAdapter adapter, View view, int position) {
-                FastClickCheckUtil.check(view);
-                selectChannelGroup(position, false, -1);
-            }
-        });
-    }
-
-    private void selectChannelGroup(int groupIndex, boolean focus, int liveChannelIndex) {
-        if (focus && tvLeftChannelListLayout.getVisibility() != View.VISIBLE) return;
-        mLastChannelGroupIndex=groupIndex;
-        if (focus) {
-            liveChannelGroupAdapter.setFocusedGroupIndex(groupIndex);
-            clearFocusedChannelInMenu();
-        }
-        if ((groupIndex > -1 && groupIndex != liveChannelGroupAdapter.getSelectedGroupIndex()) || isNeedInputPassword(groupIndex)) {
-            liveChannelGroupAdapter.setSelectedGroupIndex(groupIndex);
-            if (isNeedInputPassword(groupIndex)) {
-                showPasswordDialog(groupIndex, liveChannelIndex);
-                return;
-            }
-            if (focus && liveChannelIndex < 0) {
-                loadChannelGroupData(groupIndex);
-            } else {
-                loadChannelGroupDataAndPlay(groupIndex, liveChannelIndex);
-            }
-        }
-        if (tvLeftChannelListLayout.getVisibility() == View.VISIBLE) {
-            mHandler.removeCallbacks(mHideChannelListRun);
-            mHandler.postDelayed(mHideChannelListRun, postTimeout);
-        }
-    }
-
-    private void clearFocusedChannelInMenu() {
-        if (tvLeftChannelListLayout.getVisibility() != View.VISIBLE) return;
-        if (mLiveChannelView.isComputingLayout() || mLiveChannelView.isScrolling()) {
-            mLiveChannelView.postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    clearFocusedChannelInMenu();
-                }
-            }, 50);
-            return;
-        }
-        liveChannelItemAdapter.setFocusedChannelIndex(-1);
-    }
-
-    private void initLiveChannelView() {
-        mLiveChannelView.setHasFixedSize(true);
-        mLiveChannelView.setLayoutManager(new V7LinearLayoutManager(this.mContext, 1, false));
-
-        liveChannelItemAdapter = new LiveChannelItemAdapter();
-        mLiveChannelView.setAdapter(liveChannelItemAdapter);
-        mLiveChannelView.addOnScrollListener(new RecyclerView.OnScrollListener() {
-            @Override
-            public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
-                super.onScrollStateChanged(recyclerView, newState);
-                mHandler.removeCallbacks(mHideChannelListRun);
-                mHandler.postDelayed(mHideChannelListRun, postTimeout);
-            }
-        });
-
-        //ç”µè§†
-        mLiveChannelView.setOnItemListener(new TvRecyclerView.OnItemListener() {
-            @Override
-            public void onItemPreSelected(TvRecyclerView parent, View itemView, int position) {
-            }
-
-            @Override
-            public void onItemSelected(TvRecyclerView parent, View itemView, int position) {
-                if (position < 0) return;
-                mHandler.removeCallbacks(mHideChannelListRun);
-                mHandler.postDelayed(mHideChannelListRun, postTimeout);
-                liveChannelGroupAdapter.setFocusedGroupIndex(-1);
-                liveChannelItemAdapter.setFocusedChannelIndex(position);
-            }
-
-            @Override
-            public void onItemClick(TvRecyclerView parent, View itemView, int position) {
-                clickLiveChannel(position);
-            }
-        });
-
-        //æ‰‹æœº/æ¨¡æ‹Ÿå™¨
-        liveChannelItemAdapter.setOnItemClickListener(new BaseQuickAdapter.OnItemClickListener() {
-            @Override
-            public void onItemClick(BaseQuickAdapter adapter, View view, int position) {
-                FastClickCheckUtil.check(view);
-                liveChannelItemAdapter.setSelectedChannelIndex(position);
-                clickLiveChannel(position);
-            }
-        });
-    }
-
-    private void clickLiveChannel(int position) {
-        if (tvLeftChannelListLayout.getVisibility() == View.VISIBLE) {
-            mHandler.removeCallbacks(mHideChannelListRun);
-            mHandler.postDelayed(mHideChannelListRun, postTimeout);
-        }
-        playChannel(liveChannelGroupAdapter.getSelectedGroupIndex(), position, false);
-    }
-
-    private void initSettingGroupView() {
-        mSettingGroupView.setHasFixedSize(true);
-        mSettingGroupView.setLayoutManager(new V7LinearLayoutManager(this.mContext, 1, false));
-
-        liveSettingGroupAdapter = new LiveSettingGroupAdapter();
-        mSettingGroupView.setAdapter(liveSettingGroupAdapter);
-        mSettingGroupView.addOnScrollListener(new RecyclerView.OnScrollListener() {
-            @Override
-            public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
-                super.onScrollStateChanged(recyclerView, newState);
-                mHandler.removeCallbacks(mHideSettingLayoutRun);
-                mHandler.postDelayed(mHideSettingLayoutRun, postTimeout);
-            }
-        });
-
-        //ç”µè§†
-        mSettingGroupView.setOnItemListener(new TvRecyclerView.OnItemListener() {
-            @Override
-            public void onItemPreSelected(TvRecyclerView parent, View itemView, int position) {
-            }
-
-            @Override
-            public void onItemSelected(TvRecyclerView parent, View itemView, int position) {
-                mHandler.removeCallbacks(mHideSettingLayoutRun);
-                mHandler.postDelayed(mHideSettingLayoutRun, postTimeout);
-                selectVisibleSettingGroup(position, true);
-            }
-
-            @Override
-            public void onItemClick(TvRecyclerView parent, View itemView, int position) {
-            }
-        });
-
-        //æ‰‹æœº/æ¨¡æ‹Ÿå™¨
-        liveSettingGroupAdapter.setOnItemClickListener(new BaseQuickAdapter.OnItemClickListener() {
-            @Override
-            public void onItemClick(BaseQuickAdapter adapter, View view, int position) {
-                FastClickCheckUtil.check(view);
-                selectVisibleSettingGroup(position, false);
-            }
-        });
-    }
-
-    private void selectVisibleSettingGroup(int position, boolean focus) {
-        if (position < 0 || position >= liveSettingGroupAdapter.getData().size()) return;
-        selectSettingGroup(liveSettingGroupAdapter.getData().get(position).getGroupIndex(), focus);
-    }
-
-    private void selectSettingGroup(int position, boolean focus) {
-        if (focus) {
-            liveSettingGroupAdapter.setFocusedGroupIndex(position);
-            liveSettingItemAdapter.setFocusedItemIndex(-1);
-        }
-        if (position == liveSettingGroupAdapter.getSelectedGroupIndex() || position < 0 || position >= liveSettingGroupList.size())
-            return;
-
-        liveSettingGroupAdapter.setSelectedGroupIndex(position);
-        liveSettingItemAdapter.setNewData(liveSettingGroupList.get(position).getLiveSettingItems());
-
-        switch (position) {
-            case 0:
-                if (currentLiveChannelItem != null
-                        && currentLiveChannelItem.getSourceIndex() >= 0
-                        && currentLiveChannelItem.getSourceIndex() < liveSettingItemAdapter.getData().size()) {
-                    liveSettingItemAdapter.selectItem(currentLiveChannelItem.getSourceIndex(), true, false);
-                }
-                break;
-            case 1:
-                liveSettingItemAdapter.selectItem(livePlayerManager.getLivePlayerScale(), true, true);
-                break;
-            case 2:
-                liveSettingItemAdapter.selectItem(livePlayerManager.getLivePlayerType(), true, true);
-                break;
-            case 6:
-                liveSettingItemAdapter.selectItem(getCurrentLiveApiHistoryIndex(), true, true);
-                break;
-        }
-        int scrollToPosition = liveSettingItemAdapter.getSelectedItemIndex();
-        if (scrollToPosition < 0) scrollToPosition = 0;
-        mSettingItemView.scrollToPosition(scrollToPosition);
-        mHandler.removeCallbacks(mHideSettingLayoutRun);
-        mHandler.postDelayed(mHideSettingLayoutRun, postTimeout);
-    }
-
-    private void initSettingItemView() {
-        mSettingItemView.setHasFixedSize(true);
-        mSettingItemView.setLayoutManager(new V7LinearLayoutManager(this.mContext, 1, false));
-
-        liveSettingItemAdapter = new LiveSettingItemAdapter();
-        mSettingItemView.setAdapter(liveSettingItemAdapter);
-        mSettingItemView.addOnScrollListener(new RecyclerView.OnScrollListener() {
-            @Override
-            public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
-                super.onScrollStateChanged(recyclerView, newState);
-                mHandler.removeCallbacks(mHideSettingLayoutRun);
-                mHandler.postDelayed(mHideSettingLayoutRun, postTimeout);
-            }
-        });
-
-        //ç”µè§†
-        mSettingItemView.setOnItemListener(new TvRecyclerView.OnItemListener() {
-            @Override
-            public void onItemPreSelected(TvRecyclerView parent, View itemView, int position) {
-            }
-
-            @Override
-            public void onItemSelected(TvRecyclerView parent, View itemView, int position) {
-                if (position < 0) return;
-                liveSettingGroupAdapter.setFocusedGroupIndex(-1);
-                liveSettingItemAdapter.setFocusedItemIndex(position);
-                mHandler.removeCallbacks(mHideSettingLayoutRun);
-                mHandler.postDelayed(mHideSettingLayoutRun, postTimeout);
-            }
-
-            @Override
-            public void onItemClick(TvRecyclerView parent, View itemView, int position) {
-                clickSettingItem(position);
-            }
-        });
-
-        //æ‰‹æœº/æ¨¡æ‹Ÿå™¨
-        liveSettingItemAdapter.setOnItemClickListener(new BaseQuickAdapter.OnItemClickListener() {
-            @Override
-            public void onItemClick(BaseQuickAdapter adapter, View view, int position) {
-                FastClickCheckUtil.check(view);
-                clickSettingItem(position);
-            }
-        });
-    }
-
-    private void clickSettingItem(int position) {
-        int settingGroupIndex = liveSettingGroupAdapter.getSelectedGroupIndex();
-        if (settingGroupIndex >= 0 && settingGroupIndex < 3 && !isCurrentLiveChannelValid()) {
-            return;
-        }
-        if (settingGroupIndex < 4) {
-            if (position == liveSettingItemAdapter.getSelectedItemIndex())
-                return;
-            liveSettingItemAdapter.selectItem(position, true, true);
-        }
-        switch (settingGroupIndex) {
-            case 0://çº¿è·¯åˆ‡æ¢
-                if (position < 0 || position >= currentLiveChannelItem.getSourceNum()) break;
-                failoverState.setUserLocked(true);
-                currentLiveChannelItem.setSourceIndex(position);
-                playChannel(currentChannelGroupIndex, currentLiveChannelIndex,true);
-                break;
-            case 1://ç”»é¢æ¯”ä¾‹
-                livePlayerManager.changeLivePlayerScale(mVideoView, position);
-                break;
-            case 2://æ’­æ”¾è§£ç 
-                mVideoView.release();
-                livePlayerManager.changeLivePlayerType(mVideoView, position);
-                mVideoView.setUrl(currentLiveChannelItem.getUrl(),liveChannelHeader());
-                mVideoView.start();
-                break;
-            case 3://è¶…æ—¶æ¢æº
-                Hawk.put(HawkConfig.LIVE_CONNECT_TIMEOUT, position);
-                break;
-            case 4://åå¥½è®¾ç½®
-                boolean select = false;
-                switch (position) {
-                    case 0:
-                        select = !Hawk.get(HawkConfig.LIVE_SHOW_TIME, false);
-                        Hawk.put(HawkConfig.LIVE_SHOW_TIME, select);
-                        showTime();
-                        break;
-                    case 1:
-                        select = !Hawk.get(HawkConfig.LIVE_SHOW_NET_SPEED, false);
-                        Hawk.put(HawkConfig.LIVE_SHOW_NET_SPEED, select);
-                        showNetSpeed();
-                        break;
-                    case 2:
-                        select = !Hawk.get(HawkConfig.LIVE_CHANNEL_REVERSE, false);
-                        Hawk.put(HawkConfig.LIVE_CHANNEL_REVERSE, select);
-                        break;
-                    case 3:
-                        select = !Hawk.get(HawkConfig.LIVE_CROSS_GROUP, false);
-                        Hawk.put(HawkConfig.LIVE_CROSS_GROUP, select);
-                        break;
-                }
-                liveSettingItemAdapter.selectItem(position, select, false);
-                break;
-            case 5://å¤šæºåˆ‡æ¢
-                //TODO
-                if(position==ApiConfig.getLiveGroupIndex())break;
-                String currentChannelName = getPreferredLiveRefreshChannelName();
-                int currentSourceIndex = getPreferredLiveRefreshSourceIndex();
-                JsonArray live_groups=Hawk.get(HawkConfig.LIVE_GROUP_LIST,new JsonArray());
-                if (live_groups == null || position >= live_groups.size()) break;
-                liveConfigRequestId++;
-                JsonObject livesOBJ = live_groups.get(position).getAsJsonObject();
-                liveSettingItemAdapter.selectItem(position, true, true);
-                ApiConfig.setLiveGroupIndex(position);
-                ApiConfig.get().loadLiveApi(livesOBJ);
-                if (ApiConfig.get().getChannelGroupList().isEmpty()) {
-                    if (mVideoView != null) mVideoView.release();
-                    setEmptyLiveChannelList(false);
-                    break;
-                }
-                refreshLiveChannelListAndPlay(currentChannelName, currentSourceIndex);
-                break;
-            case 6: {//é…ç½®åˆ‡æ¢
-                ArrayList<String> history = Hawk.get(HawkConfig.LIVE_API_HISTORY, new ArrayList<String>());
-                if (history.isEmpty() || position < 0 || position >= history.size()) break;
-                String value = history.get(position);
-                String oldLiveApi = Hawk.get(HawkConfig.LIVE_API_URL, "");
-                String configChannelName = getPreferredLiveRefreshChannelName();
-                int configSourceIndex = getPreferredLiveRefreshSourceIndex();
-                liveSettingItemAdapter.selectItem(position, true, true);
-                if (value.equals(oldLiveApi)) break;
-                final int requestId = ++liveConfigRequestId;
-                Hawk.put(HawkConfig.LIVE_API_URL, value);
-                HistoryHelper.setLiveApiHistory(value);
-                ApiConfig.get().refreshLiveApiHistoryItems();
-                ApiConfig.get().loadLiveConfig(false, new ApiConfig.LoadConfigCallback() {
-                    @Override
-                    public void success() {
-                        mHandler.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (requestId != liveConfigRequestId || isFinishing()) return;
-                                refreshLiveChannelListAndPlay(configChannelName, configSourceIndex);
-                            }
-                        });
-                    }
-
-                    @Override
-                    public void error(String msg) {
-                        mHandler.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (requestId != liveConfigRequestId || isFinishing()) return;
-                                if (mVideoView != null) mVideoView.release();
-                                ApiConfig.get().refreshLiveApiHistoryItems();
-                                setEmptyLiveChannelList(false);
-                                Toast.makeText(LivePlayActivity.this, msg, Toast.LENGTH_SHORT).show();
-                            }
-                        });
-                    }
-
-                    @Override
-                    public void notice(String msg) {
-                        mHandler.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (requestId != liveConfigRequestId || isFinishing()) return;
-                                Toast.makeText(LivePlayActivity.this, msg, Toast.LENGTH_SHORT).show();
-                            }
-                        });
-                    }
-                });
-                break;
-            }
-        }
-        mHandler.removeCallbacks(mHideSettingLayoutRun);
-        mHandler.postDelayed(mHideSettingLayoutRun, postTimeout);
-    }
-
-    private String getPreferredLiveRefreshChannelName() {
-        if (currentLiveChannelItem != null) return currentLiveChannelItem.getChannelName();
-        return Hawk.get(HawkConfig.LIVE_CHANNEL, "");
-    }
-
-    private int getPreferredLiveRefreshSourceIndex() {
-        if (currentLiveChannelItem != null) return currentLiveChannelItem.getSourceIndex();
-        return -1;
-    }
-
-    private void refreshLiveChannelListAndPlay(String channelName, int sourceIndex) {
-        refreshingLiveChannelList = true;
-        pendingLiveRefreshChannelName = channelName;
-        pendingLiveRefreshSourceIndex = sourceIndex;
-        currentLiveLookBackIndex = -1;
-        currentLiveChangeSourceTimes = 0;
-        allowLiveSwitchPlayer = true;
-        channelGroupPasswordConfirmed.clear();
-        mHandler.removeCallbacks(mConnectTimeoutChangeSourceRun);
-        mHandler.removeCallbacks(mLoadEpgRun);
-        hideSwitchChannelSnapshot();
-        if (tvLeftChannelListLayout != null) tvLeftChannelListLayout.setVisibility(View.INVISIBLE);
-        if (tvRightSettingLayout != null) tvRightSettingLayout.setVisibility(View.INVISIBLE);
-        if (liveChannelGroupAdapter != null) {
-            liveChannelGroupAdapter.clearGroupState();
-        }
-        if (liveChannelItemAdapter != null) {
-            liveChannelItemAdapter.setFocusedChannelIndex(-1);
-            liveChannelItemAdapter.setSelectedChannelIndex(-1);
-            liveChannelItemAdapter.setNewData(new ArrayList<LiveChannelItem>());
-        }
-        initLiveChannelList();
-        initLiveSettingGroupList();
-    }
-
-    private int getCurrentLiveApiHistoryIndex() {
-        ArrayList<String> history = Hawk.get(HawkConfig.LIVE_API_HISTORY, new ArrayList<String>());
-        if (history.isEmpty()) return -1;
-        String current = Hawk.get(HawkConfig.LIVE_API_URL, "");
-        int idx = history.indexOf(current);
-        return idx >= 0 ? idx : -1;
-    }
-
-    private void initLiveChannelList() {
-        if (ApiConfig.get().shouldReloadLiveConfig()) {
-            loadLiveConfigOnEnter();
-            return;
-        }
-        List<LiveChannelGroup> list = ApiConfig.get().getChannelGroupList();
-        if (list.isEmpty()) {
-            loadLiveConfigOnEnter();
-            return;
-        }
-        initLiveObj();
-        if (list.size() == 1 && list.get(0).getGroupName().startsWith("http://127.0.0.1")) {
-            loadProxyLives(list.get(0).getGroupName());
-        } else {
-            applyLiveChannelGroups(list);
-        }
-    }
-
-    private boolean loadingLiveConfigOnEnter = false;
-
-    private void loadLiveConfigOnEnter() {
-        if (loadingLiveConfigOnEnter) return;
-        loadingLiveConfigOnEnter = true;
-        showLoading();
-        ApiConfig.get().loadLiveConfig(true, new ApiConfig.LoadConfigCallback() {
-            @Override
-            public void success() {
-                mHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        loadingLiveConfigOnEnter = false;
-                        initLiveChannelList();
-                        initLiveSettingGroupList();
-                    }
-                });
-            }
-
-            @Override
-            public void error(String msg) {
-                mHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        loadingLiveConfigOnEnter = false;
-                        setEmptyLiveChannelList();
-                    }
-                });
-            }
-
-            @Override
-            public void notice(String msg) {
-                mHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        Toast.makeText(LivePlayActivity.this, msg, Toast.LENGTH_SHORT).show();
-                    }
-                });
-            }
-        });
-    }
-
-    public void loadProxyLives(String url) {
-        try {
-            Uri parsedUrl = Uri.parse(url);
-            url = new String(Base64.decode(parsedUrl.getQueryParameter("ext"), Base64.DEFAULT | Base64.URL_SAFE | Base64.NO_WRAP), "UTF-8");
-        } catch (Throwable th) {
-            if (!url.startsWith("http://127.0.0.1")) {
-                setEmptyLiveChannelList();
-                return;
-            }
-        }
-        if (!isValidLiveProxyUrl(url)) {
-            setEmptyLiveChannelList();
-            return;
-        }
-        if (!refreshingLiveChannelList) {
-            showLoading();
-        }
-
-        LOG.i("echo-live-url:"+url);
-
-        if(url.contains(".py") || url.contains(".js")){
-            String finalUrl = url;
-            Runnable waitResponse = new Runnable() {
-                @Override
-                public void run() {
-                    ExecutorService executor = Executors.newSingleThreadExecutor();
-                    Future<String> future = executor.submit(new Callable<String>() {
-                        @Override
-                        public String call() {
-                            Spider sp = ApiConfig.get().getLiveCSP(finalUrl);
-                            String json=sp.liveContent(finalUrl);
-//                            LOG.i("echo--loadProxyLives-json--"+json);
-                            return json;
-                        }
-                    });
-                    String sortJson = null;
-                    try {
-                        sortJson = future.get(ApiConfig.get().getLiveConnectTimeoutSeconds(), TimeUnit.SECONDS);
-                    } catch (TimeoutException e) {
-                        e.printStackTrace();
-                        future.cancel(true);
-                    } catch (InterruptedException | ExecutionException e) {
-                        e.printStackTrace();
-                    } finally {
-                        if (sortJson==null || sortJson.isEmpty()) {
-                            // é¢‘é“åˆ—è¡¨ä¸ºç©ºæ—¶ï¼Œä½¿ç”¨é»˜è®¤æ’­æ”¾åˆ—è¡¨
-                            mHandler.post(new Runnable() {
-                                @Override
-                                public void run() {
-                                    setEmptyLiveChannelList();
-                                }
-                            });
-                            return;
-                        }
-                        JsonArray livesArray = TxtSubscribe.parseToJsonArray(sortJson);
-
-                        ApiConfig.get().loadLives(livesArray);
-                        List<LiveChannelGroup> list = ApiConfig.get().getChannelGroupList();
-                        if (list.isEmpty()) {
-                            mHandler.post(new Runnable() {
-                                @Override
-                                public void run() {
-                                    setEmptyLiveChannelList();
-                                }
-                            });
-                            return;
-                        }
-                        final ArrayList<LiveChannelGroup> loadedGroups = new ArrayList<>(list);
-
-                        mHandler.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                applyLiveChannelGroups(loadedGroups);
-                            }
-                        });
-                        try {
-                            executor.shutdown();
-                        } catch (Throwable th) {
-                            th.printStackTrace();
-                        }
-                    }
-                }
-            };
-            Executors.newSingleThreadExecutor().execute(waitResponse);
-        }else {
-            OkGo.<String>get(url).execute(new AbsCallback<String>() {
-
-                @Override
-                public String convertResponse(okhttp3.Response response) throws Throwable {
-                    assert response.body() != null;
-                    return response.body().string();
-                }
-
-                @Override
-                public void onSuccess(Response<String> response) {
-                    JsonArray livesArray = TxtSubscribe.parseToJsonArray(response.body());
-
-                    ApiConfig.get().loadLives(livesArray);
-                    List<LiveChannelGroup> list = ApiConfig.get().getChannelGroupList();
-                    if (list.isEmpty()) {
-                        mHandler.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                setEmptyLiveChannelList();
-                            }
-                        });
-                        return;
-                    }
-                    final ArrayList<LiveChannelGroup> loadedGroups = new ArrayList<>(list);
-
-                    mHandler.post(new Runnable() {
-                        @Override
-                        public void run() {
-                            applyLiveChannelGroups(loadedGroups);
-                        }
-                    });
-                }
-
-                @Override
-                public void onError(Response<String> response) {
-                    mHandler.post(new Runnable() {
-                        @Override
-                        public void run() {
-                            setEmptyLiveChannelList();
-                        }
-                    });
-                }
-            });
-        }
-    }
-
-    private boolean isValidLiveProxyUrl(String url) {
-        if (TextUtils.isEmpty(url)) return false;
-        String lowerUrl = url.trim().toLowerCase(Locale.US);
-        return lowerUrl.startsWith("http://")
-                || lowerUrl.startsWith("https://")
-                || lowerUrl.startsWith("rtsp://")
-                || lowerUrl.startsWith("rtmp://")
-                || lowerUrl.startsWith("rtp://");
-    }
-
-    private void applyLiveChannelGroups(List<LiveChannelGroup> groups) {
-        liveChannelGroupList.clear();
-        liveChannelGroupList.addAll(groups);
-        showSuccess();
-        initLiveState();
-    }
-
-    private void initLiveState() {
-        refreshingLiveChannelList = false;
-        String lastChannelName = pendingLiveRefreshChannelName == null ? Hawk.get(HawkConfig.LIVE_CHANNEL, "") : pendingLiveRefreshChannelName;
-        int sourceIndex = pendingLiveRefreshSourceIndex;
-        pendingLiveRefreshChannelName = null;
-        pendingLiveRefreshSourceIndex = -1;
-
-        int lastChannelGroupIndex = -1;
-        int lastLiveChannelIndex = -1;
-        LiveChannelItem lastLiveChannelItem = null;
-        for (LiveChannelGroup liveChannelGroup : liveChannelGroupList) {
-            ArrayList<LiveChannelItem> groupChannels = liveChannelGroup.getLiveChannels();
-            if (groupChannels == null || groupChannels.isEmpty()) {
-                continue;
-            }
-            for (LiveChannelItem liveChannelItem : groupChannels) {
-                if (liveChannelItem.getChannelName().equals(lastChannelName)) {
-                    lastChannelGroupIndex = liveChannelGroup.getGroupIndex();
-                    lastLiveChannelIndex = liveChannelItem.getChannelIndex();
-                    lastLiveChannelItem = liveChannelItem;
-                    break;
-                }
-            }
-            if (lastChannelGroupIndex != -1) break;
-        }
-        if (lastChannelGroupIndex == -1) {
-            Integer[] cctv1Channel = getFirstChannelByName("CCTV1");
-            if (cctv1Channel != null) {
-                lastChannelGroupIndex = cctv1Channel[0];
-                lastLiveChannelIndex = cctv1Channel[1];
-            } else {
-                lastChannelGroupIndex = getFirstNoPasswordChannelGroup();
-                if (lastChannelGroupIndex == -1)
-                    lastChannelGroupIndex = 0;
-                lastLiveChannelIndex = 0;
-            }
-        }
-        if (lastLiveChannelItem != null && sourceIndex >= 0 && lastLiveChannelItem.getSourceNum() > 0) {
-            lastLiveChannelItem.setSourceIndex(Math.min(sourceIndex, lastLiveChannelItem.getSourceNum() - 1));
-        }
-
-        livePlayerManager.init(mVideoView);
-        showTime();
-        showNetSpeed();
-        tvLeftChannelListLayout.setVisibility(View.INVISIBLE);
-        tvRightSettingLayout.setVisibility(View.INVISIBLE);
-
-        liveChannelGroupAdapter.clearGroupState();
-        liveChannelGroupAdapter.setNewData(new ArrayList<>(liveChannelGroupList));
-        currentLiveChannelIndex = -1;
-        selectChannelGroup(lastChannelGroupIndex, false, lastLiveChannelIndex);
-    }
-
-    private boolean isListOrSettingLayoutVisible() {
-        return tvLeftChannelListLayout.getVisibility() == View.VISIBLE || tvRightSettingLayout.getVisibility() == View.VISIBLE;
-    }
-
-    private boolean hasCurrentLiveChannelSource() {
-        return currentLiveChannelItem != null
-                && currentLiveChannelItem.getChannelUrls() != null
-                && currentLiveChannelItem.getSourceNum() > 0
-                && currentLiveChannelItem.getSourceIndex() >= 0
-                && currentLiveChannelItem.getSourceIndex() < currentLiveChannelItem.getChannelUrls().size();
-    }
-
-    private int getDefaultSettingGroupIndex() {
-        if (hasCurrentLiveChannelSource()) return 0;
-        return liveSettingGroupList != null && liveSettingGroupList.size() > 6 ? 6 : 0;
-    }
-
-    private ArrayList<LiveSettingGroup> getVisibleLiveSettingGroupList() {
-        ArrayList<LiveSettingGroup> visibleGroups = new ArrayList<>();
-        if (liveSettingGroupList == null) return visibleGroups;
-        boolean showChannelOptions = hasCurrentLiveChannelSource();
-        for (LiveSettingGroup group : liveSettingGroupList) {
-            if (group == null) continue;
-            int groupIndex = group.getGroupIndex();
-            if (!showChannelOptions && groupIndex >= 0 && groupIndex <= 2) continue;
-            visibleGroups.add(group);
-        }
-        return visibleGroups;
-    }
-
-    private void initLiveSettingGroupList() {
-        liveSettingGroupList=ApiConfig.get().getLiveSettingGroupList();
-        if (liveSettingGroupList.size() < 7) return;
-        liveSettingGroupList.get(3).getLiveSettingItems().get(Hawk.get(HawkConfig.LIVE_CONNECT_TIMEOUT, 1)).setItemSelected(true);
-        liveSettingGroupList.get(4).getLiveSettingItems().get(0).setItemSelected(Hawk.get(HawkConfig.LIVE_SHOW_TIME, false));
-        liveSettingGroupList.get(4).getLiveSettingItems().get(1).setItemSelected(Hawk.get(HawkConfig.LIVE_SHOW_NET_SPEED, false));
-        liveSettingGroupList.get(4).getLiveSettingItems().get(2).setItemSelected(Hawk.get(HawkConfig.LIVE_CHANNEL_REVERSE, false));
-        liveSettingGroupList.get(4).getLiveSettingItems().get(3).setItemSelected(Hawk.get(HawkConfig.LIVE_CROSS_GROUP, false));
-        int liveGroupIndex = ApiConfig.getLiveGroupIndex();
-        if (liveGroupIndex >= 0 && liveGroupIndex < liveSettingGroupList.get(5).getLiveSettingItems().size()) {
-            liveSettingGroupList.get(5).getLiveSettingItems().get(liveGroupIndex).setItemSelected(true);
-        }
-    }
-
-    private void loadCurrentSourceList() {
-        ArrayList<LiveSettingItem> liveSettingItemList = new ArrayList<>();
-        if (currentLiveChannelItem != null && currentLiveChannelItem.getChannelSourceNames() != null) {
-            ArrayList<String> currentSourceNames = currentLiveChannelItem.getChannelSourceNames();
-            for (int j = 0; j < currentSourceNames.size(); j++) {
-                LiveSettingItem liveSettingItem = new LiveSettingItem();
-                liveSettingItem.setItemIndex(j);
-                liveSettingItem.setItemName(currentSourceNames.get(j));
-                liveSettingItemList.add(liveSettingItem);
-            }
-        }
-        liveSettingGroupList.get(0).setLiveSettingItems(liveSettingItemList);
-    }
-
-    private void showResolutionAfterChannelSwitch() {
-        resolutionInfoPending = true;
-        resolutionInfoRetryCount = 0;
-        if (tvResolution != null) {
-            tvResolution.setText("");
-            tvResolution.setVisibility(View.GONE);
-        }
-        mHandler.removeCallbacks(mHideResolutionInfoRun);
-        mHandler.removeCallbacks(mUpdateResolutionInfoRun);
-        mHandler.postDelayed(mUpdateResolutionInfoRun, RESOLUTION_INFO_RETRY_DELAY);
-    }
-
-    private void showResolutionSetting() {
-        mHandler.removeCallbacks(mHideResolutionInfoRun);
-        mHandler.removeCallbacks(mUpdateResolutionInfoRun);
-        if (Hawk.get(HawkConfig.LIVE_SHOW_RESOLUTION, false)) {
-            resolutionInfoPending = true;
-            resolutionInfoRetryCount = 0;
-            if (tvResolution != null) {
-                tvResolution.setVisibility(View.GONE);
-                mHandler.postDelayed(mUpdateResolutionInfoRun, RESOLUTION_INFO_RETRY_DELAY);
-            }
-        } else {
-            showResolutionAfterChannelSwitch();
-        }
-    }
-
-    private final Runnable mHideResolutionInfoRun = new Runnable() {
-        @Override
-        public void run() {
-            if (tvResolution != null) {
-                tvResolution.setVisibility(View.GONE);
-            }
-        }
-    };
-
-    private final Runnable mUpdateResolutionInfoRun = new Runnable() {
-        @Override
-        public void run() {
-            if (tvResolution == null || mVideoView == null) {
-                return;
-            }
-            if (mVideoView.getCurrentPlayState() != VideoView.STATE_PREPARED
-                    && mVideoView.getCurrentPlayState() != VideoView.STATE_BUFFERED
-                    && mVideoView.getCurrentPlayState() != VideoView.STATE_PLAYING) {
-                retryOrHideResolutionInfo();
-                return;
-            }
-            int[] videoSize = mVideoView.getVideoSize();
-            if (videoSize != null && videoSize.length >= 2 && videoSize[0] > 0 && videoSize[1] > 0) {
-                updateResolutionText(videoSize[0], videoSize[1]);
-                return;
-            }
-            retryOrHideResolutionInfo();
-        }
-    };
-
-    private void updateResolutionText(int width, int height) {
-        resolutionInfoPending = false;
-        tvResolution.setText(width + " x " + height);
-        tvResolution.setVisibility(View.VISIBLE);
-        mHandler.removeCallbacks(mHideResolutionInfoRun);
-    }
-
-    private void retryOrHideResolutionInfo() {
-        if (resolutionInfoPending && resolutionInfoRetryCount++ < RESOLUTION_INFO_MAX_RETRY) {
-            mHandler.postDelayed(mUpdateResolutionInfoRun, RESOLUTION_INFO_RETRY_DELAY);
-        } else {
-            tvResolution.setVisibility(View.GONE);
-        }
-    }
-
-    void showTime() {
-        if (Hawk.get(HawkConfig.LIVE_SHOW_TIME, false)) {
-            mHandler.post(mUpdateTimeRun);
-            tvTime.setVisibility(View.VISIBLE);
-        } else {
-            mHandler.removeCallbacks(mUpdateTimeRun);
-            tvTime.setVisibility(View.GONE);
-        }
-    }
-
-    private Runnable mUpdateTimeRun = new Runnable() {
-        @Override
-        public void run() {
-            Date day=new Date();
-            @SuppressLint("SimpleDateFormat") SimpleDateFormat df = new SimpleDateFormat("HH:mm");
-            tvTime.setText(df.format(day));
-            mHandler.postDelayed(this, 1000);
-        }
-    };
-
-    private void showNetSpeed() {
-//        tv_right_top_tipnetspeed.setVisibility(View.VISIBLE);
-        mHandler.removeCallbacks(mUpdateNetSpeedRun);
-        if (Hawk.get(HawkConfig.LIVE_SHOW_NET_SPEED, false)) {
-            mHandler.post(mUpdateNetSpeedRun);
-            tvNetSpeed.setVisibility(View.VISIBLE);
-        } else {
-            tvNetSpeed.setVisibility(View.GONE);
-        }
-    }
-
-    private Runnable mUpdateNetSpeedRun = new Runnable() {
-        @Override
-        public void run() {
-            if (mVideoView == null) return;
-            String speed = PlayerHelper.getDisplaySpeedBps(mVideoView.getTcpSpeed(), true);
-            tvNetSpeed.setText(speed);
-//            tv_right_top_tipnetspeed.setText(speed);
-            mHandler.postDelayed(this, 1000);
-        }
-    };
-
-    private void showPasswordDialog(int groupIndex, int liveChannelIndex) {
-        if (tvLeftChannelListLayout.getVisibility() == View.VISIBLE)
-            mHandler.removeCallbacks(mHideChannelListRun);
-
-        LivePasswordDialog dialog = new LivePasswordDialog(this);
-        dialog.setOnListener(new LivePasswordDialog.OnListener() {
-            @Override
-            public void onChange(String password) {
-                if (password.equals(liveChannelGroupList.get(groupIndex).getGroupPassword())) {
-                    channelGroupPasswordConfirmed.add(groupIndex);
-                    loadChannelGroupDataAndPlay(groupIndex, liveChannelIndex);
-                } else {
-                    Toast.makeText(App.getInstance(), "å¯†ç é”™è¯¯", Toast.LENGTH_SHORT).show();
-                }
-
-                if (tvLeftChannelListLayout.getVisibility() == View.VISIBLE)
-                    mHandler.postDelayed(mHideChannelListRun, postTimeout);
-            }
-
-            @Override
-            public void onCancel() {
-                if (tvLeftChannelListLayout.getVisibility() == View.VISIBLE) {
-                    int groupIndex = liveChannelGroupAdapter.getSelectedGroupIndex();
-                    liveChannelItemAdapter.setNewData(getLiveChannels(groupIndex));
-                }
-            }
-        });
-        dialog.show();
-    }
-
-    private void loadChannelGroupDataAndPlay(int groupIndex, int liveChannelIndex) {
-        liveChannelGroupAdapter.setSelectedGroupIndex(groupIndex);
-        loadChannelGroupData(groupIndex);
-
-        if (liveChannelIndex > -1) {
-            clickLiveChannel(liveChannelIndex);
-            mChannelGroupView.scrollToPosition(groupIndex);
-            mLiveChannelView.scrollToPosition(liveChannelIndex);
-        }
-    }
-
-    private void loadChannelGroupData(int groupIndex) {
-        liveChannelItemAdapter.setNewData(getLiveChannels(groupIndex));
-        if (groupIndex == currentChannelGroupIndex) {
-            if (currentLiveChannelIndex > -1)
-                mLiveChannelView.scrollToPosition(currentLiveChannelIndex);
-            liveChannelItemAdapter.setSelectedChannelIndex(currentLiveChannelIndex);
-        }
-        else {
-            mLiveChannelView.scrollToPosition(0);
-            liveChannelItemAdapter.setSelectedChannelIndex(-1);
-        }
-    }
-
-    private boolean isNeedInputPassword(int groupIndex) {
-        return !liveChannelGroupList.get(groupIndex).getGroupPassword().isEmpty()
-                && !isPasswordConfirmed(groupIndex);
-    }
-
-    private boolean isPasswordConfirmed(int groupIndex) {
-        for (Integer confirmedNum : channelGroupPasswordConfirmed) {
-            if (confirmedNum == groupIndex)
-                return true;
-        }
-        return false;
-    }
-
-    private ArrayList<LiveChannelItem> getLiveChannels(int groupIndex) {
-        if (!isNeedInputPassword(groupIndex)) {
-            return liveChannelGroupList.get(groupIndex).getLiveChannels();
-        } else {
-            return new ArrayList<>();
-        }
-    }
-
-    private Integer[] getFirstChannelByName(String keyword) {
-        if (TextUtils.isEmpty(keyword)) return null;
-        String upperKeyword = keyword.toUpperCase(Locale.US);
-        for (LiveChannelGroup liveChannelGroup : liveChannelGroupList) {
-            if (liveChannelGroup == null || isNeedInputPassword(liveChannelGroup.getGroupIndex())) continue;
-            ArrayList<LiveChannelItem> groupChannels = liveChannelGroup.getLiveChannels();
-            if (groupChannels == null || groupChannels.isEmpty()) continue;
-            for (LiveChannelItem item : groupChannels) {
-                if (item == null || TextUtils.isEmpty(item.getChannelName())) continue;
-                if (item.getChannelName().toUpperCase(Locale.US).contains(upperKeyword)) {
-                    return new Integer[]{liveChannelGroup.getGroupIndex(), item.getChannelIndex()};
-                }
-            }
-        }
-        return null;
-    }
-
-    private Integer[] getNextChannel(int direction) {
-        int channelGroupIndex = currentChannelGroupIndex;
-        int liveChannelIndex = currentLiveChannelIndex;
-
-        //è·¨é€‰åˆ†ç»„æ¨¡å¼ä¸‹è·³è¿‡åŠ å¯†é¢‘é“åˆ†ç»„ï¼ˆé¥æ§å™¨ä¸Šä¸‹é”®æ¢å°/è¶…æ—¶æ¢æºï¼‰
-        if (direction > 0) {
-            liveChannelIndex++;
-            if (liveChannelIndex >= getLiveChannels(channelGroupIndex).size()) {
-                liveChannelIndex = 0;
-                if (Hawk.get(HawkConfig.LIVE_CROSS_GROUP, false)) {
-                    do {
-                        channelGroupIndex++;
-                        if (channelGroupIndex >= liveChannelGroupList.size())
-                            channelGroupIndex = 0;
-                    } while (!liveChannelGroupList.get(channelGroupIndex).getGroupPassword().isEmpty() || channelGroupIndex == currentChannelGroupIndex);
-                }
-            }
-        } else {
-            liveChannelIndex--;
-            if (liveChannelIndex < 0) {
-                if (Hawk.get(HawkConfig.LIVE_CROSS_GROUP, false)) {
-                    do {
-                        channelGroupIndex--;
-                        if (channelGroupIndex < 0)
-                            channelGroupIndex = liveChannelGroupList.size() - 1;
-                    } while (!liveChannelGroupList.get(channelGroupIndex).getGroupPassword().isEmpty() || channelGroupIndex == currentChannelGroupIndex);
-                }
-                liveChannelIndex = getLiveChannels(channelGroupIndex).size() - 1;
-            }
-        }
-
-        Integer[] groupChannelIndex = new Integer[2];
-        groupChannelIndex[0] = channelGroupIndex;
-        groupChannelIndex[1] = liveChannelIndex;
-
-        return groupChannelIndex;
-    }
-
-    private int getFirstNoPasswordChannelGroup() {
-        for (LiveChannelGroup liveChannelGroup : liveChannelGroupList) {
-            if (liveChannelGroup.getGroupPassword().isEmpty())
-                return liveChannelGroup.getGroupIndex();
-        }
-        return -1;
-    }
-
-    private boolean isCurrentLiveChannelValid() {
-        if (currentLiveChannelItem == null) {
-            Toast.makeText(App.getInstance(), "è¯·å…ˆé€‰æ‹©é¢‘é“", Toast.LENGTH_SHORT).show();
-            return false;
-        }
-        return true;
-    }
-
-    //è®¡ç®—ä¸¤ä¸ªæ—¶é—´ç›¸å·®çš„ç§’æ•°
-    public static long getTime(String startTime, String endTime)  {
-        SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        long eTime = 0;
-        try {
-            eTime = df.parse(endTime).getTime();
-        } catch (ParseException e) {
-            e.printStackTrace();
-        }
-        long sTime = 0;
-        try {
-            sTime = df.parse(startTime).getTime();
-        } catch (ParseException e) {
-            e.printStackTrace();
-        }
-        long diff = (eTime - sTime) / 1000;
-        return diff;
-    }
-    private  String durationToString(int duration) {
-        if (duration < 0) {
-            duration = 0;
-        }
-        String result = "";
-        int dur = duration / 1000;
-        int hour=dur/3600;
-        int min = (dur / 60) % 60;
-        int sec = dur % 60;
-        if(hour>0){
-            if (min > 9) {
-                if (sec > 9) {
-                    result =hour+":"+ min + ":" + sec;
-                } else {
-                    result =hour+":"+ min + ":0" + sec;
-                }
-            } else {
-                if (sec > 9) {
-                    result =hour+":"+ "0" + min + ":" + sec;
-                } else {
-                    result = hour+":"+"0" + min + ":0" + sec;
-                }
-            }
-        }else{
-            if (min > 9) {
-                if (sec > 9) {
-                    result = min + ":" + sec;
-                } else {
-                    result = min + ":0" + sec;
-                }
-            } else {
-                if (sec > 9) {
-                    result ="0" + min + ":" + sec;
-                } else {
-                    result = "0" + min + ":0" + sec;
-                }
-            }
-        }
-        return result;
-    }
-    public void showProgressBars( boolean show){
-
-        sBar.requestFocus();
-        if(show){
-            ll_right_top_huikan.setVisibility(View.VISIBLE);
-            backcontroller.setVisibility(View.VISIBLE);
-            ll_epg.setVisibility(View.GONE);
-        }else{
-            backcontroller.setVisibility(View.GONE);
-            ll_right_top_huikan.setVisibility(View.GONE);
-            if(!tip_epg1.getText().equals("æš‚æ— ä¿¡æ¯")){
-                ll_epg.setVisibility(View.VISIBLE);
-            }
-        }
-
-
-
-        iv_play.setOnClickListener(new View.OnClickListener() {
-
-            @Override
-            public void onClick(View arg0) {
-                mVideoView.start();
-                iv_play.setVisibility(View.INVISIBLE);
-                countDownTimer.start();
-                iv_playpause.setBackground(ContextCompat.getDrawable(LivePlayActivity.context, R.drawable.vod_pause));
-            }
-        });
-
-        iv_playpause.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View arg0) {
-                if(mVideoView.isPlaying()){
-                    mVideoView.pause();
-                    countDownTimer.cancel();
-                    iv_play.setVisibility(View.VISIBLE);
-                    iv_playpause.setBackground(ContextCompat.getDrawable(LivePlayActivity.context, R.drawable.icon_play));
-                }else{
-                    mVideoView.start();
-                    iv_play.setVisibility(View.INVISIBLE);
-                    countDownTimer.start();
-                    iv_playpause.setBackground(ContextCompat.getDrawable(LivePlayActivity.context, R.drawable.vod_pause));
-                }
-            }
-        });
-        sBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-
-
-            @Override
-            public void onStopTrackingTouch(SeekBar arg0) {
-
-            }
-
-            @Override
-            public void onStartTrackingTouch(SeekBar arg0) {
-
-            }
-
-            @Override
-            public void onProgressChanged(SeekBar sb, int progress, boolean fromuser) {
-                if(fromuser){
-                    if(countDownTimer!=null){
-                        mVideoView.seekTo(progress);
-                        countDownTimer.cancel();
-                        countDownTimer.start();
-                    }
-                }
-            }
-        });
-        sBar.setOnKeyListener(new View.OnKeyListener() {
-            @Override
-            public boolean onKey(View arg0, int keycode, KeyEvent event) {
-                if(event.getAction()==KeyEvent.ACTION_DOWN){
-                    if(keycode==KeyEvent.KEYCODE_DPAD_CENTER||keycode==KeyEvent.KEYCODE_ENTER){
-                        if(mVideoView.isPlaying()){
-                            mVideoView.pause();
-                            countDownTimer.cancel();
-                            iv_play.setVisibility(View.VISIBLE);
-                            iv_playpause.setBackground(ContextCompat.getDrawable(LivePlayActivity.context, R.drawable.icon_play));
-                        }else{
-                            mVideoView.start();
-                            iv_play.setVisibility(View.INVISIBLE);
-                            countDownTimer.start();
-                            iv_playpause.setBackground(ContextCompat.getDrawable(LivePlayActivity.context, R.drawable.vod_pause));
-                        }
-                    }
-                }
-                return false;
-            }
-        });
-        if(mVideoView.isPlaying()){
-            iv_play.setVisibility(View.INVISIBLE);
-            iv_playpause.setBackground(ContextCompat.getDrawable(LivePlayActivity.context, R.drawable.vod_pause));
-        }else{
-            iv_play.setVisibility(View.VISIBLE);
-            iv_playpause.setBackground(ContextCompat.getDrawable(LivePlayActivity.context, R.drawable.icon_play));
-        }
-        if(countDownTimer3==null){
-            countDownTimer3 = new CountDownTimer(postTimeout, 1000) {
-
-                @Override
-                public void onTick(long arg0) {
-
-                    if(mVideoView != null){
-                        sBar.setProgress(safeTimeMs(mVideoView.getCurrentPosition()));
-                        tv_currentpos.setText(durationToString(safeTimeMs(mVideoView.getCurrentPosition())));
-                    }
-
-                }
-
-                @Override
-                public void onFinish() {
-                    if(backcontroller.getVisibility() == View.VISIBLE){
-                        backcontroller.setVisibility(View.GONE);
-                    }
-                }
-            };
-        }else{
-            countDownTimer3.cancel();
-        }
-        countDownTimer3.start();
-    }
-
-    /**
-     * å½“æ’­æ”¾åˆ—è¡¨ä¸ºç©ºæˆ–åŠ è½½å¤±è´¥æ—¶ï¼Œè®¾ç½®ä¸€ä¸ªé»˜è®¤çš„æ’­æ”¾åˆ—è¡¨ï¼Œä¿è¯æ’­æ”¾ç•Œé¢ä¸ä¼šå´©æºƒ
-     */
-    private void clearLiveChannelList() {
-        clearLiveChannelList(true);
-    }
-
-    private void clearLiveChannelList(boolean releasePlayer) {
-        refreshingLiveChannelList = false;
-        pendingLiveRefreshChannelName = null;
-        pendingLiveRefreshSourceIndex = -1;
-        currentLiveChannelItem = null;
-        currentLiveChannelIndex = -1;
-        currentLiveLookBackIndex = -1;
-        currentLiveChangeSourceTimes = 0;
-        liveChannelGroupList.clear();
-        ApiConfig.get().getChannelGroupList().clear();
-        mHandler.removeCallbacks(mConnectTimeoutChangeSourceRun);
-        mHandler.removeCallbacks(mLoadEpgRun);
-        hideSwitchChannelSnapshot();
-        if (releasePlayer && mVideoView != null) mVideoView.release();
-        showSuccess();
-        if (liveChannelGroupAdapter != null) {
-            liveChannelGroupAdapter.clearGroupState();
-            liveChannelGroupAdapter.setNewData(new ArrayList<LiveChannelGroup>());
-        }
-        if (liveChannelItemAdapter != null) {
-            liveChannelItemAdapter.setFocusedChannelIndex(-1);
-            liveChannelItemAdapter.setSelectedChannelIndex(-1);
-            liveChannelItemAdapter.setNewData(new ArrayList<LiveChannelItem>());
-        }
-        if (tvLeftChannelListLayout != null) tvLeftChannelListLayout.setVisibility(View.INVISIBLE);
-        if (tvRightSettingLayout != null) tvRightSettingLayout.setVisibility(View.INVISIBLE);
-    }
-
-    private void setEmptyLiveChannelList() {
-        setEmptyLiveChannelList(true);
-    }
-
-    private void setEmptyLiveChannelList(boolean releasePlayer) {
-        clearLiveChannelList(releasePlayer);
-//        Toast.makeText(App.getInstance(), "æºå¼‚å¸¸,è¯·åˆ‡æ¢åˆ°å…¶ä»–æº", Toast.LENGTH_SHORT).show();
-    }
-}
+YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éíçuá:-jZ.¶›­–)Ş³W6¶vR6öÒæv—F‡V"çGf&÷‚æ÷62çV’æ7F—f—G“° ¦–×÷'B7FF–2‡—¢æFö–¶¶’çf–FV÷Æ–W"çWF–ÂåÆ–W%WF–Ç2ç6fUF–ÖT×3° ¦–×÷'BæG&ö–BäÖæ–fW7C°¦–×÷'BæG&ö–Bææ–ÖF–öâäæ–ÖF÷#°¦–×÷'BæG&ö–Bææ–ÖF–öâäæ–ÖF÷$Æ—7FVæW$FFW#°¦–×÷'BæG&ö–Bææ–ÖF–öâä–çDWfÇVF÷#°¦–×÷'BæG&ö–Bææ–ÖF–öâäö&¦V7Dæ–ÖF÷#°¦–×÷'BæG&ö–Bæææ÷FF–öâå7W&W74Æ–çC°¦–×÷'BæG&ö–Bæ6öçFVçBä6öçFW‡C°¦–×÷'BæG&ö–Bæ6öçFVçBä–çFVçC°¦–×÷'BæG&ö–Bæw&†–72ä&—FÖ°¦–×÷'BæG&ö–BææWBåW&“°¦–×÷'BæG&ö–Bæ÷2ä6÷VçDF÷våF–ÖW#°¦–×÷'BæG&ö–Bæ÷2ä†æFÆW#°¦–×÷'BæG&ö–BçFW‡BåFW‡EWF–Ç3°¦–×÷'BæG&ö–BçWF–Âä&6ScC°¦–×÷'BæG&ö–Bçf–Wräw&f—G“°¦–×÷'BæG&ö–Bçf–Wrä¶W”WfVçC°¦–×÷'BæG&ö–Bçf–Wråf–Ws°¦–×÷'BæG&ö–Bçf–Wråf–Wtw&÷W°¦–×÷'BæG&ö–Bçv–FvWBäg&ÖTÆ–÷WC°¦–×÷'BæG&ö–Bçv–FvWBä–ÖvUf–Ws°¦–×÷'BæG&ö–Bçv–FvWBäÆ–æV$Æ–÷WC°¦–×÷'BæG&ö–Bçv–FvWBå&VÆF—fTÆ–÷WC°¦–×÷'BæG&ö–Bçv–FvWBå6VV´&#°¦–×÷'BæG&ö–Bçv–FvWBåFW‡Ef–Ws°¦–×÷'BæG&ö–Bçv–FvWBåFö7C° ¦–×÷'BæG&ö–G‚æææ÷FF–öâäæöäçVÆÃ°¦–×÷'BæG&ö–G‚æ6÷&Ræ6öçFVçBä6öçFW‡D6ö×C°¦–×÷'BæG&ö–G‚ç&V7–6ÆW'f–Wrçv–FvWBäÆ–æV$Æ–÷WDÖævW#°¦–×÷'BæG&ö–G‚ç&V7–6ÆW'f–Wrçv–FvWBå&V7–6ÆW%f–Ws° ¦–×÷'B6öÒæ6†BæÆ–'&'’æFFW"æ&6Rä&6UV–6´FFW#°¦–×÷'B6öÒæv—F‡V"æ6GföBæ7&vÆW"å7–FW#°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62å#°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62æ’ä”6öæf–s°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62æ&6Rä°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62æ&6Rä&6T7F—f—G“°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62æ&VâäWv–æfó°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62æ&VâäÆ—fT6†ææVÄw&÷W°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62æ&VâäÆ—fT6†ææVÄ—FVÓ°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62æ&VâäÆ—fTF”Æ—7Dw&÷W°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62æ&VâäÆ—fTWtFFS°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62æ&VâäÆ—fUÆ–W$ÖævW#°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62æ&VâäÆ—fU6WGF–ætw&÷W°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62æ&VâäÆ—fU6WGF–æt—FVÓ°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62æÆ—fRäf–Æ÷fW$FV6—6–öã°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62æÆ—fRäf–Æ÷fW%öÆ–7“°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62æÆ—fRäf–Æ÷fW%7FFS°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62æÆ—fRåÆ–&6´WfVçC°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62ææf–vF–öâäÆ—fT¶W”7F–öã°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62ææf–vF–öâäÆ—fT¶W”ÖW#°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62çÆ–W"æ6öçG&öÆÆW"äÆ—fT6öçG&öÆÆW#°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62çV’æFFW"äÆ—fT6†ææVÄw&÷WFFW#°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62çV’æFFW"äÆ—fT6†ææVÄ—FVÔFFW#°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62çV’æFFW"äÆ—fTWtFFW#°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62çV’æFFW"äÆ—fTWtFFTFFW#°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62çV’æFFW"äÆ—fU6WGF–ætw&÷WFFW#°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62çV’æFFW"äÆ—fU6WGF–æt—FVÔFFW#°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62çV’æFFW"ä×”WtFFW#°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62çV’æF–ÆöräÆ—fU77v÷&DF–Æös°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62çWFFRå7F$fÆ÷uWFFTÖævW#°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62çV’çGbçv–FvWBåf–Wtö&£°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62çWF–ÂäFVfVÇD6öæf–s°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62çWF–ÂäWuWF–Ã°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62çWF–Âäf7D6Æ–6´6†V6µWF–Ã°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62çWF–Âä†v´6öæf–s°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62çWF–ÂäÄôs°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62çWF–Âäö´vô†VÇW#°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62çWF–ÂåÆ–W$†VÇW#°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62çWF–Âä†—7F÷'”†VÇW#°¦–×÷'B6öÒæv—F‡V"çGf&÷‚æ÷62çWF–ÂæÆ—fRåG‡E7V'67&–&S°¦–×÷'B6öÒævöövÆRæw6öâä§6öä'&“°¦–×÷'B÷&ræ6†Ræ6öÖÖöç2æÆæs2å7G&–æuWF–Ç3° ¦–×÷'B6öÒævöövÆRæw6öâä§6öäö&¦V7C°¦–×÷'B6öÒæÇ§’æö¶vòäö´vó°¦–×÷'B6öÒæÇ§’æö¶vòæ6ÆÆ&6²ä'46ÆÆ&6³°¦–×÷'B6öÒæÇ§’æö¶vòæÖöFVÂå&W7öç6S°¦–×÷'B6öÒæ÷&†æö'WBæ†v²ä†v³°¦–×÷'B6öÒæ÷vVâçGg&V7–6ÆW'f–Wrçv–FvWBåGe&V7–6ÆW%f–Ws°¦–×÷'B6öÒæ÷vVâçGg&V7–6ÆW'f–Wrçv–FvWBåctÆ–æV$Æ–÷WDÖævW#° ¦–×÷'B÷&ræ§6öâä¥4ôä'&“°¦–×÷'B÷&ræ§6öâä¥4ôäW†6WF–öã°¦–×÷'B÷&ræ§6öâä¥4ôäö&¦V7C°¦–×÷'B÷&rçs62æFöÒäFö7VÖVçC°¦–×÷'B÷&rçs62æFöÒäVÆVÖVçC°¦–×÷'B÷&rçs62æFöÒäæöFS°¦–×÷'B÷&rçs62æFöÒäæöFTÆ—7C°¦–×÷'B÷&rç†ÖÂç6‚ä–çWE6÷W&6S° ¦–×÷'B¦fæ–òä”ôW†6WF–öã°¦–×÷'B¦fæ–òå7G&–æu&VFW#°¦–×÷'B¦fææWBåU$ÄVæ6öFW#°¦–×÷'B¦fçFW‡Bå'6TW†6WF–öã°¦–×÷'B¦fçFW‡Bå6–×ÆTFFTf÷&ÖC°¦–×÷'B¦fçWF–Âä'&”Æ—7C°¦–×÷'B¦fçWF–Âä6ÆVæF#°¦–×÷'B¦fçWF–ÂäFFS°¦–×÷'B¦fçWF–Âä†6„Ö°¦–×÷'B¦fçWF–Âä†6‡F&ÆS°¦–×÷'B¦fçWF–ÂäÆ—7C°¦–×÷'B¦fçWF–ÂäÆö6ÆS°¦–×÷'B¦fçWF–ÂäÖ°¦–×÷'B¦fçWF–Âäö&¦V7G3°¦–×÷'B¦fçWF–ÂåF–ÖU¦öæS°¦–×÷'B¦fçWF–Âæ6öæ7W'&VçBä6ÆÆ&ÆS°¦–×÷'B¦fçWF–Âæ6öæ7W'&VçBäW†V7WF–öäW†6WF–öã°¦–×÷'B¦fçWF–Âæ6öæ7W'&VçBäW†V7WF÷%6W'f–6S°¦–×÷'B¦fçWF–Âæ6öæ7W'&VçBäW†V7WF÷'3°¦–×÷'B¦fçWF–Âæ6öæ7W'&VçBägWGW&S°¦–×÷'B¦fçWF–Âæ6öæ7W'&VçBåF–ÖUVæ—C°¦–×÷'B¦fçWF–Âæ6öæ7W'&VçBåF–ÖV÷WDW†6WF–öã°¦–×÷'B¦fçWF–Âç&VvW‚äÖF6†W#°¦–×÷'B¦fçWF–Âç&VvW‚åGFW&ã° ¦–×÷'B¦f‚ç†ÖÂç'6W'2äFö7VÖVçD'V–ÆFW#°¦–×÷'B¦f‚ç†ÖÂç'6W'2äFö7VÖVçD'V–ÆFW$f7F÷'“° ¦–×÷'B‡—¢æFö–¶¶’çf–FV÷Æ–W"æW†òäW†ôÖVF–6÷W&6T†VÇW#°¦–×÷'B‡—¢æFö–¶¶’çf–FV÷Æ–W"çÆ–W"åf–FVõf–Ws° ¢ò¢ ¢¢WF†÷"£Scp¢¢FFR£##óó ¢¢FW67&—F–öã ¢¢ğ§V&Æ–26Æ72Æ—fUÆ”7F—f—G’W‡FVæG2&6T7F—f—G’°¢V&Æ–27FF–26öçFW‡B6öçFW‡C°¢&—fFRf–FVõf–WsÇ‡—¢æFö–¶¶’çf–FV÷Æ–W"çÆ–W"ä'7G&7EÆ–W#âÕf–FVõf–Ws°¢&—fFRf–Wr7v—F6„6†ææVÅ6æ6†÷D÷fW&Æ“°¢&—fFR–ÖvUf–Wr7v—F6„6†ææVÅ6æ6†÷D–ÖvS°¢&—fFRFW‡Ef–WrGd6†ææVÄ–æfó°¢&—fFRFW‡Ef–WrGeF–ÖS°¢&—fFRFW‡Ef–WrGdæWE7VVC°¢&—fFRFW‡Ef–WrGe&W6öÇWF–öã°¢&—fFRÆ–æV$Æ–÷WBGdÆVgD6†ææVÄÆ—7DÆ–÷WC°¢&—fFRGe&V7–6ÆW%f–WrÔ6†ææVÄw&÷Wf–Ws°¢&—fFRGe&V7–6ÆW%f–WrÔÆ—fT6†ææVÅf–Ws°¢&—fFRÆ—fT6†ææVÄw&÷WFFW"Æ—fT6†ææVÄw&÷WFFW#°¢&—fFRÆ—fT6†ææVÄ—FVÔFFW"Æ—fT6†ææVÄ—FVÔFFW#° ¢&—fFRÆ–æV$Æ–÷WBGe&–v‡E6WGF–ætÆ–÷WC°¢&—fFRGe&V7–6ÆW%f–WrÕ6WGF–ætw&÷Wf–Ws°¢&—fFRGe&V7–6ÆW%f–WrÕ6WGF–æt—FVÕf–Ws°¢&—fFRÆ—fU6WGF–ætw&÷WFFW"Æ—fU6WGF–ætw&÷WFFW#°¢&—fFRÆ—fU6WGF–æt—FVÔFFW"Æ—fU6WGF–æt—FVÔFFW#°¢&—fFRÆ—7CÄÆ—fU6WGF–ætw&÷WâÆ—fU6WGF–ætw&÷WÆ—7BÒæWr'&”Æ—7CÃâ‚“° ¢V&Æ–27FF–2–çB7W'&VçD6†ææVÄw&÷W–æFW‚Ò°¢&—fFR†æFÆW"Ô†æFÆW"ÒæWr†æFÆW"‚“°¢&—fFR–çB&W6öÇWF–öä–æfõ&WG'”6÷VçBÒ°¢&—fFR&ööÆVâ&W6öÇWF–öä–æfõVæF–ærÒfÇ6S°¢&—fFR&ööÆVâW†—F–ætÆ—fUÆ’ÒfÇ6S°¢&—fFR7FF–2f–æÂÆöærUuôÄôEôDTÄ’Ò#Ã°¢&—fFR7FF–2f–æÂ–çB$U4ôÅUD”ôåô”ädõôÔ…õ$UE%’Ò°¢&—fFR7FF–2f–æÂÆöær$U4ôÅUD”ôåô”ädõõ$UE%•ôDTÄ’Ò3Ã°¢&—fFR7FF–2f–æÂÆöær$U4ôÅUD”ôåô”ädõô„”DUôDTÄ’Ò3Ã°¢&—fFR7FF–2f–æÂ7G&–ærDTdTÅEôUuôDE$U52Ò&‡GG¢òöWrãS¦×BçF÷£ƒö’öF——óö6ƒ×¶æÖWÒfFFS×¶FFWÒ#°¢&—fFR7FF–2f–æÂGFW&â4D4…UõDô´TåõEDU$âÒGFW&âæ6ö×–ÆR‚"…ÅÂCõÅÇµµçÕÒ¥ÅÇÒ’"“°¢&—fFR7FF–2f–æÂGFW&â4D4…UõDuõEDU$âÒGFW&âæ6ö×–ÆR‚%ÅÇ²…µçÕÒ¢•ÅÇÒ"“°¢&—fFRf–æÂ'Vææ&ÆRÔÆöDWu'VâÒæWr'Vææ&ÆR‚’°¢÷fW'&–FP¢V&Æ–2fö–B'Vâ‚’°¢–b†6†ææVÅôæÖRÒçVÆÂbbÆ—fTWtFFTFFW"ÒçVÆÂbbÆ—fTWtFFTFFW"ævWE6VÆV7FVD–æFW‚‚’ãÒ’°¢vWDWr†æWrFFR‚’“°¢Ğ¢Ğ¢Ó°¢&—fFR&ööÆVâf—'7DÆ—fTWtÆöBÒG'VS° ¢&—fFRÆ—7CÄÆ—fT6†ææVÄw&÷WâÆ—fT6†ææVÄw&÷WÆ—7BÒæWr'&”Æ—7CÃâ‚“°¢&—fFR–çB7W'&VçDÆ—fT6†ææVÄ–æFW‚ÒÓ°¢&—fFR–çB7W'&VçDÆ—fTÆöö´&6´–æFW‚ÒÓ°¢&—fFR–çB7W'&VçDÆ—fT6†ævU6÷W&6UF–ÖW2Ò°¢&—fFR&ööÆVâÆÆ÷tÆ—fU7v—F6…Æ–W"ÒG'VS°¢&—fFRÆ—fT6†ææVÄ—FVÒ7W'&VçDÆ—fT6†ææVÄ—FVÒÒçVÆÃ°¢&—fFR7G&–ærVæF–ætÆ—fU&Vg&W6„6†ææVÄæÖRÒçVÆÃ°¢&—fFR–çBVæF–ætÆ—fU&Vg&W6…6÷W&6T–æFW‚ÒÓ°¢&—fFR&ööÆVâ&Vg&W6†–ætÆ—fT6†ææVÄÆ—7BÒfÇ6S°¢&—fFR–çBÆ—fT6öæf–u&WVW7D–BÒ°¢&—fFRf–æÂf–Æ÷fW%öÆ–7’f–Æ÷fW%öÆ–7’ÒæWrf–Æ÷fW%öÆ–7’‚“°¢&—fFRf–Æ÷fW%7FFRf–Æ÷fW%7FFRÒæWrf–Æ÷fW%7FFRƒ“°¢&—fFRÆ–&6´WfVçBVæF–ætf–Æ÷fW$WfVçBÒÆ–&6´WfVçBåÄ”$4µôU%$õ#°¢&—fFR&ööÆVâ7W'&VçEÆ–&6µ7F'FVBÒfÇ6S°¢&—fFRÆ—fUÆ–W$ÖævW"Æ—fUÆ–W$ÖævW"ÒæWrÆ—fUÆ–W$ÖævW"‚“°¢&—fFR'&”Æ—7CÄ–çFVvW#â6†ææVÄw&÷W77v÷&D6öæf—&ÖVBÒæWr'&”Æ—7CÃâ‚“° ¢òôUr'’›èĞ¢&—fFR7FF–2Æ—fT6†ææVÄ—FVÒ6†ææVÅôæÖRÒçVÆÃ°¢&—fFR7FF–2†6‡F&ÆSÅ7G&–ærÂ'&”Æ—7CÄWv–æfóãâ‡4WrÒæWr†6‡F&ÆSÃâ‚“°¢&—fFR6÷VçDF÷våF–ÖW"6÷VçDF÷våF–ÖW#°¢òò&—fFR6÷VçDF÷våF–ÖW"6÷VçDF÷våF–ÖW%&–v‡EF÷°¢&—fFRf–WrÆÅ÷&–v‡E÷F÷öÆöF–æs°¢&—fFRf–WrÆÅ÷&–v‡E÷F÷ö‡V–¶ã°¢&—fFRf–WrF—dÆöDWs°¢&—fFRf–WrF—dÆöDWtF—f–FW#°¢&—fFRf–WrF—dÆöDWvÆVgC°¢&—fFRÆ–æV$Æ–÷WBF—dWs°¢&VÆF—fTÆ–÷WBÆÅöWs°¢FW‡Ef–WrGeö6†ææVÆçVÓ°¢FW‡Ef–WrF—ö6†æÖS°¢FW‡Ef–WrF—öWs°¢FW‡Ef–WrF—öWs#°¢FW‡Ef–WrGe÷7&6–æfó°¢FW‡Ef–WrGeö7W&WuöÆVgC°¢FW‡Ef–WrGeöæW‡FWuöÆVgC°¢&—fFR×”WtFFW"×”FFW#°¢&—fFRFW‡Ef–WrGe÷&–v‡E÷F÷÷F—æWG7VVC°¢&—fFRFW‡Ef–WrGe÷&–v‡E÷F÷ö6†ææVÅöæÖS°¢&—fFRFW‡Ef–WrGe÷&–v‡E÷F÷öWuöæÖS°¢&—fFRFW‡Ef–WrGe÷&–v‡E÷F÷÷G—S°¢&—fFR–ÖvUf–Wr—eö6—&6ÆUö&s°¢&—fFRFW‡Ef–WrGe÷6†÷vçVÒ°¢&—fFRFW‡Ef–WrG‡DæôWr°¢&—fFR–ÖvUf–Wr—eö&6µö&s° ¢&—fFRö&¦V7Dæ–ÖF÷"ö&¦V7Dæ–ÖF÷#°¢V&Æ–27G&–ærWu7G&–ætFG&W72Ò"#° ¢&—fFRGe&V7–6ÆW%f–WrÔWtFFTw&–Ef–Ws°¢&—fFRGe&V7–6ÆW%f–WrÕ&–v‡DWtÆ—7C°¢&—fFRÆ—fTWtFFTFFW"Æ—fTWtFFTFFW#°¢&—fFRÆ—fTWtFFW"WtÆ—7DFFW#° ¢&—fFRÆ—7CÄÆ—fTF”Æ—7Dw&÷WâÆ—fTF”Æ—7BÒæWr'&”Æ—7CÃâ‚“°  ¢òöÆöFòvF’&WÆ¢V&Æ–27FF–26–×ÆTFFTf÷&ÖBf÷&ÖDFFRÒæWr6–×ÆTFFTf÷&ÖB‚'———’ÔÔÒÖFB"“°¢V&Æ–27FF–26–×ÆTFFTf÷&ÖBf÷&ÖDFFSÒæWr6–×ÆTFFTf÷&ÖB‚$ÔÒÖFB"“°¢V&Æ–27FF–27G&–ærF’Òf÷&ÖDFFRæf÷&ÖB†æWrFFR‚’“°¢V&Æ–27FF–2FFRæ÷vF’ÒæWrFFR‚“° ¢&—fFR&ööÆVâ—54„•”’ÒfÇ6S°¢&—fFR&ööÆVâ—4&6²ÒfÇ6S°¢&—fFR7FF–2–çB6†—–•÷F–ÖUö3²òşi{nz{¾i{n™{N[zîXÀ¢V&Æ–27FF–27G&–ærÆ•W&Ã°¢òö¶Vç6öà¢&—fFR–ÖvUf–Wr–ÖtÆ—fT–6öã°¢&—fFRg&ÖTÆ–÷WBÆ—fT–6öäçVÆÄ&s°¢&—fFRFW‡Ef–WrÆ—fT–6öäçVÆÅFW‡C°¢6–×ÆTFFTf÷&ÖBF–ÖTf÷&ÖBÒæWr6–×ÆTFFTf÷&ÖB‚'———’ÔÔÒÖFB"“°¢&—fFRf–Wr&6¶6öçG&öÆÆW#°¢&—fFR6÷VçDF÷våF–ÖW"6÷VçDF÷våF–ÖW#3°¢&—fFRf–æÂ–çBf–FVõv–GF‚Ò“#°¢&—fFRf–æÂ–çBf–FVô†V–v‡BÒƒ°¢&—fFRFW‡Ef–WrGeö7W'&VçG÷3°¢&—fFRFW‡Ef–WrGeöGW&F–öã°¢&—fFR6VV´&"4&#°¢&—fFRf–Wr—e÷Æ—W6S°¢&—fFRf–Wr—e÷Æ“°¢&—fFR&ööÆVâ6†÷rÒfÇ6S°¢&—fFR7FF–2f–æÂ–çB÷7EF–ÖV÷WBÒc° ¢òò˜^hê~Yši[ZÙ~™Jî‹é>XZ^y¨NŠhXˆ~hÚ.y¨Nš)˜>Xû~z¢&—fFR–çB6VÆV7FVD6†ææVÄçVÖ&W"Ò°¢&—fFRFW‡Ef–WrGe6VÆV7FVD6†ææVÃ°¢&—fFRFW‡Ef–WrföDVçG'“°¢&—fFRf–æÂÆ—fT¶W”ÖW"Æ—fT¶W”ÖW"ÒæWrÆ—fT¶W”ÖW"‚“°¢&—fFR&ööÆVâÆöæu&W74†æFÆVBÒfÇ6S°  ¢÷fW'&–FP¢&÷FV7FVB–çBvWDÆ–÷WE&W4”B‚’°¢&WGW&â"æÆ–÷WBæ7F—f—G•öÆ—fU÷Æ“°¢Ğ ¢÷fW'&–FP¢&÷FV7FVBfö–B–æ—B‚’°¢6öçFW‡BÒF†—3°¢Wu7G&–ætFG&W72ÒvWD6öæf–wW&VDWtFG&W72‚“° ¢6WDÆöE6—"†f–æEf–Wt'”–B…"æ–BæÆ—fU÷&ö÷B’“°¢Õf–FVõf–WrÒf–æEf–Wt'”–B…"æ–BæÕf–FVõf–Wr“°¢7v—F6„6†ææVÅ6æ6†÷D÷fW&Æ’Òf–æEf–Wt'”–B…"æ–Bç7v—F6„6†ææVÅ6æ6†÷D÷fW&Æ’“°¢7v—F6„6†ææVÅ6æ6†÷D–ÖvRÒf–æEf–Wt'”–B…"æ–Bç7v—F6„6†ææVÅ6æ6†÷D–ÖvR“° ¢GdÆVgD6†ææVÄÆ—7DÆ–÷WBÒf–æEf–Wt'”–B…"æ–BçGdÆVgD6†æææVÄÆ—7DÆ–÷WB“°¢Ô6†ææVÄw&÷Wf–WrÒf–æEf–Wt'”–B…"æ–BæÔw&÷Ww&–Ef–Wr“°¢ÔÆ—fT6†ææVÅf–WrÒf–æEf–Wt'”–B…"æ–BæÔ6†ææVÄw&–Ef–Wr“°¢Ge&–v‡E6WGF–ætÆ–÷WBÒf–æEf–Wt'”–B…"æ–BçGe&–v‡E6WGF–ætÆ–÷WB“°¢Õ6WGF–ætw&÷Wf–WrÒf–æEf–Wt'”–B…"æ–BæÕ6WGF–ætw&÷Wf–Wr“°¢Õ6WGF–æt—FVÕf–WrÒf–æEf–Wt'”–B…"æ–BæÕ6WGF–æt—FVÕf–Wr“°¢Gd6†ææVÄ–æfòÒf–æEf–Wt'”–B…"æ–BçGd6†ææVÂ“°¢GeF–ÖRÒf–æEf–Wt'”–B…"æ–BçGeF–ÖR“°¢GdæWE7VVBÒf–æEf–Wt'”–B…"æ–BçGdæWE7VVB“°¢Ge&W6öÇWF–öâÒf–æEf–Wt'”–B…"æ–BçGe&W6öÇWF–öâ“° ¢òôUrf–æEf–Wt'”–B'’›èĞ¢F—ö6†æÖRÒ…FW‡Ef–Wr’f–æEf–Wt'”–B…"æ–BçGeö6†ææVÅö&%öæÖR“²òş[©^˜:YŞz{ ¢Geö6†ææVÆçVÒÒ…FW‡Ef–Wr’f–æEf–Wt'”–B…"æ–BçGeö6†ææVÅö&÷GFöÕöçVÖ&W"“²òş[©^˜:i[ZÙp¢F—öWsÒ…FW‡Ef–Wr’f–æEf–Wt'”–B…"æ–BçGeö7W'&VçE÷&öw&Õ÷F–ÖR“²òş[©^˜:„U~[Ù>X˜Şˆ¨.yºîKúhğ¢F—öWs"Ò…FW‡Ef–Wr’f–æEf–Wt'”–B…"æ–BçGeöæW‡E÷&öw&Õ÷F–ÖR“²òş[©^˜:„U~[Ù>Kˆ¾KŠ®ˆ¨.yºîKúhğ¢Ge÷7&6–æfòÒ…FW‡Ef–Wr’f–æEf–Wt'”–B…"æ–BçGe÷6÷W&6R“²òş{«ş‹zşx«nh¢Geö7W&WuöÆVgBÒ…FW‡Ef–Wr’f–æEf–Wt'”–B…"æ–BçGeö7W'&VçE÷&öw&Ò“²òş[Ù>X˜Şˆ¨.yºà¢GeöæW‡FWuöÆVgCÒ…FW‡Ef–Wr’f–æEf–Wt'”–B…"æ–BçGeöæW‡E÷&öw&Ò“²òşKˆ¾Kˆˆ¨.yºà¢ÆÅöWrÒ…&VÆF—fTÆ–÷WB’f–æEf–Wt'”–B…"æ–BæÆÅöWr“°¢òòGe÷&–v‡E÷F÷÷F—æWG7VVBÒ…FW‡Ef–Wr–f–æEf–Wt'”–B…"æ–BçGe÷&–v‡E÷F÷÷F—æWG7VVB“°¢Ge÷&–v‡E÷F÷ö6†ææVÅöæÖRÒ…FW‡Ef–Wr–f–æEf–Wt'”–B…"æ–BçGe÷&–v‡E÷F÷ö6†ææVÅöæÖR“°¢Ge÷&–v‡E÷F÷öWuöæÖRÒ…FW‡Ef–Wr–f–æEf–Wt'”–B…"æ–BçGe÷&–v‡E÷F÷öWuöæÖR“°¢òòGe÷&–v‡E÷F÷÷G—RÒ…FW‡Ef–Wr–f–æEf–Wt'”–B…"æ–BçGe÷&–v‡E÷F÷÷G—R“°¢—eö6—&6ÆUö&rÒ„–ÖvUf–Wr’f–æEf–Wt'”–B…"æ–Bæ—eö6—&6ÆUö&r“°¢—eö&6µö&rÒ„–ÖvUf–Wr’f–æEf–Wt'”–B…"æ–Bæ—eö&6µö&r“°¢Ge÷6†÷vçVÒÒ…FW‡Ef–Wr’f–æEf–Wt'”–B…"æ–BçGe÷6†÷vçVÒ“°¢G‡DæôWrÒ…FW‡Ef–Wr’f–æEf–Wt'”–B…"æ–BçG‡DæôWr“°¢ÆÅ÷&–v‡E÷F÷öÆöF–ærÒf–æEf–Wt'”–B…"æ–BæÆÅ÷&–v‡E÷F÷öÆöF–ær“°¢ÆÅ÷&–v‡E÷F÷ö‡V–¶âÒf–æEf–Wt'”–B…"æ–BæÆÅ÷&–v‡E÷F÷ö‡V–¶â“°¢F—dÆöDWrÒ…f–Wr’f–æEf–Wt'”–B…"æ–BæF—dÆöDWr“°¢F—dÆöDWtF—f–FW"Òf–æEf–Wt'”–B…"æ–BæF—dÆöDWtF—f–FW"“°¢F—dÆöDWvÆVgBÒ…f–Wr’f–æEf–Wt'”–B…"æ–BæF—dÆöDWvÆVgB“°¢F—dWrÒ„Æ–æV$Æ–÷WB’f–æEf–Wt'”–B…"æ–BæF—dUr“°¢òşXû>Kˆ®Šy.Y»îx˜~ix¾‹ÚÀ¢ö&¦V7Dæ–ÖF÷"Òö&¦V7Dæ–ÖF÷"æödfÆöB†—eö6—&6ÆUö&rÂ'&÷FF–öâ"Â3cãb“°¢ö&¦V7Dæ–ÖF÷"ç6WDGW&F–öâ‡÷7EF–ÖV÷WB“°¢ö&¦V7Dæ–ÖF÷"ç6WE&WVD6÷VçB‚Ó“°¢ö&¦V7Dæ–ÖF÷"ç7F'B‚“° ¢òöÆöFòvF’&WÆ¢ÔWtFFTw&–Ef–WrÒf–æEf–Wt'”–B…"æ–BæÔWtFFTw&–Ef–Wr“°¢†v²çWB„†v´6öæf–rääõuôDDRÂf÷&ÖDFFRæf÷&ÖB†æWrFFR‚’’“°¢F“Öf÷&ÖDFFRæf÷&ÖB†æWrFFR‚’“°¢æ÷vF“ÖæWrFFR‚“° ¢Õ&–v‡DWtÆ—7BÒ…Ge&V7–6ÆW%f–Wr’f–æEf–Wt'”–B…"æ–BæÇeöWr“°¢òôU~š)˜>YŞz{ ¢–ÖtÆ—fT–6öâÒf–æEf–Wt'”–B…"æ–Bæ–ÖuöÆ—fUö–6öâ“°¢Æ—fT–6öäçVÆÄ&rÒf–æEf–Wt'”–B…"æ–BæÆ—fUö–6öåöçVÆÅö&r“°¢Æ—fT–6öäçVÆÅFW‡BÒf–æEf–Wt'”–B…"æ–BæÆ—fUö–6öåöçVÆÅ÷FW‡B“°¢–ÖtÆ—fT–6öâç6WEf—6–&–Æ—G’…f–Wrä”åd•4”$ÄR“°¢Æ—fT–6öäçVÆÅFW‡Bç6WEf—6–&–Æ—G’…f–Wrä”åd•4”$ÄR“°¢Æ—fT–6öäçVÆÄ&rç6WEf—6–&–Æ—G’…f–Wrä”åd•4”$ÄR“° ¢4&"Ò…6VV´&"’f–æEf–Wt'”–B…"æ–Bç%÷&öw&W76&"“°¢Geö7W'&VçG÷2Ò…FW‡Ef–Wr’f–æEf–Wt'”–B…"æ–BçGeö7W'&VçG÷2“°¢&6¶6öçG&öÆÆW"Ò…f–Wr’f–æEf–Wt'”–B…"æ–Bæ&6¶6öçG&öÆÆW"“°¢GeöGW&F–öâÒ…FW‡Ef–Wr’f–æEf–Wt'”–B…"æ–BçGeöGW&F–öâ“°¢—e÷Æ—W6RÒf–æEf–Wt'”–B…"æ–Bæ—e÷Æ—W6R“°¢—e÷Æ’Òf–æEf–Wt'”–B…"æ–Bæ—e÷Æ’“° ¢Ge6VÆV7FVD6†ææVÂÒf–æEf–Wt'”–B…"æ–BçGe÷6VÆV7FVEö6†ææVÂ“°¢föDVçG'’Òf–æEf–Wt'”–B…"æ–Bç7F&fÆ÷u÷föEöVçG'’“°¢föDVçG'’ç6WDöä6Æ–6´Æ—7FVæW"‡f–WrÓâ÷VåföD†öÖR‚’“° ¢–b‡6†÷r—°¢&6¶6öçG&öÆÆW"ç6WEf—6–&–Æ—G’…f–Wråd•4”$ÄR“°¢ÆÅöWrç6WEf—6–&–Æ—G’…f–WrätôäR“° ¢ÖVÇ6W°¢&6¶6öçG&öÆÆW"ç6WEf—6–&–Æ—G’…f–WrätôäR“°¢ÆÅöWrç6WEf—6–&–Æ—G’…f–Wråd•4”$ÄR“°¢Ğ  ¢—e÷Æ’ç6WDöä6Æ–6´Æ—7FVæW"†æWrf–Wräöä6Æ–6´Æ—7FVæW"‚’° ¢÷fW'&–FP¢V&Æ–2fö–Böä6Æ–6²…f–Wr&s’°¢Õf–FVõf–Wrç7F'B‚“°¢—e÷Æ’ç6WEf—6–&–Æ—G’…f–Wrä”åd•4”$ÄR“°¢6÷VçDF÷våF–ÖW"ç7F'B‚“°¢—e÷Æ—W6Rç6WD&6¶w&÷VæB„6öçFW‡D6ö×BævWDG&v&ÆR„Æ—fUÆ”7F—f—G’æ6öçFW‡BÂ"æG&v&ÆRçföE÷W6R’“°¢Ğ¢Ò“° ¢—e÷Æ—W6Rç6WDöä6Æ–6´Æ—7FVæW"†æWrf–Wräöä6Æ–6´Æ—7FVæW"‚’°¢÷fW'&–FP¢V&Æ–2fö–Böä6Æ–6²…f–Wr&s’°¢–b†Õf–FVõf–Wræ—5Æ––ær‚’—°¢Õf–FVõf–WrçW6R‚“°¢6÷VçDF÷våF–ÖW"æ6æ6VÂ‚“°¢—e÷Æ’ç6WEf—6–&–Æ—G’…f–Wråd•4”$ÄR“°¢—e÷Æ—W6Rç6WD&6¶w&÷VæB„6öçFW‡D6ö×BævWDG&v&ÆR„Æ—fUÆ”7F—f—G’æ6öçFW‡BÂ"æG&v&ÆRæ–6öå÷Æ’’“°¢ÖVÇ6W°¢Õf–FVõf–Wrç7F'B‚“°¢—e÷Æ’ç6WEf—6–&–Æ—G’…f–Wrä”åd•4”$ÄR“°¢6÷VçDF÷våF–ÖW"ç7F'B‚“°¢—e÷Æ—W6Rç6WD&6¶w&÷VæB„6öçFW‡D6ö×BævWDG&v&ÆR„Æ—fUÆ”7F—f—G’æ6öçFW‡BÂ"æG&v&ÆRçföE÷W6R’“°¢Ğ¢Ğ¢Ò“°¢4&"ç6WDöå6VV´&$6†ævTÆ—7FVæW"†æWr6VV´&"äöå6VV´&$6†ævTÆ—7FVæW"‚’°  ¢÷fW'&–FP¢V&Æ–2fö–Böå7F÷G&6¶–æuF÷V6‚…6VV´&"&s’° ¢Ğ ¢÷fW'&–FP¢V&Æ–2fö–Böå7F'EG&6¶–æuF÷V6‚…6VV´&"&s’° ¢Ğ ¢÷fW'&–FP¢V&Æ–2fö–Böå&öw&W746†ævVB…6VV´&"6"Â–çB&öw&W72Â&ööÆVâg&ö×W6W"’°¢–b‚g&ö×W6W"’°¢&WGW&ã°¢Ğ¢–b†6÷VçDF÷våF–ÖW"ÖçVÆÂ—°¢Õf–FVõf–Wrç6VVµFò‡&öw&W72“°¢6÷VçDF÷våF–ÖW"æ6æ6VÂ‚“°¢6÷VçDF÷våF–ÖW"ç7F'B‚“°¢Ğ¢Ğ  ¢Ò“°¢4&"ç6WDöä¶W”Æ—7FVæW"†æWrf–Wräöä¶W”Æ—7FVæW"‚’°¢÷fW'&–FP¢V&Æ–2&ööÆVâöä¶W’…f–Wr&sÂ–çB¶W–6öFRÂ¶W”WfVçBWfVçB’°¢–b†WfVçBævWD7F–öâ‚“ÓÔ¶W”WfVçBä5D”ôåôDõtâ—°¢–b†¶W–6öFSÓÔ¶W”WfVçBä´U”4ôDUôEEô4TåDU'ÇÆ¶W–6öFSÓÔ¶W”WfVçBä´U”4ôDUôTåDU"—°¢–b†Õf–FVõf–Wræ—5Æ––ær‚’—°¢Õf–FVõf–WrçW6R‚“°¢6÷VçDF÷våF–ÖW"æ6æ6VÂ‚“°¢—e÷Æ’ç6WEf—6–&–Æ—G’…f–Wråd•4”$ÄR“°¢—e÷Æ—W6Rç6WD&6¶w&÷VæB„6öçFW‡D6ö×BævWDG&v&ÆR„Æ—fUÆ”7F—f—G’æ6öçFW‡BÂ"æG&v&ÆRæ–6öå÷Æ’’“°¢ÖVÇ6W°¢Õf–FVõf–Wrç7F'B‚“°¢—e÷Æ’ç6WEf—6–&–Æ—G’…f–Wrä”åd•4”$ÄR“°¢6÷VçDF÷våF–ÖW"ç7F'B‚“°¢—e÷Æ—W6Rç6WD&6¶w&÷VæB„6öçFW‡D6ö×BævWDG&v&ÆR„Æ—fUÆ”7F—f—G’æ6öçFW‡BÂ"æG&v&ÆRçföE÷W6R’“°¢Ğ¢Ğ¢Ğ¢&WGW&âfÇ6S°¢Ğ¢Ò“°¢–æ—DWtFFUf–Wr‚“°¢–æ—DWtÆ—7Ef–Wr‚“°¢–æ—DF”Æ—7B‚“°¢–æ—Ef–FVõf–Wr‚“°¢–æ—D6†ææVÄw&÷Wf–Wr‚“°¢–æ—DÆ—fT6†ææVÅf–Wr‚“°¢–æ—E6WGF–ætw&÷Wf–Wr‚“°¢–æ—E6WGF–æt—FVÕf–Wr‚“°¢–æ—DÆ—fT6†ææVÄÆ—7B‚“°¢–æ—DÆ—fU6WGF–ætw&÷WÆ—7B‚“°¢†v²çWB„†v´6öæf–råÄ”U%ô•5ôÄ•dRÇG'VR“°¢Ô†æFÆW"ç÷7DFVÆ–VB‚‚’Óâ7F$fÆ÷uWFFTÖævW"æ6†V6²‡F†—2’ÂSÂ“°¢Ğ¢òşˆë~XùdU~[›nZÙX*‚òòy›î[yÖWrD••WrS¦×BWrÒÒÒÒÒÒÒˆz®[»¤U~jÎ[Èş‹é>X{®jÎ[ÈşŠû~Xø.ˆ2S¦×@¢&—fFRÆ—7CÄWv–æfóâWvFFÒæWr'&”Æ—7CÃâ‚“° ¢&—fFRfö–B6†÷tWr„FFRFFRÂ'&”Æ—7CÄWv–æfóâ'&”Æ—7B’°¢&ööÆVâ†4WrÒ'&”Æ—7BÒçVÆÂbb'&”Æ—7Bç6—¦R‚’â°¢WFFTWuæVÅ7FFR††4Wr“°¢–b††4Wr’°¢WvFFÒ'&”Æ—7C°¢WtÆ—7DFFW"ä6ä&6²†7W'&VçDÆ—fT6†ææVÄ—FVÒævWF–æ6ÇVFUö&6²‚’“°¢WtÆ—7DFFW"ç6WDæWtFF†WvFF“°¢WFFT7W'&VçDWu6VÆV7FVD–æFW‚‚“°¢Ğ¢Ğ ¢&—fFR–çBf–æD7W'&VçDWt–æFW‚„Æ—7CÄWv–æfóâWtÆ—7B’°¢–b†WtÆ—7BÓÒçVÆÂÇÂWtÆ—7Bæ—4V×G’‚’’&WGW&âÓ°¢FFRæ÷rÒæWrFFR‚“°¢f÷"†–çB’ÒWtÆ—7Bç6—¦R‚’Ò²’ãÒ²’ÒÒ’°¢Wv–æfòWt–æfòÒWtÆ—7BævWB†’“°¢–b†Wt–æfòÓÒçVÆÂÇÂWt–æfòç7F'FFFUF–ÖRÓÒçVÆÂÇÂWt–æfòæVæFFFUF–ÖRÓÒçVÆÂ’°¢6öçF–çVS°¢Ğ¢FFRVæDFFUF–ÖRÒWt–æfòæVæFFFUF–ÖS°¢–b‚VæDFFUF–ÖRægFW"†Wt–æfòç7F'FFFUF–ÖR’’°¢6ÆVæF"6ÆVæF"Ò6ÆVæF"ævWD–ç7Fæ6R‚“°¢6ÆVæF"ç6WEF–ÖR†VæDFFUF–ÖR“°¢6ÆVæF"æFB„6ÆVæF"äD•ôôeôÔôåD‚Â“°¢VæDFFUF–ÖRÒ6ÆVæF"ævWEF–ÖR‚“°¢Ğ¢–b‚æ÷ræ&Vf÷&R†Wt–æfòç7F'FFFUF–ÖR’bbæ÷ræ&Vf÷&R†VæDFFUF–ÖR’’°¢&WGW&â“°¢Ğ¢Ğ¢&WGW&âÓ°¢Ğ ¢&—fFR–çBvWD7W'&VçDWt–æFW„÷%6VÆV7FVB‚’°¢–çBWt–æFW‚Òf–æD7W'&VçDWt–æFW‚†WtÆ—7DFFW"ævWDFF‚’“°¢–b†Wt–æFW‚ãÒ’&WGW&âWt–æFWƒ°¢Wt–æFW‚ÒWtÆ—7DFFW"ævWE6VÆV7FVD–æFW‚‚“°¢–b†Wt–æFW‚ãÒbbWt–æFW‚ÂWtÆ—7DFFW"ævWDFF‚’ç6—¦R‚’’&WGW&âWt–æFWƒ°¢&WGW&â°¢Ğ ¢&—fFRfö–BWFFT7W'&VçDWu6VÆV7FVD–æFW‚‚’°¢–b†WtÆ—7DFFW"ÓÒçVÆÂÇÂWtÆ—7DFFW"ævWDFF‚’ÓÒçVÆÂÇÂWtÆ—7DFFW"ævWDFF‚’æ—4V×G’‚’’&WGW&ã°¢–çBWt–æFW‚Òf–æD7W'&VçDWt–æFW‚†WtÆ—7DFFW"ævWDFF‚’“°¢–b†Wt–æFW‚ãÒ’°¢WtÆ—7DFFW"ç6WE6VÆV7FVDWt–æFW‚†Wt–æFW‚“°¢Ğ¢Ğ ¢&—fFRfö–B7–æ47W'&VçDWu6VÆV7F–öâ†&ööÆVâfö7W2’°¢–b†Õ&–v‡DWtÆ—7BÓÒçVÆÂÇÂWtÆ—7DFFW"ÓÒçVÆÂÇÂWtÆ—7DFFW"ævWDFF‚’ÓÒçVÆÂÇÂWtÆ—7DFFW"ævWDFF‚’æ—4V×G’‚’’&WGW&ã°¢–çBWt–æFW‚ÒvWD7W'&VçDWt–æFW„÷%6VÆV7FVB‚“°¢Õ&–v‡DWtÆ—7Bç6WE6VÆV7FVE÷6—F–öâ†Wt–æFW‚“°¢Õ&–v‡DWtÆ—7Bç6WE6VÆV7F–öâ†Wt–æFW‚“°¢WtÆ—7DFFW"ç6WE6VÆV7FVDWt–æFW‚†Wt–æFW‚“°¢–b†fö7W2’°¢WtÆ—7DFFW"ç6WDfö7W6VDWt–æFW‚†Wt–æFW‚“°¢fö7W4Wu÷6—F–öâ†Wt–æFW‚“°¢ÒVÇ6R°¢Õ&–v‡DWtÆ—7Bç÷7B†æWr'Vææ&ÆR‚’°¢÷fW'&–FP¢V&Æ–2fö–B'Vâ‚’°¢Õ&–v‡DWtÆ—7Bç6Öö÷F…67&öÆÅFõ÷6—F–öâ†Wt–æFW‚“°¢Ğ¢Ò“°¢Ğ¢Ğ ¢&—fFRfö–BWFFTWuæVÅ7FFR†&ööÆVâ†4Wr’°¢–b††4Wr’°¢G‡DæôWrç6WEf—6–&–Æ—G’…f–WrätôäR“°¢Õ&–v‡DWtÆ—7Bç6WEf—6–&–Æ—G’…f–Wråd•4”$ÄR“°¢F—dÆöDWtF—f–FW"ç6WEf—6–&–Æ—G’…f–Wråd•4”$ÄR“°¢–b†F—dWrævWEf—6–&–Æ—G’‚’Òf–Wråd•4”$ÄR’°¢F—dÆöDWrç6WEf—6–&–Æ—G’…f–Wråd•4”$ÄR“°¢F—dÆöDWvÆVgBç6WEf—6–&–Æ—G’…f–WrätôäR“°¢Ğ¢ÒVÇ6R°¢WvFFÒæWr'&”Æ—7CÃâ‚“°¢WtÆ—7DFFW"ç6WDæWtFF†WvFF“°¢G‡DæôWrç6WEf—6–&–Æ—G’…f–WrätôäR“°¢Õ&–v‡DWtÆ—7Bç6WEf—6–&–Æ—G’…f–WrätôäR“°¢F—dWrç6WEf—6–&–Æ—G’…f–WrätôäR“°¢F—dÆöDWrç6WEf—6–&–Æ—G’…f–WrätôäR“°¢F—dÆöDWtF—f–FW"ç6WEf—6–&–Æ—G’…f–WrätôäR“°¢F—dÆöDWvÆVgBç6WEf—6–&–Æ—G’…f–WrätôäR“°¢Ô6†ææVÄw&÷Wf–Wrç6WEf—6–&–Æ—G’…f–Wråd•4”$ÄR“°¢Ğ¢Ğ ¢&—fFR7G&–ærvWDf—'7E'D&Vf÷&U76R…7G&–ær7G"’°¢–b‡7G"ÓÒçVÆÂÇÂ7G"æ—4V×G’‚’’°¢&WGW&â7G#°¢Ğ¢–çB76T–æFW‚Ò7G"æ–æFW„öb‚rr“°¢–b‡76T–æFW‚ÓÒÓ’°¢&WGW&â7G#°¢ÒVÇ6R°¢&WGW&â7G"ç7V'7G&–ærƒÂ76T–æFW‚“°¢Ğ¢Ğ ¢V&Æ–2fö–BvWDWr„FFRFFR’°¢7G&–ær6†ææVÄæÖRÒ6†ææVÅôæÖRævWD6†ææVÄæÖR‚“°¢7G&–ær6†ææVÄæÖU&VÂÒæ÷&ÖÆ—¦TWt6†ææVÄæÖR†vWDf—'7E'D&Vf÷&U76R†6†ææVÄæÖR’“°¢7W&W74Æ–çB‚%6–×ÆTFFTf÷&ÖB"’6–×ÆTFFTf÷&ÖBF–ÖTf÷&ÖBÒæWr6–×ÆTFFTf÷&ÖB‚'———’ÔÔÒÖFB"“°¢F–ÖTf÷&ÖBç6WEF–ÖU¦öæR…F–ÖU¦öæRævWEF–ÖU¦öæR‚$tÕB³ƒ£"’“°¢7G&–ærWuFtæÖRÒ6†ææVÄæÖU&VÃ°¢–b†ÆövõW&ÃÓÖçVÆÂÇÂÆövõW&Âæ—4V×G’‚’—°¢7G&–æuµÒWt–æfòÒWuWF–ÂævWDWt–æfò†6†ææVÄæÖU&VÂ“°¢–b†Wt–æfòÒçVÆÂbbWt–æfõ³Òæ—4V×G’‚’’°¢WuFtæÖRÒWt–æfõ³Ó°¢Ğ¢WFFT6†ææVÄ–6öâ†6†ææVÄæÖRÂWt–æfòÓÒçVÆÂòçVÆÂ¢Wt–æfõ³Ò“°¢ÖVÇ6R–b†ÆövõW&ÂæWVÇ2‚&fÇ6R"’—°¢WFFT6†ææVÄ–6öâ†6†ææVÄæÖRÂçVÆÂ“°¢ÖVÇ6R°¢7G&–ærÆövóÒÆövõW&Âç&WÆ6R‚'¶æÖWÒ"ÆWuFtæÖR“°¢WFFT6†ææVÄ–6öâ†6†ææVÄæÖRÂÆövò“°¢Ğ¢f–æÂ7G&–ærf–æÄWuFtæÖRÒWuFtæÖS°¢WtÆ—7DFFW"ä6ä&6²†7W'&VçDÆ—fT6†ææVÄ—FVÒævWF–æ6ÇVFUö&6²‚’“°¢–b‚†4WtFG&W72‚’’°¢WFFTWuæVÅ7FFR†fÇ6R“°¢&WGW&ã°¢Ğ¢'&”Æ—7CÅ7G&–æsâWuVW'”æÖW2Ò'V–ÆDWuVW'”æÖW2†6†ææVÄæÖRÂ6†ææVÄæÖU&VÂÂf–æÄWuFtæÖR“°¢7G&–ærW&Ã°¢W&ÂÒ'V–ÆDWuW&Â†Wu7G&–ætFG&W72ÂWuVW'”æÖW2ævWBƒ’ÂFFRÂF–ÖTf÷&ÖB“° ¢7G&–ær6fVDWt¶W’Ò6†ææVÄæÖR²%ò"²ö&¦V7G2ç&WV—&TæöäçVÆÂ†Æ—fTWtFFTFFW"ævWD—FVÒ†Æ—fTWtFFTFFW"ævWE6VÆV7FVD–æFW‚‚’’’ævWDFFU&W6VçFVB‚“°¢–b†‡4Wræ6öçF–ç4¶W’‡6fVDWt¶W’’—°¢6†÷tWr†FFRÂ‡4WrævWB‡6fVDWt¶W’’“°¢6†÷t&÷GFöÔWr‚“°¢&WGW&ã°¢Ğ¢WFFTWuæVÅ7FFR†fÇ6R“°¢&WVW7DWr‡W&ÂÂFFRÂ6†ææVÄæÖU&VÂÂf–æÄWuFtæÖRÂ6fVDWt¶W’ÂWuVW'”æÖW2ÂF–ÖTf÷&ÖBÂ“°¢Ğ ¢&—fFR7G&–ær'V–ÆDWuW&Â…7G&–ærFG&W72Â7G&–ærWuFtæÖRÂFFRFFRÂ6–×ÆTFFTf÷&ÖBF–ÖTf÷&ÖB’°¢–b†FG&W72æ6öçF–ç2‚'¶æÖWÒ"’ÇÂFG&W72æ6öçF–ç2‚'¶FFWÒ"’’°¢&WGW&âFG&W72ç&WÆ6R‚'¶æÖWÒ"ÂVæ6öFTWu&Ò†WuFtæÖR’’ç&WÆ6R‚'¶FFWÒ"ÂF–ÖTf÷&ÖBæf÷&ÖB†FFR’“°¢ÒVÇ6R–b†—5†ÖÄWtFG&W72†FG&W72’—°¢&WGW&âFG&W73°¢ÖVÇ6R°¢&WGW&âFG&W72²†FG&W72æ6öçF–ç2‚#ò"’ò"b"¢#ò"’²&6ƒÒ"²Væ6öFTWu&Ò†WuFtæÖR’²"fFFSÒ"²F–ÖTf÷&ÖBæf÷&ÖB†FFR“°¢Ğ¢Ğ ¢&—fFR7G&–ærVæ6öFTWu&Ò…7G&–ærfÇVR’°¢G'’°¢&WGW&âU$ÄVæ6öFW"æVæ6öFR‡fÇVRÓÒçVÆÂò""¢fÇVRÂ%UDbÓ‚"’ç&WÆ6R‚"²"Â"S#"“°¢Ò6F6‚„W†6WF–öâR’°¢&WGW&âfÇVRÓÒçVÆÂò""¢fÇVS°¢Ğ¢Ğ ¢&—fFR'&”Æ—7CÅ7G&–æsâ'V–ÆDWuVW'”æÖW2…7G&–ær6†ææVÄæÖRÂ7G&–ær6†ææVÄæÖU&VÂÂ7G&–ærWuFtæÖR’°¢'&”Æ—7CÅ7G&–æsâVW'”æÖW2ÒæWr'&”Æ—7CÃâ‚“°¢FDWuVW'”æÖR‡VW'”æÖW2ÂWuFtæÖR“°¢FDWuVW'”æÖR‡VW'”æÖW2Â6†ææVÄæÖU&VÂ“°¢FDWuVW'”æÖR‡VW'”æÖW2Âæ÷&ÖÆ—¦TWt6†ææVÄæÖR†vWDf—'7E'D&Vf÷&U76R†6†ææVÄæÖR’’“°¢FDWuVW'”æÖR‡VW'”æÖW2ÂvWDf—'7E'D&Vf÷&U76R†6†ææVÄæÖR’“°¢FDWuVW'”æÖR‡VW'”æÖW2Â6†ææVÄæÖR“°¢–b‡VW'”æÖW2æ—4V×G’‚’’°¢VW'”æÖW2æFB‚""“°¢Ğ¢&WGW&âVW'”æÖW3°¢Ğ ¢&—fFRfö–BFDWuVW'”æÖR„'&”Æ—7CÅ7G&–æsâVW'”æÖW2Â7G&–æræÖR’°¢–b†æÖRÓÒçVÆÂ’&WGW&ã°¢7G&–ærG&–ÔæÖRÒæÖRçG&–Ò‚“°¢–b‡G&–ÔæÖRæ—4V×G’‚’ÇÂVW'”æÖW2æ6öçF–ç2‡G&–ÔæÖR’’&WGW&ã°¢VW'”æÖW2æFB‡G&–ÔæÖR“°¢Ğ ¢&—fFR7G&–ærvWD6öæf–wW&VDWtFG&W72‚’°¢7G&–ærW6W$WtFG&W72Ò†v²ævWB„†v´6öæf–räUuõU$ÂÂ""“°¢–b‡W6W$WtFG&W72ÒçVÆÂbbW6W$WtFG&W72çG&–Ò‚’æÆVæwF‚‚’ãÒR’°¢&WGW&âW6W$WtFG&W72çG&–Ò‚“°¢Ğ¢&WGW&âDTdTÅEôUuôDE$U53°¢Ğ ¢&—fFR&ööÆVâ†4WtFG&W72‚’°¢&WGW&âWu7G&–ætFG&W72ÒçVÆÂbbWu7G&–ætFG&W72çG&–Ò‚’æ—4V×G’‚“°¢Ğ ¢&—fFRfö–B&WVW7DWr…7G&–ærW&ÂÂFFRFFRÂ7G&–ær6†ææVÄæÖU&VÂÂ7G&–ærf–æÄWuFtæÖRÂ7G&–ær6fVDWt¶W’À¢'&”Æ—7CÅ7G&–æsâWuVW'”æÖW2Â6–×ÆTFFTf÷&ÖBF–ÖTf÷&ÖBÂ–çBVW'”–æFW‚’°¢ö¶‡GG2äö´‡GG6Æ–VçB6Æ–VçBÒö´vô†VÇW"ævWDFVfVÇD6Æ–VçB‚“°¢–b†6Æ–VçBÓÒçVÆÂ’6Æ–VçBÒ6öÒæv—F‡V"æ6GföBææWBäö´‡GGæ6Æ–VçB‚“°¢6Æ–VçBææWt6ÆÂ†æWrö¶‡GG2å&WVW7Bä'V–ÆFW"‚’çW&Â‡W&Â’æ'V–ÆB‚’’æVçVWVR†æWrö¶‡GG2ä6ÆÆ&6²‚’°¢÷fW'&–FP¢V&Æ–2fö–Böäf–ÇW&R†ö¶‡GG2ä6ÆÂ6ÆÂÂ”ôW†6WF–öâR’°¢Ô†æFÆW"ç÷7B†æWr'Vææ&ÆR‚’°¢÷fW'&–FP¢V&Æ–2fö–B'Vâ‚’°¢öäWu&WVW7Df–ÇW&R†FFRÂ6†ææVÄæÖU&VÂÂf–æÄWuFtæÖRÂ6fVDWt¶W’ÂWuVW'”æÖW2ÂF–ÖTf÷&ÖBÂVW'”–æFW‚“°¢Ğ¢Ò“°¢Ğ ¢÷fW'&–FP¢V&Æ–2fö–Böå&W7öç6R†ö¶‡GG2ä6ÆÂ6ÆÂÂö¶‡GG2å&W7öç6R&W7öç6R’F‡&÷w2”ôW†6WF–öâ°¢–b‡&W7öç6Ræ6öFR‚’Ò#’°¢&W7öç6Ræ6Æ÷6R‚“°¢Ô†æFÆW"ç÷7B†æWr'Vææ&ÆR‚’°¢÷fW'&–FP¢V&Æ–2fö–B'Vâ‚’°¢öäWu&WVW7Df–ÇW&R†FFRÂ6†ææVÄæÖU&VÂÂf–æÄWuFtæÖRÂ6fVDWt¶W’ÂWuVW'”æÖW2ÂF–ÖTf÷&ÖBÂVW'”–æFW‚“°¢Ğ¢Ò“°¢&WGW&ã°¢Ğ¢f–æÂ7G&–ær&öG“°¢G'’°¢&öG’Ò&W7öç6Ræ&öG’‚’ÒçVÆÂò&W7öç6Ræ&öG’‚’ç7G&–ær‚’¢"#°¢Òf–æÆÇ’°¢&W7öç6Ræ6Æ÷6R‚“°¢Ğ¢Ô†æFÆW"ç÷7B†æWr'Vææ&ÆR‚’°¢÷fW'&–FP¢V&Æ–2fö–B'Vâ‚’°¢öäWu&WVW7E&W7öç6R†&öG’ÂFFRÂ6†ææVÄæÖU&VÂÂf–æÄWuFtæÖRÂ6fVDWt¶W’ÂWuVW'”æÖW2ÂF–ÖTf÷&ÖBÂVW'”–æFW‚“°¢Ğ¢Ò“°¢Ğ¢Ò“°¢Ğ ¢&—fFRfö–BöäWu&WVW7Df–ÇW&R„FFRFFRÂ7G&–ær6†ææVÄæÖU&VÂÂ7G&–ærf–æÄWuFtæÖRÂ7G&–ær6fVDWt¶W’À¢'&”Æ—7CÅ7G&–æsâWuVW'”æÖW2Â6–×ÆTFFTf÷&ÖBF–ÖTf÷&ÖBÂ–çBVW'”–æFW‚’°¢–b‚—47W'&VçDWu&WVW7B‡6fVDWt¶W’’’&WGW&ã°¢–b‡&WVW7DæW‡DWuVW'”æÖR†FFRÂ6†ææVÄæÖU&VÂÂf–æÄWuFtæÖRÂ6fVDWt¶W’ÂWuVW'”æÖW2ÂF–ÖTf÷&ÖBÂVW'”–æFW‚’’°¢&WGW&ã°¢Ğ¢–b‡&WVW7DFVfVÇDWtöäf–ÇW&R†FFRÂ6†ææVÄæÖU&VÂÂf–æÄWuFtæÖRÂ6fVDWt¶W’ÂWuVW'”æÖW2ÂF–ÖTf÷&ÖBÂVW'”–æFW‚’’°¢&WGW&ã°¢Ğ¢WFFTWuæVÅ7FFR†fÇ6R“°¢òò6†÷tWr†FFRÂæWr'&”Æ—7CÃâ‚’“°¢òò6†÷t&÷GFöÔWr‚“°¢Ğ ¢&—fFRfö–BöäWu&WVW7E&W7öç6R…7G&–ær&Õ7G&–ærÂFFRFFRÂ7G&–ær6†ææVÄæÖU&VÂÂ7G&–ærf–æÄWuFtæÖRÀ¢7G&–ær6fVDWt¶W’Â'&”Æ—7CÅ7G&–æsâWuVW'”æÖW2Â6–×ÆTFFTf÷&ÖBF–ÖTf÷&ÖBÂ–çBVW'”–æFW‚’°¢–b‚—47W'&VçDWu&WVW7B‡6fVDWt¶W’’’&WGW&ã°¢–b‡&Õ7G&–ærÓÒçVÆÂÇÂ&Õ7G&–ærçG&–Ò‚’æ—4V×G’‚’’°¢WFFTWuæVÅ7FFR†fÇ6R“°¢&WGW&ã°¢Ğ¢Äôræ’‚&V6†òÖWuFtæÖS¢"²6†ææVÄæÖU&VÂ“°¢'&”Æ—7CÄWv–æfóâ'&”Æ—7BÒæWr'&”Æ—7CÄWv–æfóâ‚“°¢G'’°¢–b†—5†ÖÄWu&W7öç6R‡&Õ7G&–ær’’°¢'&”Æ—7BÒ'6U†ÖÄWr‡&Õ7G&–ærÂf–æÄWuFtæÖRÂFFR“°¢ÒVÇ6R–b‡&Õ7G&–æræ6öçF–ç2‚&WuöFF"’ÇÂ&Õ7G&–ærçG&–Ò‚’ç7F'G5v—F‚‚'²"’’°¢'&”Æ—7BÒ'6T§6öäWr‡&Õ7G&–ærÂFFR“°¢Ğ ¢Ò6F6‚„¥4ôäW†6WF–öâ¥4ôäW†6WF–öâ’°¢¥4ôäW†6WF–öâç&–çE7F6µG&6R‚“°¢Ğ¢–b†'&”Æ—7Bæ—4V×G’‚’bb&WVW7DæW‡DWuVW'”æÖR†FFRÂ6†ææVÄæÖU&VÂÂf–æÄWuFtæÖRÂ6fVDWt¶W’ÂWuVW'”æÖW2ÂF–ÖTf÷&ÖBÂVW'”–æFW‚’’°¢&WGW&ã°¢Ğ¢‡4WrçWB‡6fVDWt¶W’Â'&”Æ—7B“°¢–b‚—47W'&VçDWu&WVW7B‡6fVDWt¶W’’’&WGW&ã°¢6†÷tWr†FFRÂ'&”Æ—7B“°¢6†÷t&÷GFöÔWr‚“°¢Ğ ¢&—fFR&ööÆVâ&WVW7DFVfVÇDWtöäf–ÇW&R„FFRFFRÂ7G&–ær6†ææVÄæÖU&VÂÂ7G&–ærf–æÄWuFtæÖRÂ7G&–ær6fVDWt¶W’À¢'&”Æ—7CÅ7G&–æsâWuVW'”æÖW2Â6–×ÆTFFTf÷&ÖBF–ÖTf÷&ÖBÂ–çBVW'”–æFW‚’°¢–b„DTdTÅEôUuôDE$U52æWVÇ2†Wu7G&–ætFG&W72’ÇÂWuVW'”æÖW2ÓÒçVÆÂÇÂVW'”–æFW‚ãÒWuVW'”æÖW2ç6—¦R‚’’°¢&WGW&âfÇ6S°¢Ğ¢7G&–ærfÆÆ&6µW&ÂÒ'V–ÆDWuW&Â„DTdTÅEôUuôDE$U52ÂWuVW'”æÖW2ævWBƒ’ÂFFRÂF–ÖTf÷&ÖB“°¢Äôræ’‚&V6†òÖWrfÆÆ&6²FVfVÇBFG&W72"“°¢&WVW7DWr†fÆÆ&6µW&ÂÂFFRÂ6†ææVÄæÖU&VÂÂf–æÄWuFtæÖRÂ6fVDWt¶W’ÂWuVW'”æÖW2ÂF–ÖTf÷&ÖBÂWuVW'”æÖW2ç6—¦R‚’“°¢&WGW&âG'VS°¢Ğ ¢&—fFR&ööÆVâ&WVW7DæW‡DWuVW'”æÖR„FFRFFRÂ7G&–ær6†ææVÄæÖU&VÂÂ7G&–ærf–æÄWuFtæÖRÂ7G&–ær6fVDWt¶W’À¢'&”Æ—7CÅ7G&–æsâWuVW'”æÖW2Â6–×ÆTFFTf÷&ÖBF–ÖTf÷&ÖBÂ–çBVW'”–æFW‚’°¢–b‚—5FV×ÆFTWtFG&W72†Wu7G&–ætFG&W72’ÇÂWuVW'”æÖW2ÓÒçVÆÂÇÂVW'”–æFW‚²ãÒWuVW'”æÖW2ç6—¦R‚’’°¢&WGW&âfÇ6S°¢Ğ¢–çBæW‡D–æFW‚ÒVW'”–æFW‚²°¢7G&–æræW‡EW&ÂÒ'V–ÆDWuW&Â†Wu7G&–ætFG&W72ÂWuVW'”æÖW2ævWB†æW‡D–æFW‚’ÂFFRÂF–ÖTf÷&ÖB“°¢Äôræ’‚&V6†òÖWr&WG'’VW'’æÖS¢"²WuVW'”æÖW2ævWB†æW‡D–æFW‚’“°¢&WVW7DWr†æW‡EW&ÂÂFFRÂ6†ææVÄæÖU&VÂÂf–æÄWuFtæÖRÂ6fVDWt¶W’ÂWuVW'”æÖW2ÂF–ÖTf÷&ÖBÂæW‡D–æFW‚“°¢&WGW&âG'VS°¢Ğ ¢&—fFR&ööÆVâ—5FV×ÆFTWtFG&W72…7G&–ærFG&W72’°¢&WGW&âFG&W72ÒçVÆÂbb†FG&W72æ6öçF–ç2‚'¶æÖWÒ"’ÇÂFG&W72æ6öçF–ç2‚'¶FFWÒ"’“°¢Ğ ¢&—fFR&ööÆVâ—47W'&VçDWu&WVW7B…7G&–ær6fVDWt¶W’’°¢–b†6†ææVÅôæÖRÓÒçVÆÂÇÂÆ—fTWtFFTFFW"ÓÒçVÆÂÇÂÆ—fTWtFFTFFW"ævWE6VÆV7FVD–æFW‚‚’Â’&WGW&âfÇ6S°¢7G&–ær7W'&VçDWt¶W’Ò6†ææVÅôæÖRævWD6†ææVÄæÖR‚’²%ò"²ö&¦V7G2ç&WV—&TæöäçVÆÂ†Æ—fTWtFFTFFW"ævWD—FVÒ†Æ—fTWtFFTFFW"ævWE6VÆV7FVD–æFW‚‚’’’ævWDFFU&W6VçFVB‚“°¢&WGW&â6fVDWt¶W’æWVÇ2†7W'&VçDWt¶W’“°¢Ğ ¢òşi‹îzK®[©^˜:„Up¢&—fFR&ööÆVâ—5†ÖÄWtFG&W72…7G&–ærFG&W72’°¢–b†FG&W72ÓÒçVÆÂ’°¢&WGW&âfÇ6S°¢Ğ¢7G&–ærÆ÷vW$FG&W72ÒFG&W72çFôÆ÷vW$66R„Æö6ÆRå$ôõB“°¢–çBVW'”–æFW‚ÒÆ÷vW$FG&W72æ–æFW„öb‚#ò"“°¢–b‡VW'”–æFW‚ãÒ’°¢Æ÷vW$FG&W72ÒÆ÷vW$FG&W72ç7V'7G&–ærƒÂVW'”–æFW‚“°¢Ğ¢&WGW&âÆ÷vW$FG&W72æVæG5v—F‚‚"ç†ÖÂ"“°¢Ğ ¢&—fFR&ööÆVâ—5†ÖÄWu&W7öç6R…7G&–ær&W7öç6R’°¢–b‡&W7öç6RÓÒçVÆÂ’°¢&WGW&âfÇ6S°¢Ğ¢7G&–ærG&–Õ&W7öç6RÒ&W7öç6RçG&–Ò‚“°¢&WGW&âG&–Õ&W7öç6Rç7F'G5v—F‚‚#Ã÷†ÖÂ"’ÇÂG&–Õ&W7öç6Rç7F'G5v—F‚‚#ÇGb"’ÇÂG&–Õ&W7öç6Ræ6öçF–ç2‚#Ç&öw&ÖÖR"“°¢Ğ ¢&—fFR'&”Æ—7CÄWv–æfóâ'6T§6öäWr…7G&–ær&W7öç6RÂFFRFFR’F‡&÷w2¥4ôäW†6WF–öâ°¢'&”Æ—7CÄWv–æfóâWtÆ—7BÒæWr'&”Æ—7CÃâ‚“°¢¥4ôäö&¦V7B§6öäö&¦V7BÒæWr¥4ôäö&¦V7B‡&W7öç6R“°¢7G&–ær6†ææVÄæÖRÒ§6öäö&¦V7Bæ÷E7G&–ær‚&6†ææVÅöæÖR"Â§6öäö&¦V7Bæ÷E7G&–ær‚&6†ææVÂ"Â""’“°¢–b†—5Væf–Æ&ÆTWuFW‡B†6†ææVÄæÖR’’°¢&WGW&âWtÆ—7C°¢Ğ¢¥4ôä'&’Wt'&’Òf–æD§6öäWt'&’†§6öäö&¦V7B“°¢–b†Wt'&’ÓÒçVÆÂ’°¢&WGW&âWtÆ—7C°¢Ğ¢f÷"†–çB’Ò²’ÂWt'&’æÆVæwF‚‚“²’²²’°¢¥4ôäö&¦V7B—FVÒÒWt'&’æ÷D¥4ôäö&¦V7B†’“°¢–b†—FVÒÓÒçVÆÂ’°¢6öçF–çVS°¢Ğ¢7G&–ærF—FÆRÒ6ÆVäWuF—FÆR†—FVÒæ÷E7G&–ær‚'F—FÆR"Â—FVÒæ÷E7G&–ær‚&æÖR"Â""’’“°¢–b…FW‡EWF–Ç2æ—4V×G’‡F—FÆR’ÇÂ—5Væf–Æ&ÆTWuFW‡B‡F—FÆR’’°¢6öçF–çVS°¢Ğ¢7G&–ær7F'EFW‡BÒ—FVÒæ÷E7G&–ær‚'7F'B"Â—FVÒæ÷E7G&–ær‚'7F'E÷F–ÖR"Â—FVÒæ÷E7G&–ær‚'7F'GF–ÖR"Â""’’“°¢7G&–ærVæEFW‡BÒ—FVÒæ÷E7G&–ær‚&VæB"Â—FVÒæ÷E7G&–ær‚&VæE÷F–ÖR"Â—FVÒæ÷E7G&–ær‚&VæGF–ÖR"Â""’’“°¢FFR7F'DFFRÒ'6T§6öäWtFFR†FFRÂ7F'EFW‡B“°¢FFRVæDFFRÒ'6T§6öäWtFFR†FFRÂVæEFW‡B“°¢–b‡7F'DFFRÓÒçVÆÂÇÂVæDFFRÓÒçVÆÂ’°¢6öçF–çVS°¢Ğ¢–b‚VæDFFRægFW"‡7F'DFFR’’°¢VæDFFRÒæWrFFR†VæDFFRævWEF–ÖR‚’²F–ÖUVæ—BäD•2çFôÖ–ÆÆ—2ƒ’“°¢Ğ¢WtÆ—7BæFB†7&VFU†ÖÄWt–æfò†FFRÂF—FÆRÂ7F'DFFRÂVæDFFRÂWtÆ—7Bç6—¦R‚’’“°¢Ğ¢&WGW&âWtÆ—7C°¢Ğ ¢&—fFR¥4ôä'&’f–æD§6öäWt'&’„¥4ôäö&¦V7B§6öäö&¦V7B’°¢¥4ôä'&’Wt'&’Ò§6öäö&¦V7Bæ÷D¥4ôä'&’‚&WuöFF"“°¢–b†Wt'&’ÒçVÆÂ’&WGW&âWt'&“°¢Wt'&’Ò§6öäö&¦V7Bæ÷D¥4ôä'&’‚&FF"“°¢–b†Wt'&’ÒçVÆÂ’&WGW&âWt'&“°¢Wt'&’Ò§6öäö&¦V7Bæ÷D¥4ôä'&’‚&Æ—7B"“°¢–b†Wt'&’ÒçVÆÂ’&WGW&âWt'&“°¢¥4ôäö&¦V7BFFö&¦V7BÒ§6öäö&¦V7Bæ÷D¥4ôäö&¦V7B‚&FF"“°¢–b†FFö&¦V7BÒçVÆÂ’°¢Wt'&’ÒFFö&¦V7Bæ÷D¥4ôä'&’‚&WuöFF"“°¢–b†Wt'&’ÒçVÆÂ’&WGW&âWt'&“°¢Wt'&’ÒFFö&¦V7Bæ÷D¥4ôä'&’‚&Æ—7B"“°¢Ğ¢&WGW&âWt'&“°¢Ğ ¢&—fFRFFR'6T§6öäWtFFR„FFRFFRÂ7G&–ærF–ÖUFW‡B’°¢–b‡F–ÖUFW‡BÓÒçVÆÂÇÂF–ÖUFW‡BçG&–Ò‚’æ—4V×G’‚’’°¢&WGW&âçVÆÃ°¢Ğ¢7G&–ærG&–ÕFW‡BÒF–ÖUFW‡BçG&–Ò‚“°¢7G&–æuµÒgVÆÅGFW&ç2ÒæWr7G&–æuµ×²'———’ÔÔÒÖFB„ƒ¦ÖÓ§72"Â'———’ÔÔÒÖFB„ƒ¦ÖÒ'Ó°¢f÷"…7G&–ærGFW&â¢gVÆÅGFW&ç2’°¢G'’°¢6–×ÆTFFTf÷&ÖBFFTf÷&ÖBÒæWr6–×ÆTFFTf÷&ÖB‡GFW&âÂÆö6ÆRævWDFVfVÇB‚’“°¢FFTf÷&ÖBç6WEF–ÖU¦öæR…F–ÖU¦öæRævWEF–ÖU¦öæR‚$tÕB³ƒ£"’“°¢&WGW&âFFTf÷&ÖBç'6R‡G&–ÕFW‡B“°¢Ò6F6‚…'6TW†6WF–öâ–væ÷&VB’°¢Ğ¢Ğ¢6–×ÆTFFTf÷&ÖBF”f÷&ÖBÒæWr6–×ÆTFFTf÷&ÖB‚'———’ÔÔÒÖFB"ÂÆö6ÆRævWDFVfVÇB‚’“°¢F”f÷&ÖBç6WEF–ÖU¦öæR…F–ÖU¦öæRævWEF–ÖU¦öæR‚$tÕB³ƒ£"’“°¢7G&–ærF•FW‡BÒF”f÷&ÖBæf÷&ÖB†FFR“°¢7G&–æuµÒF–ÖUGFW&ç2ÒæWr7G&–æuµ×²$„ƒ¦ÖÓ§72"Â$„ƒ¦ÖÒ'Ó°¢f÷"…7G&–ærGFW&â¢F–ÖUGFW&ç2’°¢G'’°¢6–×ÆTFFTf÷&ÖBFFTf÷&ÖBÒæWr6–×ÆTFFTf÷&ÖB‚'———’ÔÔÒÖFB"²GFW&âÂÆö6ÆRævWDFVfVÇB‚’“°¢FFTf÷&ÖBç6WEF–ÖU¦öæR…F–ÖU¦öæRævWEF–ÖU¦öæR‚$tÕB³ƒ£"’“°¢&WGW&âFFTf÷&ÖBç'6R†F•FW‡B²""²G&–ÕFW‡B“°¢Ò6F6‚…'6TW†6WF–öâ–væ÷&VB’°¢Ğ¢Ğ¢&WGW&âçVÆÃ°¢Ğ ¢&—fFR7G&–ær6ÆVäWuF—FÆR…7G&–ærF—FÆR’°¢–b‡F—FÆRÓÒçVÆÂ’°¢&WGW&â"#°¢Ğ¢&WGW&âF—FÆRç&WÆ6R‚"ÒŞXXŞ‹KKÛşyJ‚"Â""¢ç&WÆ6R‚"ÒŞXXŞ‹KKÛşyJ‚"Â""¢çG&–Ò‚“°¢Ğ ¢&—fFR&ööÆVâ—5Væf–Æ&ÆTWuFW‡B…7G&–ærFW‡B’°¢&WGW&âFW‡BÒçVÆÂbb‡FW‡Bæ6öçF–ç2‚.iÊ®hùKé²"’ÇÂFW‡Bæ6öçF–ç2‚.i¨.iz"’“°¢Ğ ¢&—fFR7G&–æræ÷&ÖÆ—¦TWt6†ææVÄæÖR…7G&–ær6†ææVÄæÖR’°¢–b†6†ææVÄæÖRÓÒçVÆÂ’°¢&WGW&â"#°¢Ğ¢7G&–ærG&–ÔæÖRÒ6†ææVÄæÖRçG&–Ò‚“°¢7G&–ær6ö×7DæÖRÒG&–ÔæÖRç&WÆ6R‚"Ò"Â""’ç&WÆ6R‚""Â""“°¢ÖF6†W"67GdÖF6†W"ÒGFW&âæ6ö×–ÆR‚"ƒö’•â„45EeÅÆB²ƒó¥ÅÂ·Ä²“ò’ƒó¥µÅÇSFSÕÅÇS–fUÒâ§ÂB’"’æÖF6†W"†6ö×7DæÖR“°¢–b†67GdÖF6†W"æÖF6†W2‚’’°¢&WGW&â67GdÖF6†W"æw&÷Wƒ’çFõWW$66R„Æö6ÆRå$ôõB“°¢Ğ¢–b†6ö×7DæÖRçFõWW$66R„Æö6ÆRå$ôõB’ç7F'G5v—F‚‚$45Eb"’’°¢&WGW&â6ö×7DæÖRçFõWW$66R„Æö6ÆRå$ôõB“°¢Ğ¢&WGW&âG&–ÔæÖS°¢Ğ ¢&—fFR'&”Æ—7CÄWv–æfóâ'6U†ÖÄWr…7G&–ær†ÖÂÂ7G&–ær6†ææVÄæÖRÂFFRFFR’°¢'&”Æ—7CÄWv–æfóâWtÆ—7BÒæWr'&”Æ—7CÃâ‚“°¢G'’°¢Fö7VÖVçD'V–ÆFW$f7F÷'’f7F÷'’ÒFö7VÖVçD'V–ÆFW$f7F÷'’ææWt–ç7Fæ6R‚“°¢f7F÷'’ç6WD–væ÷&–æt6öÖÖVçG2‡G'VR“°¢f7F÷'’ç6WD6öÆW66–ær‡G'VR“°¢G'’°¢f7F÷'’ç6WDfVGW&R‚&‡GG¢ò÷†ÖÂæ÷&r÷6‚öfVGW&W2öW‡FW&æÂÖvVæW&ÂÖVçF—F–W2"ÂfÇ6R“°¢f7F÷'’ç6WDfVGW&R‚&‡GG¢ò÷†ÖÂæ÷&r÷6‚öfVGW&W2öW‡FW&æÂ×&ÖWFW"ÖVçF—F–W2"ÂfÇ6R“°¢f7F÷'’ç6WDfVGW&R‚&‡GG¢òö6†Ræ÷&r÷†ÖÂöfVGW&W2öæöçfÆ–FF–æröÆöBÖW‡FW&æÂÖGFB"ÂfÇ6R“°¢Ò6F6‚„W†6WF–öâ–væ÷&VB’°¢Ğ¢Fö7VÖVçD'V–ÆFW"'V–ÆFW"Òf7F÷'’ææWtFö7VÖVçD'V–ÆFW"‚“°¢'V–ÆFW"ç6WDVçF—G•&W6öÇfW"‚‡V&Æ–4–BÂ7—7FVÔ–B’ÓâæWr–çWE6÷W&6R†æWr7G&–æu&VFW"‚""’’“°¢Fö7VÖVçBFö7VÖVçBÒ'V–ÆFW"ç'6R†æWr–çWE6÷W&6R†æWr7G&–æu&VFW"‡†ÖÂ’’“°¢Fö7VÖVçBævWDFö7VÖVçDVÆVÖVçB‚’ææ÷&ÖÆ—¦R‚“° ¢7G&–ærF&vWDæÖRÒæ÷&ÖÆ—¦TWt6†ææVÄæÖR†6†ææVÄæÖR“°¢'&”Æ—7CÅ7G&–æsâ6†ææVÄ–G2ÒæWr'&”Æ—7CÃâ‚“°¢æöFTÆ—7B6†ææVÄæöFW2ÒFö7VÖVçBævWDVÆVÖVçG4'•FtæÖR‚&6†ææVÂ"“°¢f÷"†–çB’Ò²’Â6†ææVÄæöFW2ævWDÆVæwF‚‚“²’²²’°¢æöFR6†ææVÄæöFRÒ6†ææVÄæöFW2æ—FVÒ†’“°¢–b†6†ææVÄæöFRævWDæöFUG—R‚’ÒæöFRäTÄTÔTåEôäôDR’°¢6öçF–çVS°¢Ğ¢VÆVÖVçB6†ææVÄVÆVÖVçBÒ„VÆVÖVçB’6†ææVÄæöFS°¢7G&–ær6†ææVÄ–BÒ6†ææVÄVÆVÖVçBævWDGG&–'WFR‚&–B"“°¢–b‡F&vWDæÖRæWVÇ2†æ÷&ÖÆ—¦TWt6†ææVÄæÖR†6†ææVÄ–B’’’°¢6†ææVÄ–G2æFB†6†ææVÄ–B“°¢6öçF–çVS°¢Ğ¢æöFTÆ—7BF—7Æ”æÖTæöFW2Ò6†ææVÄVÆVÖVçBævWDVÆVÖVçG4'•FtæÖR‚&F—7Æ’ÖæÖR"“°¢f÷"†–çB¢Ò²¢ÂF—7Æ”æÖTæöFW2ævWDÆVæwF‚‚“²¢²²’°¢7G&–ærF—7Æ”æÖRÒF—7Æ”æÖTæöFW2æ—FVÒ†¢’ævWEFW‡D6öçFVçB‚“°¢–b‡F&vWDæÖRæWVÇ2†æ÷&ÖÆ—¦TWt6†ææVÄæÖR†F—7Æ”æÖR’’’°¢6†ææVÄ–G2æFB†6†ææVÄ–B“°¢'&V³°¢Ğ¢Ğ¢Ğ ¢FFRF•7F'BÒvWDF•7F'B†FFR“°¢FFRF”VæBÒæWrFFR†F•7F'BævWEF–ÖR‚’²F–ÖUVæ—BäD•2çFôÖ–ÆÆ—2ƒ’“°¢æöFTÆ—7B&öw&ÖÖTæöFW2ÒFö7VÖVçBævWDVÆVÖVçG4'•FtæÖR‚'&öw&ÖÖR"“°¢f÷"†–çB’Ò²’Â&öw&ÖÖTæöFW2ævWDÆVæwF‚‚“²’²²’°¢æöFR&öw&ÖÖTæöFRÒ&öw&ÖÖTæöFW2æ—FVÒ†’“°¢–b‡&öw&ÖÖTæöFRævWDæöFUG—R‚’ÒæöFRäTÄTÔTåEôäôDR’°¢6öçF–çVS°¢Ğ¢VÆVÖVçB&öw&ÖÖTVÆVÖVçBÒ„VÆVÖVçB’&öw&ÖÖTæöFS°¢7G&–ær&öw&ÖÖT6†ææVÂÒ&öw&ÖÖTVÆVÖVçBævWDGG&–'WFR‚&6†ææVÂ"“°¢–b‚6†ææVÄ–G2æ6öçF–ç2‡&öw&ÖÖT6†ææVÂ’bbF&vWDæÖRæWVÇ2†æ÷&ÖÆ—¦TWt6†ææVÄæÖR‡&öw&ÖÖT6†ææVÂ’’’°¢6öçF–çVS°¢Ğ ¢FFR7F'DFFRÒ'6U†ÖÅGdFFR‡&öw&ÖÖTVÆVÖVçBævWDGG&–'WFR‚'7F'B"’“°¢FFRVæDFFRÒ'6U†ÖÅGdFFR‡&öw&ÖÖTVÆVÖVçBævWDGG&–'WFR‚'7F÷"’“°¢–b‡7F'DFFRÓÒçVÆÂÇÂVæDFFRÓÒçVÆÂÇÂVæDFFRægFW"‡7F'DFFR’’°¢6öçF–çVS°¢Ğ¢–b‚7F'DFFRæ&Vf÷&R†F”VæB’ÇÂVæDFFRægFW"†F•7F'B’’°¢6öçF–çVS°¢Ğ ¢7G&–ærF—FÆRÒ"#°¢æöFTÆ—7BF—FÆTæöFW2Ò&öw&ÖÖTVÆVÖVçBævWDVÆVÖVçG4'•FtæÖR‚'F—FÆR"“°¢–b‡F—FÆTæöFW2ævWDÆVæwF‚‚’â’°¢F—FÆRÒF—FÆTæöFW2æ—FVÒƒ’ævWEFW‡D6öçFVçB‚“°¢Ğ¢WtÆ—7BæFB†7&VFU†ÖÄWt–æfò†FFRÂF—FÆRÂ7F'DFFRÂVæDFFRÂWtÆ—7Bç6—¦R‚’’“°¢Ğ¢Ò6F6‚„W†6WF–öâW†6WF–öâ’°¢W†6WF–öâç&–çE7F6µG&6R‚“°¢Ğ¢&WGW&âWtÆ—7C°¢Ğ ¢&—fFRFFRvWDF•7F'B„FFRFFR’F‡&÷w2'6TW†6WF–öâ°¢6–×ÆTFFTf÷&ÖBF”f÷&ÖBÒæWr6–×ÆTFFTf÷&ÖB‚'———’ÔÔÒÖFB"ÂÆö6ÆRævWDFVfVÇB‚’“°¢F”f÷&ÖBç6WEF–ÖU¦öæR…F–ÖU¦öæRævWEF–ÖU¦öæR‚$tÕB³ƒ£"’“°¢&WGW&âF”f÷&ÖBç'6R†F”f÷&ÖBæf÷&ÖB†FFR’“°¢Ğ ¢&—fFRFFR'6U†ÖÅGdFFR…7G&–ærFFUFW‡B’°¢–b†FFUFW‡BÓÒçVÆÂÇÂFFUFW‡BçG&–Ò‚’æ—4V×G’‚’’°¢&WGW&âçVÆÃ°¢Ğ¢7G&–ærG&–ÔFFRÒFFUFW‡BçG&–Ò‚“°¢G'’°¢&WGW&âæWr6–×ÆTFFTf÷&ÖB‚'———”ÔÖFD„†Ö×72¢"ÂÆö6ÆRævWDFVfVÇB‚’’ç'6R‡G&–ÔFFR“°¢Ò6F6‚…'6TW†6WF–öâ–væ÷&VB’°¢Ğ¢G'’°¢6–×ÆTFFTf÷&ÖBFFTf÷&ÖBÒæWr6–×ÆTFFTf÷&ÖB‚'———”ÔÖFD„†Ö×72"ÂÆö6ÆRævWDFVfVÇB‚’“°¢FFTf÷&ÖBç6WEF–ÖU¦öæR…F–ÖU¦öæRævWEF–ÖU¦öæR‚$tÕB³ƒ£"’“°¢&WGW&âFFTf÷&ÖBç'6R‡G&–ÔFFR“°¢Ò6F6‚…'6TW†6WF–öâ–væ÷&VB’°¢Ğ¢&WGW&âçVÆÃ°¢Ğ ¢&—fFRWv–æfò7&VFU†ÖÄWt–æfò„FFRWtFFRÂ7G&–ærF—FÆRÂFFR7F'DFFRÂFFRVæDFFRÂ–çB–æFW‚’°¢6–×ÆTFFTf÷&ÖBF–ÖTf÷&ÖBÒæWr6–×ÆTFFTf÷&ÖB‚$„ƒ¦ÖÒ"ÂÆö6ÆRævWDFVfVÇB‚’“°¢Wv–æfòWt–æfòÒæWrWv–æfò†WtFFRÂF—FÆRÂWtFFRÂF–ÖTf÷&ÖBæf÷&ÖB‡7F'DFFR’ÂF–ÖTf÷&ÖBæf÷&ÖB†VæDFFR’Â–æFW‚“°¢Wt–æfòç7F'FFFUF–ÖRÒ7F'DFFS°¢Wt–æfòæVæFFFUF–ÖRÒVæDFFS°¢Wt–æfòç7F'BÒF–ÖTf÷&ÖBæf÷&ÖB‡7F'DFFR“°¢Wt–æfòæVæBÒF–ÖTf÷&ÖBæf÷&ÖB†VæDFFR“°¢Wt–æfòæ÷&–v–å7F'BÒWt–æfòç7F'C°¢Wt–æfòæ÷&–v–äVæBÒWt–æfòæVæC°¢Wt–æfòæFFW7F'BÒ–çFVvW"ç'6T–çB†Wt–æfòç7F'Bç&WÆ6R‚#¢"Â""’“°¢Wt–æfòæFFVVæBÒ–çFVvW"ç'6T–çB†Wt–æfòæVæBç&WÆ6R‚#¢"Â""’“°¢&WGW&âWt–æfó°¢Ğ ¢7W&W74Æ–çB‚%6WEFW‡D“†â"¢&—fFRfö–B6†÷t&÷GFöÔWr‚’°¢–b†—54„•”’—°¢&WGW&ã°¢Ğ¢–b†6†ææVÅôæÖRævWD6†ææVÄæÖR‚’ÒçVÆÂ’°¢F—ö6†æÖRç6WEFW‡B†6†ææVÅôæÖRævWD6†ææVÄæÖR‚’“°¢Geö6†ææVÆçVÒç6WEFW‡B‚""²6†ææVÅôæÖRævWD6†ææVÄçVÒ‚’“°¢FW‡Ef–WrGeö7W'&VçE÷&öw&ÕöæÖRÒf–æEf–Wt'”–B…"æ–BçGeö7W'&VçE÷&öw&ÕöæÖR“°¢FW‡Ef–WrGeöæW‡E÷&öw&ÕöæÖRÒf–æEf–Wt'”–B…"æ–BçGeöæW‡E÷&öw&ÕöæÖR“°¢6WDFVfVÇD&÷GFöÔWr‡Geö7W'&VçE÷&öw&ÕöæÖRÂGeöæW‡E÷&öw&ÕöæÖR“°¢7G&–ær6fVDWt¶W’Ò6†ææVÅôæÖRævWD6†ææVÄæÖR‚’²%ò"²ö&¦V7G2ç&WV—&TæöäçVÆÂ†Æ—fTWtFFTFFW"ævWD—FVÒ†Æ—fTWtFFTFFW"ævWE6VÆV7FVD–æFW‚‚’’’ævWDFFU&W6VçFVB‚“° ¢–b†‡4Wræ6öçF–ç4¶W’‡6fVDWt¶W’’’°¢'&”Æ—7CÄWv–æfóâ'&”Æ—7BÒ‡4WrævWB‡6fVDWt¶W’“°¢–b†'&”Æ—7BÒçVÆÂbb'&”Æ—7Bç6—¦R‚’â’°¢FFRFFRÒæWrFFR‚“°¢–çB6—¦RÒ'&”Æ—7Bç6—¦R‚’Ò°¢&ööÆVâ†4–æfòÒfÇ6S°¢v†–ÆR‡6—¦RãÒ’°¢–b†FFRægFW"‚†'&”Æ—7BævWB‡6—¦R’’ç7F'FFFUF–ÖR’bFFRæ&Vf÷&R‚†'&”Æ—7BævWB‡6—¦R’’æVæFFFUF–ÖR’’°¢F—öWsç6WEFW‡B‚†'&”Æ—7BævWB‡6—¦R’’ç7F'B²"Ò"²†'&”Æ—7BævWB‡6—¦R’’æVæB“°¢Geö7W'&VçE÷&öw&ÕöæÖRç6WEFW‡B‚†'&”Æ—7BævWB‡6—¦R’’çF—FÆR“°¢–b‡6—¦RÒ'&”Æ—7Bç6—¦R‚’Ò’°¢F—öWs"ç6WEFW‡B‚†'&”Æ—7BævWB‡6—¦R²’’ç7F'B²"Ò"²†'&”Æ—7BævWB‡6—¦R²’’æVæB“°¢GeöæW‡E÷&öw&ÕöæÖRç6WEFW‡B‚†'&”Æ—7BævWB‡6—¦R²’’çF—FÆR“°¢ÒVÇ6R°¢F—öWs"ç6WEFW‡B‚†'&”Æ—7BævWB‡6—¦R’’æVæB²"Ó#3£S’"“°¢GeöæW‡E÷&öw&ÕöæÖRç6WEFW‡B‚.{+î[Úˆ¨.yºâŞi¨.izˆ¨.yºîš(NY®Kúhò"“°¢Ğ¢†4–æfó×G'VS°¢'&V³°¢ÒVÇ6R°¢6—¦RÒÓ°¢Ğ¢Ğ¢Ğ¢WtÆ—7DFFW"ä6ä&6²†7W'&VçDÆ—fT6†ææVÄ—FVÒævWF–æ6ÇVFUö&6²‚’“°¢WtÆ—7DFFW"ç6WDæWtFF†'&”Æ—7B“°¢WFFTWuæVÅ7FFR†'&”Æ—7BÒçVÆÂbb'&”Æ—7Bç6—¦R‚’â“°¢ÒVÇ6R°¢WFFTWuæVÅ7FFR†fÇ6R“°¢Ğ ¢–b†6÷VçDF÷våF–ÖW"ÒçVÆÂ’°¢6÷VçDF÷våF–ÖW"æ6æ6VÂ‚“°¢Ğ¢–b‚F—öWsævWEFW‡B‚’æWVÇ2‚.i¨.izKúhò"’—°¢ÆÅ÷&–v‡E÷F÷öÆöF–ærç6WEf—6–&–Æ—G’…f–Wråd•4”$ÄR“°¢ÆÅöWrç6WEf—6–&–Æ—G’…f–Wråd•4”$ÄR“°¢6÷VçDF÷våF–ÖW"ÒæWr6÷VçDF÷våF–ÖW"‡÷7EF–ÖV÷WBÂ’²òş[©^˜:†W~™©‰xşi{n™{NŠëîZé ¢V&Æ–2fö–BöåF–6²†Æöær¢’°¢Ğ¢V&Æ–2fö–Böäf–æ—6‚‚’°¢ÆÅ÷&–v‡E÷F÷öÆöF–ærç6WEf—6–&–Æ—G’…f–WrätôäR“°¢ÆÅ÷&–v‡E÷F÷ö‡V–¶âç6WEf—6–&–Æ—G’…f–WrätôäR“°¢ÆÅöWrç6WEf—6–&–Æ—G’…f–WrätôäR“°¢Ğ¢Ó°¢6÷VçDF÷våF–ÖW"ç7F'B‚“°¢ÖVÇ6R°¢ÆÅ÷&–v‡E÷F÷öÆöF–ærç6WEf—6–&–Æ—G’…f–WrätôäR“°¢ÆÅ÷&–v‡E÷F÷ö‡V–¶âç6WEf—6–&–Æ—G’…f–WrätôäR“°¢ÆÅöWrç6WEf—6–&–Æ—G’…f–WrätôäR“°¢Ğ¢–b†6†ææVÅôæÖRÓÒçVÆÂÇÂ6†ææVÅôæÖRævWE6÷W&6TçVÒ‚’ÃÒ’°¢‚…FW‡Ef–Wr’f–æEf–Wt'”–B…"æ–BçGe÷6÷W&6R’’ç6WEFW‡B‚#ó"“°¢ÒVÇ6R°¢‚…FW‡Ef–Wr’f–æEf–Wt'”–B…"æ–BçGe÷6÷W&6R’’ç6WEFW‡B‚.{«ş‹zò"²†6†ææVÅôæÖRævWE6÷W&6T–æFW‚‚’²’²"ò"²6†ææVÅôæÖRævWE6÷W&6TçVÒ‚’“°¢Ğ¢Ge÷&–v‡E÷F÷ö6†ææVÅöæÖRç6WEFW‡B†6†ææVÅôæÖRævWD6†ææVÄæÖR‚’“°¢Ge÷&–v‡E÷F÷öWuöæÖRç6WEFW‡B†6†ææVÅôæÖRævWD6†ææVÄæÖR‚’“°¢Ğ¢Ğ ¢&—fFRfö–B6WDFVfVÇD&÷GFöÔWr…FW‡Ef–Wr7W'&VçE&öw&ÔæÖRÂFW‡Ef–WræW‡E&öw&ÔæÖR’°¢F–ÖU¦öæRF–ÖU¦öæRÒF–ÖU¦öæRævWEF–ÖU¦öæR‚$tÕB³ƒ£"“°¢6ÆVæF"7W'&VçE7F'BÒ6ÆVæF"ævWD–ç7Fæ6R‡F–ÖU¦öæR“°¢7W'&VçE7F'Bç6WB„6ÆVæF"äÔ”åUDRÂ“°¢7W'&VçE7F'Bç6WB„6ÆVæF"å4T4ôäBÂ“°¢7W'&VçE7F'Bç6WB„6ÆVæF"äÔ”ÄÄ•4T4ôäBÂ“°¢6ÆVæF"7W'&VçDVæBÒ„6ÆVæF"’7W'&VçE7F'Bæ6ÆöæR‚“°¢7W'&VçDVæBæFB„6ÆVæF"äÔ”åUDRÂS’“°¢6ÆVæF"æW‡E7F'BÒ„6ÆVæF"’7W'&VçDVæBæ6ÆöæR‚“°¢æW‡E7F'BæFB„6ÆVæF"äÔ”åUDRÂ“°¢6ÆVæF"æW‡DVæBÒ„6ÆVæF"’æW‡E7F'Bæ6ÆöæR‚“°¢æW‡DVæBæFB„6ÆVæF"äÔ”åUDRÂS’“° ¢6–×ÆTFFTf÷&ÖBF–ÖTf÷&ÖBÒæWr6–×ÆTFFTf÷&ÖB‚$„ƒ¦ÖÒ"ÂÆö6ÆRævWDFVfVÇB‚’“°¢F–ÖTf÷&ÖBç6WEF–ÖU¦öæR‡F–ÖU¦öæR“°¢F—öWsç6WEFW‡B‡F–ÖTf÷&ÖBæf÷&ÖB†7W'&VçE7F'BævWEF–ÖR‚’’²"Ò"²F–ÖTf÷&ÖBæf÷&ÖB†7W'&VçDVæBævWEF–ÖR‚’’“°¢7W'&VçE&öw&ÔæÖRç6WEFW‡B‚.{+î[Úˆ¨.yºâ"“°¢F—öWs"ç6WEFW‡B‡F–ÖTf÷&ÖBæf÷&ÖB†æW‡E7F'BævWEF–ÖR‚’’²"Ò"²F–ÖTf÷&ÖBæf÷&ÖB†æW‡DVæBævWEF–ÖR‚’’“°¢æW‡E&öw&ÔæÖRç6WEFW‡B‚.i¨.izˆ¨.yºîš(NY®Kúhò"“°¢Ğ ¢&—fFRfö–BWFFT7W'&VçD6†ææVÄ–6öâ‚’°¢–b†6†ææVÅôæÖRÓÒçVÆÂÇÂ6†ææVÅôæÖRævWD6†ææVÄæÖR‚’ÓÒçVÆÂ’°¢&WGW&ã°¢Ğ¢7G&–ær6†ææVÄæÖRÒ6†ææVÅôæÖRævWD6†ææVÄæÖR‚“°¢7G&–ær6†ææVÄæÖU&VÂÒæ÷&ÖÆ—¦TWt6†ææVÄæÖR†vWDf—'7E'D&Vf÷&U76R†6†ææVÄæÖR’“°¢7G&–ærWuFtæÖRÒ6†ææVÄæÖU&VÃ°¢7G&–ær–6öåW&ÂÒçVÆÃ°¢–b‚6†ææVÅôæÖRævWD6†ææVÄÆövò‚’æ—4V×G’‚’’°¢–6öåW&ÂÒ6†ææVÅôæÖRævWD6†ææVÄÆövò‚“°¢ÒVÇ6R–b†ÆövõW&ÂÓÒçVÆÂÇÂÆövõW&Âæ—4V×G’‚’’°¢7G&–æuµÒWt–æfòÒWuWF–ÂævWDWt–æfò†6†ææVÄæÖU&VÂ“°¢–b†Wt–æfòÒçVÆÂ’°¢–6öåW&ÂÒWt–æfõ³Ó°¢–b‚Wt–æfõ³Òæ—4V×G’‚’’°¢WuFtæÖRÒWt–æfõ³Ó°¢Ğ¢Ğ¢ÒVÇ6R–b‚ÆövõW&ÂæWVÇ2‚&fÇ6R"’’°¢–6öåW&ÂÒÆövõW&Âç&WÆ6R‚'¶æÖWÒ"ÂWuFtæÖR“°¢Ğ¢WFFT6†ææVÄ–6öâ†6†ææVÄæÖRÂ–6öåW&Â“°¢Ğ ¢7W&W74Æ–çB‚%6WEFW‡D“†â"¢&—fFRfö–BWFFT6†ææVÄ–6öâ…7G&–ær6†ææVÄæÖRÂ7G&–ærÆövõW&Â’°¢–b†6†ææVÅôæÖRÓÒçVÆÂÇÂ6†ææVÅôæÖRævWD6†ææVÄæÖR‚’ÓÒçVÆÂÇÂ6†ææVÅôæÖRævWD6†ææVÄæÖR‚’æWVÇ2†6†ææVÄæÖR’’°¢&WGW&ã°¢Ğ¢–b…7G&–æuWF–Ç2æ—4V×G’†ÆövõW&Â’’°¢–ÖtÆ—fT–6öâç6WD–ÖvTG&v&ÆR†çVÆÂ“°¢Æ—fT–6öäçVÆÄ&rç6WEf—6–&–Æ—G’…f–Wråd•4”$ÄR“°¢Æ—fT–6öäçVÆÅFW‡Bç6WEf—6–&–Æ—G’…f–Wråd•4”$ÄR“°¢–ÖtÆ—fT–6öâç6WEf—6–&–Æ—G’…f–Wrä”åd•4”$ÄR“°¢Æ—fT–6öäçVÆÅFW‡Bç6WEFW‡B‚""²6†ææVÅôæÖRævWD6†ææVÄçVÒ‚’“°¢ÒVÇ6R°¢–ÖtÆ—fT–6öâç6WEf—6–&–Æ—G’…f–Wråd•4”$ÄR“°¢6öÒæv—F‡V"çGf&÷‚æ÷62çWF–Âä–ÖuWF–ÂæÆöB„FVfVÇD6öæf–ræ6†V6µ&WÆ6U&÷‡’†ÆövõW&Â’Â–ÖtÆ—fT–6öâÂÂÂÂ6†ææVÅôæÖRævWD6†ææVÄæÖR‚’Â–ÖvUf–Wrå66ÆUG—Rä4TåDU%ô”å4”DR“°¢Æ—fT–6öäçVÆÄ&rç6WEf—6–&–Æ—G’…f–Wrä”åd•4”$ÄR“°¢Æ—fT–6öäçVÆÅFW‡Bç6WEf—6–&–Æ—G’…f–Wrä”åd•4”$ÄR“°¢Ğ¢Ğ  ¢òşš)˜>X‰~Š€¢7W&W74Æ–çB‚$æ÷F–g”FF6WD6†ævVB"¢V&Æ–2fö–BF—dÆöDWu&–v‡B…f–Wrf–Wr’°¢–b†WtÆ—7DFFW"ævWDFF‚’ÓÒçVÆÂÇÂWtÆ—7DFFW"ævWDFF‚’æ—4V×G’‚’’°¢WFFTWuæVÅ7FFR†fÇ6R“°¢&WGW&ã°¢Ğ¢Ô†æFÆW"ç&VÖ÷fT6ÆÆ&6·2†Ô†–FT6†ææVÄÆ—7E'Vâ“°¢Ô†æFÆW"ç÷7DFVÆ–VB†Ô†–FT6†ææVÄÆ—7E'VâÂ÷7EF–ÖV÷WB“°¢Ô6†ææVÄw&÷Wf–Wrç6WEf—6–&–Æ—G’…f–WrätôäR“°¢F—dWrç6WEf—6–&–Æ—G’…f–Wråd•4”$ÄR“°¢Õ&–v‡DWtÆ—7Bç6WEf—6–&–Æ—G’…f–Wråd•4”$ÄR“°¢F—dÆöDWvÆVgBç6WEf—6–&–Æ—G’…f–Wråd•4”$ÄR“°¢F—dÆöDWrç6WEf—6–&–Æ—G’…f–WrätôäR“°¢Æ—fT6†ææVÄ—FVÔFFW"ç6WDfö7W6VD6†ææVÄ–æFW‚‚Ó“°¢WtÆ—7DFFW"ææ÷F–g”FF6WD6†ævVB‚“°¢Õ&–v‡DWtÆ—7Bç÷7B†æWr'Vææ&ÆR‚’°¢÷fW'&–FP¢V&Æ–2fö–B'Vâ‚’°¢fö7W47W'&VçDWt–äÖVçR‚“°¢Ğ¢Ò“°¢Ğ¢òşš)˜>X‰~Š€¢V&Æ–2fö–BF—dÆöDWtÆVgB…f–Wrf–Wr’°¢Ô†æFÆW"ç&VÖ÷fT6ÆÆ&6·2†Ô†–FT6†ææVÄÆ—7E'Vâ“°¢Ô†æFÆW"ç÷7DFVÆ–VB†Ô†–FT6†ææVÄÆ—7E'VâÂ÷7EF–ÖV÷WB“°¢Ô6†ææVÄw&÷Wf–Wrç6WEf—6–&–Æ—G’…f–Wråd•4”$ÄR“°¢F—dWrç6WEf—6–&–Æ—G’…f–WrätôäR“°¢F—dÆöDWvÆVgBç6WEf—6–&–Æ—G’…f–WrätôäR“°¢F—dÆöDWrç6WEf—6–&–Æ—G’…f–Wråd•4”$ÄR“°¢fö7W47W'&VçD6†ææVÄ–äÖVçR‚“°¢Ğ  ¢÷fW'&–FP¢V&Æ–2fö–Böä&6µ&W76VB‚’°¢–b‡GdÆVgD6†ææVÄÆ—7DÆ–÷WBævWEf—6–&–Æ—G’‚’ÓÒf–Wråd•4”$ÄR’°¢Ô†æFÆW"ç&VÖ÷fT6ÆÆ&6·2†Ô†–FT6†ææVÄÆ—7E'Vâ“°¢Ô†æFÆW"ç÷7B†Ô†–FT6†ææVÄÆ—7E'Vâ“°¢ÒVÇ6R–b‡Ge&–v‡E6WGF–ætÆ–÷WBævWEf—6–&–Æ—G’‚’ÓÒf–Wråd•4”$ÄR’°¢Ô†æFÆW"ç&VÖ÷fT6ÆÆ&6·2†Ô†–FU6WGF–ætÆ–÷WE'Vâ“°¢Ô†æFÆW"ç÷7B†Ô†–FU6WGF–ætÆ–÷WE'Vâ“°¢ÒVÇ6R–b‚&6¶6öçG&öÆÆW"ævWEf—6–&–Æ—G’‚’ÓÒf–Wråd•4”$ÄR—²òğ¢&6¶6öçG&öÆÆW"ç6WEf—6–&–Æ—G’…f–WrätôäR“°¢ÖVÇ6R–b†—4&6²—°¢—4&6³ÒfÇ6S°¢Æ•&U6÷W&6R‚“°¢ÖVÇ6R°¢Ô†æFÆW"ç&VÖ÷fT6ÆÆ&6·2†Ô6öææV7EF–ÖV÷WD6†ævU6÷W&6U'Vâ“°¢Ô†æFÆW"ç&VÖ÷fT6ÆÆ&6·2†ÕWFFTæWE7VVE'Vâ“°¢W†—F–ætÆ—fUÆ’ÒG'VS°¢7WW"æöä&6µ&W76VB‚“°¢Ğ¢Ğ ¢&—fFRf–æÂ'Vææ&ÆRÕÆ•6VÆV7FVD6†ææVÂÒæWr'Vææ&ÆR‚’°¢÷fW'&–FP¢V&Æ–2fö–B'Vâ‚’°¢–çB6†ææVÄçVÖ&W"Ò6VÆV7FVD6†ææVÄçVÖ&W#°¢6VÆV7FVD6†ææVÄçVÖ&W"Ò°¢–çB7W'&VçEF÷FÂÒ°¢–çBw&÷W–æFW‚Ò°¢–çB6†ææVÄ–æFW‚ÒÓ°¢f÷"„Æ—fT6†ææVÄw&÷Ww&÷W¢Æ—fT6†ææVÄw&÷WÆ—7B’°¢–çBw&÷W6†ææVÄ6÷VçBÒw&÷WævWDÆ—fT6†ææVÇ2‚’ç6—¦R‚“°¢–b†7W'&VçEF÷FÂ²w&÷W6†ææVÄ6÷VçBãÒ6†ææVÄçVÖ&W"’°¢6†ææVÄ–æFW‚Ò6†ææVÄçVÖ&W"Ò7W'&VçEF÷FÂÒ²òò‹ÚÎhÚ.K‹£Ö&6VN{J.[ÉP¢'&V³°¢Ğ¢7W'&VçEF÷FÂ³Òw&÷W6†ææVÄ6÷VçC°¢w&÷W–æFW‚²³°¢Ğ¢Ge6VÆV7FVD6†ææVÂç6WEf—6–&–Æ—G’…f–Wrä”åd•4”$ÄR“°¢Ge6VÆV7FVD6†ææVÂç6WEFW‡B‚""“°¢–b†6†ææVÄ–æFWƒãÓ—°¢ÆöD6†ææVÄw&÷WFFæEÆ’†w&÷W–æFW‚Æ6†ææVÄ–æFW‚“°¢ÖVÇ6R°¢Æ”6†ææVÂ†7W'&VçD6†ææVÄw&÷W–æFW‚Â7W'&VçDÆ—fT6†ææVÄ–æFW‚ÂfÇ6R“°¢Ğ¢Ğ¢Ó° ¢7W&W74Æ–çB‚%6WEFW‡D“†â"¢&—fFRfö–BçVÖW&–4¶W”F÷vâ†–çBF–v—B’°¢6VÆV7FVD6†ææVÄçVÖ&W"Ò6VÆV7FVD6†ææVÄçVÖ&W"¢²F–v—C°¢Ge6VÆV7FVD6†ææVÂç6WEFW‡B„–çFVvW"çFõ7G&–ær‡6VÆV7FVD6†ææVÄçVÖ&W"’“°¢ÆÅ÷&–v‡E÷F÷öÆöF–ærç6WEf—6–&–Æ—G’…f–WrätôäR“°¢ÆÅ÷&–v‡E÷F÷ö‡V–¶âç6WEf—6–&–Æ—G’…f–WrätôäR“°¢Ge6VÆV7FVD6†ææVÂç6WEf—6–&–Æ—G’…f–Wråd•4”$ÄR“° ¢Ô†æFÆW"ç&VÖ÷fT6ÆÆ&6·2†ÕÆ•6VÆV7FVD6†ææVÂ“°¢Ô†æFÆW"ç÷7DFVÆ–VB†ÕÆ•6VÆV7FVD6†ææVÂÂ#S“°¢Ğ ¢&—fFRf–æÂ†æFÆW"ÖÔ†æFÆW"ÒæWr†æFÆW"‚“°¢&—fFR'Vææ&ÆRÔÆöæu&W75'Vææ&ÆS°¢&—fFR7FF–2f–æÂÆöærÄôäuõ$U55ôDTÄ’Òƒ°¢÷fW'&–FP¢V&Æ–2&ööÆVâF—7F6„¶W”WfVçB„¶W”WfVçBWfVçB’°¢–çB¶W”6öFRÒWfVçBævWD¶W”6öFR‚“°¢&ööÆVâÖVçUf—6–&ÆRÒ—4Æ—7D÷%6WGF–ætÆ–÷WEf—6–&ÆR‚“°¢–b†WfVçBævWD7F–öâ‚’ÓÒ¶W”WfVçBä5D”ôåôDõtâ’°¢–b‡GdÆVgD6†ææVÄÆ—7DÆ–÷WBævWEf—6–&–Æ—G’‚’ÓÒf–Wråd•4”$ÄR’°¢–b†¶W”6öFRÓÒ¶W”WfVçBä´U”4ôDUôEEõ$”t…Bbb—4fö7W4–åf–Wr†Ô6†ææVÄw&÷Wf–Wr’’°¢fö7W46†ææVÄg&öÕ6VÆV7FVDw&÷W‚“°¢&WGW&âG'VS°¢Ğ¢–b†¶W”6öFRÓÒ¶W”WfVçBä´U”4ôDUôEEõ$”t…Bbb—4fö7W4–åf–Wr†ÔÆ—fT6†ææVÅf–Wr’’°¢F—dÆöDWu&–v‡B†çVÆÂ“°¢&WGW&âG'VS°¢Ğ¢–b†¶W”6öFRÓÒ¶W”WfVçBä´U”4ôDUôEEôÄTeBbb—4fö7W4–åf–Wr†Õ&–v‡DWtÆ—7B’’°¢F—dÆöDWtÆVgB†çVÆÂ“°¢&WGW&âG'VS°¢Ğ¢–b†¶W”6öFRÓÒ¶W”WfVçBä´U”4ôDUôEEõ$”t…Bbb—4fö7W4–åf–Wr†ÔÆ—fT6†ææVÅf–Wr’bb—4fö7W4–åf–Wr†Õ&–v‡DWtÆ—7B’’°¢fö7W47W'&VçDw&÷W–äÖVçR‚“°¢&WGW&âG'VS°¢Ğ¢Ğ¢–b‚ÖVçUf—6–&ÆR’°¢–b†¶W”6öFRãÒ¶W”WfVçBä´U”4ôDUóbb¶W”6öFRÃÒ¶W”WfVçBä´U”4ôDUó’’°¢çVÖW&–4¶W”F÷vâ†¶W”6öFRÒ¶W”WfVçBä´U”4ôDUó“°¢&WGW&âG'VS°¢Ğ¢–b†¶W”6öFRãÒ¶W”WfVçBä´U”4ôDUôåTÕEóbb¶W”6öFRÃÒ¶W”WfVçBä´U”4ôDUôåTÕEó’’°¢çVÖW&–4¶W”F÷vâ†¶W”6öFRÒ¶W”WfVçBä´U”4ôDUôåTÕEó“°¢&WGW&âG'VS°¢Ğ¢Æ—fT¶W”7F–öâ7F–öâÒÆ—fT¶W”ÖW"æÖ†¶W”6öFRÂfÇ6R“°¢–b†7F–öâÒÆ—fT¶W”7F–öâäõTåô4„ääTÅ2bb†æFÆTÆ—fT¶W”7F–öâ†7F–öâ’’°¢&WGW&âG'VS°¢Ğ¢Ğ¢ÒVÇ6R–b†WfVçBævWD7F–öâ‚’ÓÒ¶W”WfVçBä5D”ôåõU’°¢&ööÆVâ—46öæf—&ÒÒ¶W”6öFRÓÒ¶W”WfVçBä´U”4ôDUôEEô4TåDU ¢ÇÂ¶W”6öFRÓÒ¶W”WfVçBä´U”4ôDUôTåDU ¢ÇÂ¶W”6öFRÓÒ¶W”WfVçBä´U”4ôDUôÔTD”õÄ•õU4S°¢–b†—46öæf—&Ò’°¢6æ6VÄÆöæu&W72‚“°¢–b†Æöæu&W74†æFÆVB’°¢Æöæu&W74†æFÆVBÒfÇ6S°¢&WGW&âG'VS°¢Ğ¢Ğ¢–b‚ÖVçUf—6–&ÆRbbWfVçBævWE&WVD6÷VçB‚’ÓÒ ¢bb†æFÆTÆ—fT¶W”7F–öâ†Æ—fT¶W”ÖW"æÖ†¶W”6öFRÂfÇ6R’’’°¢&WGW&âG'VS°¢Ğ¢Ğ¢&WGW&â7WW"æF—7F6„¶W”WfVçB†WfVçB“°¢Ğ ¢&—fFR&ööÆVâ†æFÆTÆ—fT¶W”7F–öâ„Æ—fT¶W”7F–öâ7F–öâ’°¢7v—F6‚†7F–öâ’°¢66R4„ääTÅõ$Ud”õU3 ¢–b„†v²ævWB„†v´6öæf–räÄ•dUô4„ääTÅõ$UdU%4RÂfÇ6R’’Æ”æW‡B‚“°¢VÇ6RÆ•&Wf–÷W2‚“°¢&WGW&âG'VS°¢66R4„ääTÅôäU…C ¢–b„†v²ævWB„†v´6öæf–räÄ•dUô4„ääTÅõ$UdU%4RÂfÇ6R’’Æ•&Wf–÷W2‚“°¢VÇ6RÆ”æW‡B‚“°¢&WGW&âG'VS°¢66RÄ”äUõ$Ud”õU3 ¢–b†—4&6²’6†÷u&öw&W74&'2‡G'VR“°¢VÇ6RÆ•&U6÷W&6R‚“°¢&WGW&âG'VS°¢66RÄ”äUôäU…C ¢–b†—4&6²’6†÷u&öw&W74&'2‡G'VR“°¢VÇ6RÆ”æW‡E6÷W&6R‚“°¢&WGW&âG'VS°¢66RõTåô4„ääTÅ3 ¢6†÷t6†ææVÄÆ—7B‚“°¢&WGW&âG'VS°¢66RõTåõ4UED”äu3 ¢6†÷u6WGF–ætw&÷W‚“°¢&WGW&âG'VS°¢66RõTåõdôC ¢÷VåföD†öÖR‚“°¢&WGW&âG'VS°¢66R$4³ ¢öä&6µ&W76VB‚“°¢&WGW&âG'VS°¢FVfVÇC ¢&WGW&âfÇ6S°¢Ğ¢Ğ ¢&—fFRfö–B÷VåföD†öÖR‚’°¢–çFVçB–çFVçBÒæWr–çFVçB‡F†—2Â†öÖT7F—f—G’æ6Æ72“°¢–çFVçBçWDW‡G&„†öÖT7F—f—G’äU…E$õ$T4õdU%•ôÔôDRÂG'VR“°¢7F'D7F—f—G’†–çFVçB“°¢Ğ ¢÷fW'&–FP¢V&Æ–2&ööÆVâöä¶W”F÷vâ†–çB¶W”6öFRÂ¶W”WfVçBWfVçB’°¢–b‚—4Æ—7D÷%6WGF–ætÆ–÷WEf—6–&ÆR‚¢bb†¶W”6öFRÓÒ¶W”WfVçBä´U”4ôDUôEEô4TåDU"ÇÂ¶W”6öFRÓÒ¶W”WfVçBä´U”4ôDUôTåDU"ÇÂ¶W”6öFRÓÒ¶W”WfVçBä´U”4ôDUôÔTD”õÄ•õU4R¢bbWfVçBævWE&WVD6÷VçB‚’ÓÒ’°¢ÔÆöæu&W75'Vææ&ÆRÒæWr'Vææ&ÆR‚’°¢÷fW'&–FP¢V&Æ–2fö–B'Vâ‚’°¢ÔÆöæu&W75'Vææ&ÆRÒçVÆÃ°¢Æöæu&W74†æFÆVBÒG'VS°¢÷VåföD†öÖR‚“°¢Ğ¢Ó°¢ÖÔ†æFÆW"ç÷7DFVÆ–VB†ÔÆöæu&W75'Vææ&ÆRÂÄôäuõ$U55ôDTÄ’“°¢Ğ¢&WGW&â7WW"æöä¶W”F÷vâ†¶W”6öFRÂWfVçB“°¢Ğ ¢÷fW'&–FP¢V&Æ–2&ööÆVâöä¶W•W†–çB¶W”6öFRÂ¶W”WfVçBWfVçB’°¢–b†¶W”6öFRÓÒ¶W”WfVçBä´U”4ôDUôEEô4TåDU"ÇÂ¶W”6öFRÓÒ¶W”WfVçBä´U”4ôDUôTåDU"ÇÂ¶W”6öFRÓÒ¶W”WfVçBä´U”4ôDUôÔTD”õÄ•õU4R’°¢6æ6VÄÆöæu&W72‚“°¢Ğ¢&WGW&â7WW"æöä¶W•W†¶W”6öFRÂWfVçB“°¢Ğ ¢&—fFRfö–B6æ6VÄÆöæu&W72‚’°¢–b†ÔÆöæu&W75'Vææ&ÆRÒçVÆÂ’°¢ÖÔ†æFÆW"ç&VÖ÷fT6ÆÆ&6·2†ÔÆöæu&W75'Vææ&ÆR“°¢ÔÆöæu&W75'Vææ&ÆRÒçVÆÃ°¢Ğ¢Ğ ¢÷fW'&–FP¢&÷FV7FVBfö–Böå&W7VÖR‚’°¢7WW"æöå&W7VÖR‚“°¢W†—F–ætÆ—fUÆ’ÒfÇ6S°¢–b†Õf–FVõf–WrÒçVÆÂ’°¢Õf–FVõf–Wrç&W7VÖR‚“°¢Ğ¢Ğ  ¢÷fW'&–FP¢&÷FV7FVBfö–BöåW6R‚’°¢7WW"æöåW6R‚“°¢–b†Õf–FVõf–WrÒçVÆÂbbW†—F–ætÆ—fUÆ’’°¢Õf–FVõf–WrçW6R‚“°¢Ğ¢Ğ ¢÷fW'&–FP¢&÷FV7FVBfö–BöäFW7G&÷’‚’°¢7WW"æöäFW7G&÷’‚“°¢†v²çWB„†v´6öæf–råÄ”U%ô•5ôÄ•dRÂfÇ6R“°¢†–FU7v—F6„6†ææVÅ6æ6†÷B‚“°¢–b†Õf–FVõf–WrÒçVÆÂ’°¢Õf–FVõf–Wrç&VÆV6R‚“°¢Õf–FVõf–WrÒçVÆÃ°¢Ğ¢Ô†æFÆW"ç&VÖ÷fT6ÆÆ&6·2†ÔÆöDWu'Vâ“°¢Ô†æFÆW"ç&VÖ÷fT6ÆÆ&6·2†ÕWFFU&W6öÇWF–öä–æfõ'Vâ“°¢Ô†æFÆW"ç&VÖ÷fT6ÆÆ&6·2†Ô†–FU&W6öÇWF–öä–æfõ'Vâ“°¢Ğ ¢&—fFRfö–B6†÷t6†ææVÄÆ—7B‚’°¢–b‡Ge&–v‡E6WGF–ætÆ–÷WBævWEf—6–&–Æ—G’‚’ÓÒf–Wråd•4”$ÄR’°¢Ô†æFÆW"ç&VÖ÷fT6ÆÆ&6·2†Ô†–FU6WGF–ætÆ–÷WE'Vâ“°¢Ô†æFÆW"ç÷7B†Ô†–FU6WGF–ætÆ–÷WE'Vâ“°¢&WGW&ã°¢Ğ¢–b†Æ—fT6†ææVÄw&÷WÆ—7Bæ—4V×G’‚’’&WGW&ã°¢–b‡GdÆVgD6†ææVÄÆ—7DÆ–÷WBævWEf—6–&–Æ—G’‚’ÓÒf–Wrä”åd•4”$ÄR’°¢–b†7W'&VçDÆ—fTÆöö´&6´–æFWƒâÓ—°¢Õ&–v‡DWtÆ—7Bç6WE6VÆV7FVE÷6—F–öâ†7W'&VçDÆ—fTÆöö´&6´–æFW‚“°¢Õ&–v‡DWtÆ—7Bç÷7B†æWr'Vææ&ÆR‚’°¢÷fW'&–FP¢V&Æ–2fö–B'Vâ‚’°¢Õ&–v‡DWtÆ—7Bç6Öö÷F…67&öÆÅFõ÷6—F–öâ†7W'&VçDÆ—fTÆöö´&6´–æFW‚“°¢Ğ¢Ò“°¢Ğ¢&Vg&W6„6†ææVÄÆ—7B†7W'&VçD6†ææVÄw&÷W–æFW‚“° ¢Ô†æFÆW"ç÷7DFVÆ–VB†Ôfö7W47W'&VçD6†ææVÄæE6†÷t6†ææVÄÆ—7BÂS“°¢Ğ¢VÇ6R°¢Ô†æFÆW"ç&VÖ÷fT6ÆÆ&6·2†Ô†–FT6†ææVÄÆ—7E'Vâ“°¢Ô†æFÆW"ç÷7B†Ô†–FT6†ææVÄÆ—7E'Vâ“°¢Ğ¢Ğ ¢&—fFR–çBÔÆ7D6†ææVÄw&÷W–æFW‚ÒÓ°¢&—fFRÆ—7CÄÆ—fT6†ææVÄ—FVÓâÔÆ7D6†ææVÄÆ—7BÒæWr'&”Æ—7CÃâ‚“° ¢&—fFRfö–B&Vg&W6„6†ææVÄÆ—7B†–çB7W'&VçD6†ææVÄw&÷W–æFW‚’°¢Æ—7CÄÆ—fT6†ææVÄ—FVÓâæWt6†ææVÇ2ÒvWDÆ—fT6†ææVÇ2†7W'&VçD6†ææVÄw&÷W–æFW‚“°¢òò"âXŠNijŞi[hÚîiŠşY
+nXùXÉ`¢–b†7W'&VçD6†ææVÄw&÷W–æFW‚ÓÒÔÆ7D6†ææVÄw&÷W–æFW€¢bb—56ÖTFF†æWt6†ææVÇ2ÂÔÆ7D6†ææVÄÆ—7B’’°¢&WGW&ã²òòi[hÚîiÊ®XùXÉnûÈÎ‹{>‹ø~X‹~ikŠz>Xk>˜:Xˆny»Ni*Şš)˜>‹ø~ZI®i{nXÚšğ¢Ğ¢–b†7W'&VçDÆ—fT6†ææVÄ–æFW‚âÓ—°¢ÔÆ—fT6†ææVÅf–Wrç67&öÆÅFõ÷6—F–öâ†7W'&VçDÆ—fT6†ææVÄ–æFW‚“°¢ÔÆ—fT6†ææVÅf–Wrç6WE6VÆV7F–öâ†7W'&VçDÆ—fT6†ææVÄ–æFW‚“°¢Ğ¢Ô6†ææVÄw&÷Wf–Wrç67&öÆÅFõ÷6—F–öâ†7W'&VçD6†ææVÄw&÷W–æFW‚“°¢Ô6†ææVÄw&÷Wf–Wrç6WE6VÆV7F–öâ†7W'&VçD6†ææVÄw&÷W–æFW‚“°¢ÔÆ7D6†ææVÄw&÷W–æFW‚Ò7W'&VçD6†ææVÄw&÷W–æFWƒ°¢ÔÆ7D6†ææVÄÆ—7BÒæWr'&”Æ—7CÃâ†æWt6†ææVÇ2“°¢Æ—fT6†ææVÄ—FVÔFFW"ç6WDæWtFF†æWt6†ææVÇ2“°¢Ğ ¢òòZûjùNKŠNKŠ®X‰~ŠXh^ZëiŠşY
+ny»YÀ¢&—fFR&ööÆVâ—56ÖTFF„Æ—7CÄÆ—fT6†ææVÄ—FVÓâÆ—7CÂÆ—7CÄÆ—fT6†ææVÄ—FVÓâÆ—7C"’°¢òò&WGW&âÆ—7Cç6—¦R‚’ÓÒÆ—7C"ç6—¦R‚“°¢–b†Æ—7CÓÒÆ—7C"’&WGW&âG'VS°¢–b†Æ—7CÓÒçVÆÂÇÂÆ—7C"ÓÒçVÆÂÇÂÆ—7Cç6—¦R‚’ÒÆ—7C"ç6—¦R‚’’&WGW&âfÇ6S°¢f÷"†–çB’Ò²’ÂÆ—7Cç6—¦R‚“²’²²’°¢–b‚Æ—7CævWB†’’æWVÇ2†Æ—7C"ævWB†’’’’°¢&WGW&âfÇ6S°¢Ğ¢Ğ¢&WGW&âG'VS°¢Ğ ¢&—fFR'Vææ&ÆRÔfö7W47W'&VçD6†ææVÄæE6†÷t6†ææVÄÆ—7BÒæWr'Vææ&ÆR‚’°¢÷fW'&–FP¢V&Æ–2fö–B'Vâ‚’°¢–b†Ô6†ææVÄw&÷Wf–Wræ—567&öÆÆ–ær‚’ÇÂÔÆ—fT6†ææVÅf–Wræ—567&öÆÆ–ær‚’ÇÂÔ6†ææVÄw&÷Wf–Wræ—46ö×WF–ætÆ–÷WB‚’ÇÂÔÆ—fT6†ææVÅf–Wræ—46ö×WF–ætÆ–÷WB‚’’°¢Ô†æFÆW"ç÷7DFVÆ–VB‡F†—2Â“°¢ÒVÇ6R°¢GdÆVgD6†ææVÄÆ—7DÆ–÷WBç6WEf—6–&–Æ—G’…f–Wråd•4”$ÄR“°¢fö7W47W'&VçD6†ææVÄ–äÖVçR‚“°¢f–Wtö&¢f–Wtö&¢ÒæWrf–Wtö&¢‡GdÆVgD6†ææVÄÆ—7DÆ–÷WBÂ…f–Wtw&÷WäÖ&v–äÆ–÷WE&×2’GdÆVgD6†ææVÄÆ—7DÆ–÷WBævWDÆ–÷WE&×2‚’“°¢ö&¦V7Dæ–ÖF÷"æ–ÖF÷"Òö&¦V7Dæ–ÖF÷"æödö&¦V7B‡f–Wtö&¢Â&Ö&v–äÆVgB"ÂæWr–çDWfÇVF÷"‚’Â×GdÆVgD6†ææVÄÆ—7DÆ–÷WBævWDÆ–÷WE&×2‚’çv–GF‚Â“°¢æ–ÖF÷"ç6WDGW&F–öâƒ#“°¢æ–ÖF÷"æFDÆ—7FVæW"†æWræ–ÖF÷$Æ—7FVæW$FFW"‚’°¢÷fW'&–FP¢V&Æ–2fö–Böäæ–ÖF–öäVæB„æ–ÖF÷"æ–ÖF–öâ’°¢7WW"æöäæ–ÖF–öäVæB†æ–ÖF–öâ“°¢fö7W47W'&VçD6†ææVÄ–äÖVçR‚“°¢Ô†æFÆW"ç&VÖ÷fT6ÆÆ&6·2†Ô†–FT6†ææVÄÆ—7E'Vâ“°¢Ô†æFÆW"ç÷7DFVÆ–VB†Ô†–FT6†ææVÄÆ—7E'VâÂ÷7EF–ÖV÷WB“°¢Ğ¢Ò“°¢æ–ÖF÷"ç7F'B‚“°¢Ğ¢Ğ¢Ó° ¢&—fFR&ööÆVâ—4fö7W4–åf–Wr…f–Wrf–Wr’°¢f–Wrfö7W6VBÒvWD7W'&VçDfö7W2‚“°¢&WGW&âfö7W6VBÒçVÆÂbbf–WrÒçVÆÂbb†fö7W6VBÓÒf–WrÇÂ—46†–ÆDöb‡f–WrÂfö7W6VB’“°¢Ğ ¢&—fFR&ööÆVâ—46†–ÆDöb…f–Wr&VçBÂf–Wr6†–ÆB’°¢f–Wr7W'&VçBÒ6†–ÆC°¢v†–ÆR†7W'&VçBÒçVÆÂ’°¢–b†7W'&VçBÓÒ&VçB’&WGW&âG'VS°¢–b‚†7W'&VçBævWE&VçB‚’–ç7Fæ6Vöbf–Wr’’&WGW&âfÇ6S°¢7W'&VçBÒ…f–Wr’7W'&VçBævWE&VçB‚“°¢Ğ¢&WGW&âfÇ6S°¢Ğ ¢&—fFRfö–Bfö7W5&V7–6ÆW%÷6—F–öâ…Ge&V7–6ÆW%f–Wr&V7–6ÆW%f–WrÂ–çB÷6—F–öâ’°¢–b‡&V7–6ÆW%f–WrÓÒçVÆÂÇÂ÷6—F–öâÂ’&WGW&ã°¢&V7–6ÆW%f–Wrç67&öÆÅFõ÷6—F–öâ‡÷6—F–öâ“°¢&V7–6ÆW%f–Wrç6WE6VÆV7F–öâ‡÷6—F–öâ“°¢&WVW7E&V7–6ÆW$—FVÔfö7W2‡&V7–6ÆW%f–WrÂ÷6—F–öâÂ“°¢Ğ ¢&—fFRfö–Bfö7W47W'&VçDw&÷W–äÖVçR‚’°¢–b†7W'&VçD6†ææVÄw&÷W–æFW‚Â’&WGW&ã°¢Ô6†ææVÄw&÷Wf–Wrç6WEf—6–&–Æ—G’…f–Wråd•4”$ÄR“°¢F—dWrç6WEf—6–&–Æ—G’…f–WrätôäR“°¢F—dÆöDWvÆVgBç6WEf—6–&–Æ—G’…f–WrätôäR“°¢F—dÆöDWrç6WEf—6–&–Æ—G’†WtÆ—7DFFW"ÒçVÆÂbbWtÆ—7DFFW"ævWDFF‚’ÒçVÆÂbbWtÆ—7DFFW"ævWDFF‚’æ—4V×G’‚’òf–Wråd•4”$ÄR¢f–WrätôäR“°¢Æ—fT6†ææVÄw&÷WFFW"ç6WE6VÆV7FVDw&÷W–æFW‚†7W'&VçD6†ææVÄw&÷W–æFW‚“°¢Æ—fT6†ææVÄ—FVÔFFW"ç6WE6VÆV7FVD6†ææVÄ–æFW‚†7W'&VçDÆ—fT6†ææVÄ–æFW‚“°¢Æ—fT6†ææVÄw&÷WFFW"ç6WDfö7W6VDw&÷W–æFW‚†7W'&VçD6†ææVÄw&÷W–æFW‚“°¢Æ—fT6†ææVÄ—FVÔFFW"ç6WDfö7W6VD6†ææVÄ–æFW‚‚Ó“°¢WtÆ—7DFFW"ç6WDfö7W6VDWt–æFW‚‚Ó“°¢ÔÆ—fT6†ææVÅf–Wræ6ÆV$fö7W2‚“°¢Õ&–v‡DWtÆ—7Bæ6ÆV$fö7W2‚“°¢fö7W5&V7–6ÆW%÷6—F–öâ†Ô6†ææVÄw&÷Wf–WrÂ7W'&VçD6†ææVÄw&÷W–æFW‚“°¢Ğ ¢&—fFRfö–Bfö7W4Wu÷6—F–öâ†–çB÷6—F–öâ’°¢–b†Õ&–v‡DWtÆ—7BÓÒçVÆÂÇÂ÷6—F–öâÂ’&WGW&ã°¢&V7–6ÆW%f–WräÆ–÷WDÖævW"Æ–÷WDÖævW"ÒÕ&–v‡DWtÆ—7BævWDÆ–÷WDÖævW"‚“°¢–b†Æ–÷WDÖævW"–ç7Fæ6VöbÆ–æV$Æ–÷WDÖævW"’°¢–çBöfg6WBÒÖF‚æÖ‚ƒÂ†Õ&–v‡DWtÆ—7BævWD†V–v‡B‚’ÒvWE&W6÷W&6W2‚’ævWDF–ÖVç6–öå—†VÅ6—¦R…"æF–ÖVâçG5ó’’ò"“°¢‚„Æ–æV$Æ–÷WDÖævW"’Æ–÷WDÖævW"’ç67&öÆÅFõ÷6—F–öåv—F„öfg6WB‡÷6—F–öâÂöfg6WB“°¢ÒVÇ6R°¢Õ&–v‡DWtÆ—7Bç67&öÆÅFõ÷6—F–öâ‡÷6—F–öâ“°¢Ğ¢Õ&–v‡DWtÆ—7Bç6WE6VÆV7F–öâ‡÷6—F–öâ“°¢&WVW7E&V7–6ÆW$—FVÔfö7W2†Õ&–v‡DWtÆ—7BÂ÷6—F–öâÂ“°¢Ğ ¢&—fFRfö–B&WVW7E&V7–6ÆW$—FVÔfö7W2…Ge&V7–6ÆW%f–Wr&V7–6ÆW%f–WrÂ–çB÷6—F–öâÂ–çB&WG'”6÷VçB’°¢&V7–6ÆW%f–Wrç÷7B†æWr'Vææ&ÆR‚’°¢÷fW'&–FP¢V&Æ–2fö–B'Vâ‚’°¢&V7–6ÆW%f–Wråf–Wt†öÆFW"†öÆFW"Ò&V7–6ÆW%f–Wræf–æEf–Wt†öÆFW$f÷$FFW%÷6—F–öâ‡÷6—F–öâ“°¢–b††öÆFW"ÒçVÆÂ’°¢†öÆFW"æ—FVÕf–Wrç&WVW7Dfö7W2‚“°¢ÒVÇ6R–b‡&WG'”6÷VçBÂ2’°¢&WVW7E&V7–6ÆW$—FVÔfö7W2‡&V7–6ÆW%f–WrÂ÷6—F–öâÂ&WG'”6÷VçB²“°¢Ğ¢Ğ¢Ò“°¢Ğ ¢&—fFRfö–Bfö7W47W'&VçD6†ææVÄ–äÖVçR‚’°¢–b†7W'&VçD6†ææVÄw&÷W–æFW‚ÂÇÂ7W'&VçDÆ—fT6†ææVÄ–æFW‚Â’&WGW&ã°¢–b†Æ—fT6†ææVÄw&÷WFFW"ævWE6VÆV7FVDw&÷W–æFW‚‚’Ò7W'&VçD6†ææVÄw&÷W–æFW‚’°¢Æ—fT6†ææVÄw&÷WFFW"ç6WE6VÆV7FVDw&÷W–æFW‚†7W'&VçD6†ææVÄw&÷W–æFW‚“°¢Æ—fT6†ææVÄ—FVÔFFW"ç6WDæWtFF†vWDÆ—fT6†ææVÇ2†7W'&VçD6†ææVÄw&÷W–æFW‚’“°¢ÔÆ7D6†ææVÄw&÷W–æFW‚Ò7W'&VçD6†ææVÄw&÷W–æFWƒ°¢ÔÆ7D6†ææVÄÆ—7BÒæWr'&”Æ—7CÃâ†vWDÆ—fT6†ææVÇ2†7W'&VçD6†ææVÄw&÷W–æFW‚’“°¢Ğ¢Æ—fT6†ææVÄw&÷WFFW"ç6WDfö7W6VDw&÷W–æFW‚‚Ó“°¢Æ—fT6†ææVÄ—FVÔFFW"ç6WE6VÆV7FVD6†ææVÄ–æFW‚†7W'&VçDÆ—fT6†ææVÄ–æFW‚“°¢Æ—fT6†ææVÄ—FVÔFFW"ç6WDfö7W6VD6†ææVÄ–æFW‚†7W'&VçDÆ—fT6†ææVÄ–æFW‚“°¢fö7W5&V7–6ÆW%÷6—F–öâ†ÔÆ—fT6†ææVÅf–WrÂ7W'&VçDÆ—fT6†ææVÄ–æFW‚“°¢Ğ ¢&—fFRfö–Bfö7W46†ææVÄg&öÕ6VÆV7FVDw&÷W‚’°¢–çBw&÷W–æFW‚ÒÆ—fT6†ææVÄw&÷WFFW"ævWE6VÆV7FVDw&÷W–æFW‚‚“°¢–b†w&÷W–æFW‚Â’w&÷W–æFW‚Ò7W'&VçD6†ææVÄw&÷W–æFWƒ°¢–b†w&÷W–æFW‚ÂÇÂw&÷W–æFW‚ãÒÆ—fT6†ææVÄw&÷WÆ—7Bç6—¦R‚’’&WGW&ã°¢–b†—4æVVD–çWE77v÷&B†w&÷W–æFW‚’’°¢6†÷u77v÷&DF–Æör†w&÷W–æFW‚ÂÓ“°¢&WGW&ã°¢Ğ¢–b†Ô6†ææVÄw&÷Wf–WrævWEf—6–&–Æ—G’‚’Òf–Wråd•4”$ÄR’&WGW&ã°¢–çB6†ææVÄ–æFW‚Òw&÷W–æFW‚ÓÒ7W'&VçD6†ææVÄw&÷W–æFW‚bb7W'&VçDÆ—fT6†ææVÄ–æFW‚ãÒò7W'&VçDÆ—fT6†ææVÄ–æFW‚¢°¢Æ—fT6†ææVÄ—FVÔFFW"ç6WDæWtFF†vWDÆ—fT6†ææVÇ2†w&÷W–æFW‚’“°¢Æ—fT6†ææVÄw&÷WFFW"ç6WE6VÆV7FVDw&÷W–æFW‚†w&÷W–æFW‚“°¢Æ—fT6†ææVÄw&÷WFFW"ç6WDfö7W6VDw&÷W–æFW‚‚Ó“°¢Æ—fT6†ææVÄ—FVÔFFW"ç6WE6VÆV7FVD6†ææVÄ–æFW‚†w&÷W–æFW‚ÓÒ7W'&VçD6†ææVÄw&÷W–æFW‚ò7W'&VçDÆ—fT6†ææVÄ–æFW‚¢Ó“°¢Æ—fT6†ææVÄ—FVÔFFW"ç6WDfö7W6VD6†ææVÄ–æFW‚†6†ææVÄ–æFW‚“°¢fö7W5&V7–6ÆW%÷6—F–öâ†ÔÆ—fT6†ææVÅf–WrÂ6†ææVÄ–æFW‚“°¢Ğ ¢&—fFRfö–Bfö7W47W'&VçDWt–äÖVçR‚’°¢–b†Õ&–v‡DWtÆ—7BÓÒçVÆÂÇÂWtÆ—7DFFW"ÓÒçVÆÂÇÂWtÆ—7DFFW"ævWDFF‚’ÓÒçVÆÂÇÂWtÆ—7DFFW"ævWDFF‚’æ—4V×G’‚’’&WGW&ã°¢7–æ47W'&VçDWu6VÆV7F–öâ‡G'VR“°¢Ğ ¢&—fFR'Vææ&ÆRÔ†–FT6†ææVÄÆ—7E'VâÒæWr'Vææ&ÆR‚’°¢÷fW'&–FP¢V&Æ–2fö–B'Vâ‚’°¢f–Wtw&÷WäÖ&v–äÆ–÷WE&×2&×2Ò…f–Wtw&÷WäÖ&v–äÆ–÷WE&×2’GdÆVgD6†ææVÄÆ—7DÆ–÷WBævWDÆ–÷WE&×2‚“°¢–b‡GdÆVgD6†ææVÄÆ—7DÆ–÷WBævWEf—6–&–Æ—G’‚’ÓÒf–Wråd•4”$ÄR’°¢f–Wtö&¢f–Wtö&¢ÒæWrf–Wtö&¢‡GdÆVgD6†ææVÄÆ—7DÆ–÷WBÂ&×2“°¢ö&¦V7Dæ–ÖF÷"æ–ÖF÷"Òö&¦V7Dæ–ÖF÷"æödö&¦V7B‡f–Wtö&¢Â&Ö&v–äÆVgB"ÂæWr–çDWfÇVF÷"‚’ÂÂ×GdÆVgD6†ææVÄÆ—7DÆ–÷WBævWDÆ–÷WE&×2‚’çv–GF‚“°¢æ–ÖF÷"ç6WDGW&F–öâƒ#“°¢æ–ÖF÷"æFDÆ—7FVæW"†æWræ–ÖF÷$Æ—7FVæW$FFW"‚’°¢÷fW'&–FP¢V&Æ–2fö–Böäæ–ÖF–öäVæB„æ–ÖF÷"æ–ÖF–öâ’°¢7WW"æöäæ–ÖF–öäVæB†æ–ÖF–öâ“°¢GdÆVgD6†ææVÄÆ—7DÆ–÷WBç6WEf—6–&–Æ—G’…f–Wrä”åd•4”$ÄR“°¢Ğ¢Ò“°¢æ–ÖF÷"ç7F'B‚“°¢Ğ¢Ğ¢Ó° ¢&—fFRfö–B6†÷t6†ææVÄ–æfò‚’°¢Gd6†ææVÄ–æfòç6WEFW‡B…7G&–æræf÷&ÖB„Æö6ÆRævWDFVfVÇB‚’Â"VBW2W2‚VBòVB’"Â7W'&VçDÆ—fT6†ææVÄ—FVÒævWD6†ææVÄçVÒ‚’À¢7W'&VçDÆ—fT6†ææVÄ—FVÒævWD6†ææVÄæÖR‚’Â7W'&VçDÆ—fT6†ææVÄ—FVÒævWE6÷W&6TæÖR‚’À¢7W'&VçDÆ—fT6†ææVÄ—FVÒævWE6÷W&6T–æFW‚‚’²Â7W'&VçDÆ—fT6†ææVÄ—FVÒævWE6÷W&6TçVÒ‚’’“° ¢g&ÖTÆ–÷WBäÆ–÷WE&×2Å&×2ÒæWrg&ÖTÆ–÷WBäÆ–÷WE&×2„Æ–æV$Æ–÷WBäÆ–÷WE&×2åu$ô4ôåDTåBÂÆ–æV$Æ–÷WBäÆ–÷WE&×2åu$ô4ôåDTåB“°¢–b‡Ge&–v‡E6WGF–ætÆ–÷WBævWEf—6–&–Æ—G’‚’ÓÒf–Wråd•4”$ÄR’°¢Å&×2æw&f—G’Òw&f—G’äÄTeC°¢Å&×2æÆVgDÖ&v–âÒc°¢Å&×2çF÷Ö&v–âÒ3°¢ÒVÇ6R°¢Å&×2æw&f—G’Òw&f—G’å$”t…C°¢Å&×2ç&–v‡DÖ&v–âÒc°¢Å&×2çF÷Ö&v–âÒ3°¢Ğ¢Gd6†ææVÄ–æfòç6WDÆ–÷WE&×2†Å&×2“° ¢Gd6†ææVÄ–æfòç6WEf—6–&–Æ—G’…f–Wråd•4”$ÄR“°¢Ô†æFÆW"ç&VÖ÷fT6ÆÆ&6·2†Ô†–FT6†ææVÄ–æfõ'Vâ“°¢Ô†æFÆW"ç÷7DFVÆ–VB†Ô†–FT6†ææVÄ–æfõ'VâÂ3“°¢Ğ ¢&—fFR'Vææ&ÆRÔ†–FT6†ææVÄ–æfõ'VâÒæWr'Vææ&ÆR‚’°¢÷fW'&–FP¢V&Æ–2fö–B'Vâ‚’°¢Gd6†ææVÄ–æfòç6WEf—6–&–Æ—G’…f–Wrä”åd•4”$ÄR“°¢Ğ¢Ó° ¢&—fFR§6öäö&¦V7B6F6‡WÖçVÆÃ°¢&—fFR7G&–ærÆövõW&ÃÖçVÆÃ°¢&—fFRfö–B–æ—DÆ—fTö&¢‚—°¢6F6‡WÒçVÆÃ°¢ÆövõW&ÂÒçVÆÃ°¢–çB÷6—F–öãÔ”6öæf–rævWDÆ—fTw&÷W–æFW‚‚“°¢§6öä'&’Æ—fUöw&÷W3Ô†v²ævWB„†v´6öæf–räÄ•dUôu$õUôÄ•5BÆæWr§6öä'&’‚’“°¢–b†Æ—fUöw&÷W2ÓÒçVÆÂÇÂÆ—fUöw&÷W2ç6—¦R‚’ÓÒÇÂ÷6—F–öâÂÇÂ÷6—F–öâãÒÆ—fUöw&÷W2ç6—¦R‚’’°¢&WGW&ã°¢Ğ¢§6öäö&¦V7BÆ—fW4ô$¢ÒÆ—fUöw&÷W2ævWB‡÷6—F–öâ’ævWD4§6öäö&¦V7B‚“°¢7G&–ærG—RÒÆ—fW4ô$¢æ†2‚'G—R"“öÆ—fW4ô$¢ævWB‚'G—R"’ævWD57G&–ær‚“¢##° ¢–b†Æ—fW4ô$¢æ†2‚&6F6‡W"’bbÆ—fW4ô$¢ævWB‚&6F6‡W"’æ—4§6öäö&¦V7B‚’—°¢6F6‡WÒÆ—fW4ô$¢ævWD4§6öäö&¦V7B‚&6F6‡W"“°¢Äôræ’‚&V6†òÖ6F6‡W¢"²6F6‡WçFõ7G&–ær‚’“°¢Ğ¢–b†Æ—fW4ô$¢æ†2‚&Æövò"’—°¢ÆövõW&ÂÒÆ—fW4ô$¢ævWB‚&Æövò"’ævWD57G&–ær‚“°¢Ğ¢–b‡G—RæWVÇ2‚#2"’—°¢7G&–ær•ö¦#Ò"#°¢–b†Æ—fW4ô$¢æ†2‚&¦""’—°¢•ö¦#ÖÆ—fW4ô$¢æ†2‚&¦""“öÆ—fW4ô$¢ævWB‚&¦""’ævWD57G&–ær‚“¢"#° ¢ÖVÇ6R–b†Æ—fW4ô$¢æ†2‚&’"’—°¢•ö¦#ÖÆ—fW4ô$¢æ†2‚&’"“öÆ—fW4ô$¢ævWB‚&’"’ævWD57G&–ær‚“¢"#°¢òò7G&–ærW‡BÒÆ—fW4ô$¢æ†2‚&W‡B"“öÆ—fW4ô$¢ævWB‚&W‡B"’ævWD4§6öäö&¦V7B‚’çFõ7G&–ær‚“¢"#°¢7G&–ærW‡CÒ"#°¢–b†Æ—fW4ô$¢æ†2‚&W‡B"’bb†Æ—fW4ô$¢ævWB‚&W‡B"’æ—4§6öäö&¦V7B‚’ÇÂÆ—fW4ô$¢ævWB‚&W‡B"’æ—4§6öä'&’‚’’—°¢W‡CÖÆ—fW4ô$¢ævWB‚&W‡B"’çFõ7G&–ær‚“°¢ÖVÇ6R°¢W‡CÒFVfVÇD6öæf–rç6fT§6öå7G&–ær†Æ—fW4ô$¢Â&W‡B"Â""“°¢Ğ¢Äôræ’‚&V6†òÖW‡C¢"¶W‡B“°¢–b‚W‡Bæ—4V×G’‚’—•ö¦#×•ö¦"²#öW‡FVæCÒ"¶W‡C°¢Ğ¢”6öæf–rævWB‚’ç6WDÆ—fT¦"‡•ö¦"“°¢Ğ¢Ğ ¢&—fFR†6„ÖÅ7G&–ærÅ7G&–æsâÆ—fUvV$†VFW"‚¢°¢&WGW&â†v²ævWB„†v´6öæf–räÄ•dUõtT%ô„TDU"“°¢Ğ ¢&—fFR†6„ÖÅ7G&–ærÂ7G&–æsâÆ—fT6†ææVÄ†VFW"‚’°¢–b†7W'&VçDÆ—fT6†ææVÄ—FVÒÓÒçVÆÂ’&WGW&âÆ—fUvV$†VFW"‚“°¢†6„ÖÅ7G&–ærÂ7G&–æsâ†VFW"ÒæWr†6„ÖÃâ‚“°¢†6„ÖÅ7G&–ærÂ7G&–æsâÆ—fT†VFW"ÒÆ—fUvV$†VFW"‚“°¢–b†Æ—fT†VFW"ÒçVÆÂ’†VFW"çWDÆÂ†Æ—fT†VFW"“°¢–b†7W'&VçDÆ—fT6†ææVÄ—FVÒævWD†VFW'2‚’ÒçVÆÂ’°¢†VFW"çWDÆÂ†7W'&VçDÆ—fT6†ææVÄ—FVÒævWD†VFW'2‚’“°¢Ğ¢–b‚7W'&VçDÆ—fT6†ææVÄ—FVÒævWD6†ææVÄf÷&ÖB‚’æ—4V×G’‚’’°¢†VFW"çWB„W†ôÖVF–6÷W&6T†VÇW"ä„TDU%ôdõ$ÔBÂ7W'&VçDÆ—fT6†ææVÄ—FVÒævWD6†ææVÄf÷&ÖB‚’“°¢Ğ¢–b††VFW"æ—4V×G’‚’’&WGW&âçVÆÃ°¢&WGW&â†VFW#°¢Ğ ¢&—fFR&ööÆVâ7W'&VçD6†ææVÄ†46F6‡W‚’°¢&WGW&â7W'&VçDÆ—fT6†ææVÄ—FVÒÒçVÆÂbb†46F6‡W6÷W&6R†7W'&VçDÆ—fT6†ææVÄ—FVÒævWD6†ææVÄ6F6‡W9×‹h‘éì¶»§q«^t€€€=‰©•Ñ¹¥µ…Ñ½È…¹¥µ…Ñ½È€ô=‰©•Ñ¹¥µ…Ñ½È¹½™=‰©•Ğ¡Ù¥•İ=‰¨°€‰µ…É¥¹I¥¡Ğˆ°¹•Ü%¹ÑÙ…±Õ…Ñ½È ¤°€µÑÙI¥¡ÑM•ÑÑ¥¹1…å½ÕĞ¹•Ñ1…å½ÕÑA…É…µÌ ¤¹İ¥‘Ñ °±¥Ù•A…¹•±‘•5…É¥¸ ¤¤ì(€€€€€€€€€€€€€€€€€€€…¹¥µ…Ñ½È¹Í•ÑÕÉ…Ñ¥½¸ ÈÀÀ¤ì(€€€€€€€€€€€€€€€€€€€…¹¥µ…Ñ½È¹…‘‘1¥ÍÑ•¹•È¡¹•Ü¹¥µ…Ñ½É1¥ÍÑ•¹•É‘…ÁÑ•È ¤ì(€€€€€€€€€€€€€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€€€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹¹¥µ…Ñ¥½¹¹¡¹¥µ…Ñ½È…¹¥µ…Ñ¥½¸¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€ÍÕÁ•È¹½¹¹¥µ…Ñ¥½¹¹¡…¹¥µ…Ñ¥½¸¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡µ!¥‘•M•ÑÑ¥¹1…å½ÕÑIÕ¸°Á½ÍÑQ¥µ•½ÕĞ¤ì(€€€€€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€€€€€ô¤ì(€€€€€€€€€€€€€€€€€€€…¹¥µ…Ñ½È¹ÍÑ…ÉĞ ¤ì(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€ô(€€€€€€€ô(€€€ôì((€€€ÁÉ¥Ù…Ñ”IÕ¹¹…‰±”µ!¥‘•M•ÑÑ¥¹1…å½ÕÑIÕ¸€ô¹•ÜIÕ¹¹…‰±” ¤ì(€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€ÁÕ‰±¥ŒÙ½¥ÉÕ¸ ¤ì(€€€€€€€€€€€Y¥•İÉ½ÕÀ¹5…É¥¹1…å½ÕÑA…É…µÌÁ…É…µÌ€ô€¡Y¥•İÉ½ÕÀ¹5…É¥¹1…å½ÕÑA…É…µÌ¤ÑÙI¥¡ÑM•ÑÑ¥¹1…å½ÕĞ¹•Ñ1…å½ÕÑA…É…µÌ ¤ì(€€€€€€€€€€€¥˜€¡ÑÙI¥¡ÑM•ÑÑ¥¹1…å½ÕĞ¹•ÑY¥Í¥‰¥±¥Ñä ¤€ôôY¥•Ü¹Y%M%	1¤ì(€€€€€€€€€€€€€€€Y¥•İ=‰¨Ù¥•İ=‰¨€ô¹•ÜY¥•İ=‰¨¡ÑÙI¥¡ÑM•ÑÑ¥¹1…å½ÕĞ°Á…É…µÌ¤ì(€€€€€€€€€€€€€€€=‰©•Ñ¹¥µ…Ñ½È…¹¥µ…Ñ½È€ô=‰©•Ñ¹¥µ…Ñ½È¹½™=‰©•Ğ¡Ù¥•İ=‰¨°€‰µ…É¥¹I¥¡Ğˆ°¹•Ü%¹ÑÙ…±Õ…Ñ½È ¤°Á…É…µÌ¹É¥¡Ñ5…É¥¸°€µÑÙI¥¡ÑM•ÑÑ¥¹1…å½ÕĞ¹•Ñ1…å½ÕÑA…É…µÌ ¤¹İ¥‘Ñ ¤ì(€€€€€€€€€€€€€€€…¹¥µ…Ñ½È¹Í•ÑÕÉ…Ñ¥½¸ ÈÀÀ¤ì(€€€€€€€€€€€€€€€…¹¥µ…Ñ½È¹…‘‘1¥ÍÑ•¹•È¡¹•Ü¹¥µ…Ñ½É1¥ÍÑ•¹•É‘…ÁÑ•È ¤ì(€€€€€€€€€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹¹¥µ…Ñ¥½¹¹¡¹¥µ…Ñ½È…¹¥µ…Ñ¥½¸¤ì(€€€€€€€€€€€€€€€€€€€€€€€ÍÕÁ•È¹½¹¹¥µ…Ñ¥½¹¹¡…¹¥µ…Ñ¥½¸¤ì(€€€€€€€€€€€€€€€€€€€€€€€ÑÙI¥¡ÑM•ÑÑ¥¹1…å½ÕĞ¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹%9Y%M%	1¤ì(€€€€€€€€€€€€€€€€€€€€€€€±¥Ù•M•ÑÑ¥¹É½ÕÁ‘…ÁÑ•È¹Í•ÑM•±•Ñ•‘É½ÕÁ%¹‘•à ´Ä¤ì(€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€ô¤ì(€€€€€€€€€€€€€€€…¹¥µ…Ñ½È¹ÍÑ…ÉĞ ¤ì(€€€€€€€€€€€ô(€€€€€€€ô(€€€ôì((€€€ÁÉ¥Ù…Ñ”¥¹Ğ±¥Ù•A…¹•±‘•5…É¥¸ ¤ì(€€€€€€€É•ÑÕÉ¸€Àì(€€€ô((€€€€¼½±…½‘…¼€ß–’¥ÁŸšVÃš6»îG–ºk–J3–ÆW’è(€€€ÁÉ¥Ù…Ñ”Ù½¥¥¹¥ÑÁ1¥ÍÑY¥•Ü ¤ì(€€€€€€€µI¥¡ÑÁ1¥ÍĞ¹Í•Ñ!…Í¥á•‘M¥é”¡ÑÉÕ”¤ì(€€€€€€€µI¥¡ÑÁ1¥ÍĞ¹Í•Ñ1…å½ÕÑ5…¹…•È¡¹•ÜXİ1¥¹•…É1…å½ÕÑ5…¹…•È¡Ñ¡¥Ì¹µ½¹Ñ•áĞ°€Ä°™…±Í”¤¤ì(€€€€€€€•Á1¥ÍÑ‘…ÁÑ•È€ô¹•Ü1¥Ù•Á‘…ÁÑ•È ¤ì(€€€€€€€µI¥¡ÑÁ1¥ÍĞ¹Í•Ñ‘…ÁÑ•È¡•Á1¥ÍÑ‘…ÁÑ•È¤ì((€€€€€€€µI¥¡ÑÁ1¥ÍĞ¹…‘‘=¹MÉ½±±1¥ÍÑ•¹•È¡¹•ÜI•å±•ÉY¥•Ü¹=¹MÉ½±±1¥ÍÑ•¹•È ¤ì(€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹MÉ½±±MÑ…Ñ•¡…¹•¡9½¹9Õ±°I•å±•ÉY¥•ÜÉ•å±•ÉY¥•Ü°¥¹Ğ¹•İMÑ…Ñ”¤ì(€€€€€€€€€€€€€€€ÍÕÁ•È¹½¹MÉ½±±MÑ…Ñ•¡…¹•¡É•å±•ÉY¥•Ü°¹•İMÑ…Ñ”¤ì(€€€€€€€€€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸¤ì(€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸°Á½ÍÑQ¥µ•½ÕĞ¤ì(€€€€€€€€€€€ô(€€€€€€€ô¤ì(€€€€€€€€¼¿R×¢(€€€€€€€µI¥¡ÑÁ1¥ÍĞ¹Í•Ñ=¹%Ñ•µ1¥ÍÑ•¹•È¡¹•ÜQÙI•å±•ÉY¥•Ü¹=¹%Ñ•µ1¥ÍÑ•¹•È ¤ì(€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹%Ñ•µAÉ•M•±•Ñ•¡QÙI•å±•ÉY¥•ÜÁ…É•¹Ğ°Y¥•Ü¥Ñ•µY¥•Ü°¥¹ĞÁ½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€•Á1¥ÍÑ‘…ÁÑ•È¹Í•Ñ½ÕÍ•‘Á%¹‘•à ´Ä¤ì(€€€€€€€€€€€ô((€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹%Ñ•µM•±•Ñ•¡QÙI•å±•ÉY¥•ÜÁ…É•¹Ğ°Y¥•Ü¥Ñ•µY¥•Ü°¥¹ĞÁ½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸¤ì(€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸°Á½ÍÑQ¥µ•½ÕĞ¤ì(€€€€€€€€€€€€€€€•Á1¥ÍÑ‘…ÁÑ•È¹Í•Ñ½ÕÍ•‘Á%¹‘•à¡Á½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€ô((€€€€€€€€€€€MÕÁÁÉ•ÍÍ1¥¹Ğ ‰9½Ñ¥™å…Ñ…M•Ñ¡…¹•ˆ¤(€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹%Ñ•µ±¥¬¡QÙI•å±•ÉY¥•ÜÁ…É•¹Ğ°Y¥•Ü¥Ñ•µY¥•Ü°¥¹ĞÁ½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€¥˜¡Á½Í¥Ñ¥½¸ôõÕÉÉ•¹Ñ1¥Ù•1½½­	…­%¹‘•à¥É•ÑÕÉ¸ì(€€€€€€€€€€€€€€€…Ñ”‘…Ñ”€ô±¥Ù•Á…Ñ•‘…ÁÑ•È¹•ÑM•±•Ñ•‘%¹‘•à ¤€ğ€À€ü¹•Ü…Ñ” ¤€è(€€€€€€€€€€€€€€€€€€€€€€€±¥Ù•Á…Ñ•‘…ÁÑ•È¹•Ñ…Ñ„ ¤¹•Ğ¡±¥Ù•Á…Ñ•‘…ÁÑ•È¹•ÑM•±•Ñ•‘%¹‘•à ¤¤¹•Ñ…Ñ•A…É…µY…° ¤ì(€€€€€€€€€€€€€€€Á¥¹™¼Í•±•Ñ•‘…Ñ„€ô•Á1¥ÍÑ‘…ÁÑ•È¹•Ñ%Ñ•´¡Á½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€¥˜€¡Í•±•Ñ•‘…Ñ„€ôô¹Õ±°ñğÍ•±•Ñ•‘…Ñ„¹ÍÑ…ÉÑ‘…Ñ•Q¥µ”€ôô¹Õ±°ñğÍ•±•Ñ•‘…Ñ„¹•¹‘‘…Ñ•Q¥µ”€ôô¹Õ±°¤É•ÑÕÉ¸ì(€€€€€€€€€€€€€€€…Ñ”¹½Ü€ô¹•Ü…Ñ” ¤ì(€€€€€€€€€€€€€€€¥˜¡¹•Ü…Ñ” ¤¹½µÁ…É•Q¼¡Í•±•Ñ•‘…Ñ„¹ÍÑ…ÉÑ‘…Ñ•Q¥µ”¤€ğ€À¥ì(€€€€€€€€€€€€€€€€€€€É•ÑÕÉ¸ì(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€¥˜€¡¹½Ü¹…™Ñ•È¡Í•±•Ñ•‘…Ñ„¹•¹‘‘…Ñ•Q¥µ”¤€˜˜€……¹ÕÉÉ•¹Ñ¡…¹¹•±…Ñ¡ÕÀ ¤¤É•ÑÕÉ¸ì(€€€€€€€€€€€€€€€ÕÉÉ•¹Ñ1¥Ù•1½½­	…­%¹‘•àõÁ½Í¥Ñ¥½¸ì(€€€€€€€€€€€€€€€•Á1¥ÍÑ‘…ÁÑ•È¹Í•ÑM•±•Ñ•‘Á%¹‘•à¡Á½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€¥˜€¡¹½Ü¹½µÁ…É•Q¼¡Í•±•Ñ•‘…Ñ„¹ÍÑ…ÉÑ‘…Ñ•Q¥µ”¤€øô€À€˜˜¹½Ü¹½µÁ…É•Q¼¡Í•±•Ñ•‘…Ñ„¹•¹‘‘…Ñ•Q¥µ”¤€ğô€À¤ì(€€€€€€€€€€€€€€€€€€€µY¥‘•½Y¥•Ü¹É•±•…Í” ¤ì(€€€€€€€€€€€€€€€€€€€¥ÍM!%e$€ô™…±Í”ì(€€€€€€€€€€€€€€€€€€€µY¥‘•½Y¥•Ü¹Í•ÑUÉ°¡ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´¹•ÑUÉ° ¤±±¥Ù•¡…¹¹•±!•…‘•È ¤¤ì(€€€€€€€€€€€€€€€€€€€µY¥‘•½Y¥•Ü¹ÍÑ…ÉĞ ¤ì(€€€€€€€€€€€€€€€€€€€•Á1¥ÍÑ‘…ÁÑ•È¹Í•ÑM¡¥å¥M•±•Ñ¥½¸ ´Ä°™…±Í”±Ñ¥µ•½Éµ…Ğ¹™½Éµ…Ğ¡‘…Ñ”¤¤ì(€€€€€€€€€€€€€€€€€€€•Á1¥ÍÑ‘…ÁÑ•È¹¹½Ñ¥™å…Ñ…M•Ñ¡…¹• ¤ì(€€€€€€€€€€€€€€€€€€€Í¡½İAÉ½É•ÍÍ	…ÉÌ¡™…±Í”¤ì(€€€€€€€€€€€€€€€€€€€É•ÑÕÉ¸ì(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€MÑÉ¥¹œÍ¡¥å¥UÉ°€ôÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´¹•ÑUÉ° ¤ì(€€€€€€€€€€€€€€€¥˜€¡¹½Ü¹½µÁ…É•Q¼¡Í•±•Ñ•‘…Ñ„¹ÍÑ…ÉÑ‘…Ñ•Q¥µ”¤€ğ€À¤ì((€€€€€€€€€€€€€€€ô•±Í”¥˜€¡…¹ÕÉÉ•¹Ñ¡…¹¹•±…Ñ¡ÕÀ ¤¤ì(€€€€€€€€€€€€€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸¤ì(€€€€€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸°€ÄÀÀ¤ì(€€€€€€€€€€€€€€€€€€€µY¥‘•½Y¥•Ü¹É•±•…Í” ¤ì(€€€€€€€€€€€€€€€€€€€¥ÍM!%e$€ôÑÉÕ”ì(€€€€€€€€€€€€€€€€€€€€¼½µ…¹M••¬õÑÉÕ”ì(€€€€€€€€€€€€€€€€€€€Í¡¥å¥UÉ°€ô‰Õ¥±‘…Ñ¡ÕÁUÉ°¡Í¡¥å¥UÉ°°Í•±•Ñ•‘…Ñ„¤ì(€€€€€€€€€€€€€€€€€€€¥˜€¡Q•áÑUÑ¥±Ì¹¥ÍµÁÑä¡Í¡¥å¥UÉ°¤¤É•ÑÕÉ¸ì(€€€€€€€€€€€€€€€€€€€1=¹¤ ‰•¡¼·–n{r/–rÃ–vÁ±…åUÉ°€èˆ¬Í¡¥å¥UÉ°¤ì(€€€€€€€€€€€€€€€€€€€Á±…åUÉ°€ôÍ¡¥å¥UÉ°ì((€€€€€€€€€€€€€€€€€€€µY¥‘•½Y¥•Ü¹Í•ÑUÉ°¡Á±…åUÉ°±±¥Ù•¡…¹¹•±!•…‘•È ¤¤ì(€€€€€€€€€€€€€€€€€€€µY¥‘•½Y¥•Ü¹ÍÑ…ÉĞ ¤ì(€€€€€€€€€€€€€€€€€€€•Á1¥ÍÑ‘…ÁÑ•È¹Í•ÑM¡¥å¥M•±•Ñ¥½¸¡Á½Í¥Ñ¥½¸°ÑÉÕ”°Ñ¥µ•½Éµ…Ğ¹™½Éµ…Ğ¡‘…Ñ”¤¤ì(€€€€€€€€€€€€€€€€€€€•Á1¥ÍÑ‘…ÁÑ•È¹¹½Ñ¥™å…Ñ…M•Ñ¡…¹• ¤ì(€€€€€€€€€€€€€€€€€€€µI¥¡ÑÁ1¥ÍĞ¹Í•ÑM•±•Ñ•‘A½Í¥Ñ¥½¸¡Á½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€€€€€µI¥¡ÑÁ1¥ÍĞ¹Á½ÍĞ¡¹•ÜIÕ¹¹…‰±” ¤ì(€€€€€€€€€€€€€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€€€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥ÉÕ¸ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€µI¥¡ÑÁ1¥ÍĞ¹Íµ½½Ñ¡MÉ½±±Q½A½Í¥Ñ¥½¸¡Á½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€€€€€ô¤ì(€€€€€€€€€€€€€€€€€€€Í¡¥å¥}Ñ¥µ•}Œ€ô•Ñ…Ñ¡ÕÁÕÉ…Ñ¥½¹M•½¹‘Ì¡Í•±•Ñ•‘…Ñ„¤ì(€€€€€€€€€€€€€€€€€€€Y¥•İÉ½ÕÀ¹1…å½ÕÑA…É…µÌ±À€ô€¥Ù}Á±…ä¹•Ñ1…å½ÕÑA…É…µÌ ¤ì(€€€€€€€€€€€€€€€€€€€±À¹İ¥‘Ñ õÙ¥‘•½!•¥¡Ğ¼Üì(€€€€€€€€€€€€€€€€€€€±À¹¡•¥¡ĞõÙ¥‘•½!•¥¡Ğ¼Üì(€€€€€€€€€€€€€€€€€€€Í	…È€ô€¡M••­	…È¤™¥¹‘Y¥•İ	å%¡H¹¥¹Á‰}ÁÉ½É•ÍÍ‰…È¤ì(€€€€€€€€€€€€€€€€€€€Í	…È¹Í•Ñ5…à¡Í…™•Q¥µ•5Ì ¡±½¹œ¤Í¡¥å¥}Ñ¥µ•}Œ€¨€ÄÀÀÀ¤¤ì(€€€€€€€€€€€€€€€€€€€Í	…È¹Í•ÑAÉ½É•ÍÌ¡Í…™•Q¥µ•5Ì¡µY¥‘•½Y¥•Ü¹•ÑÕÉÉ•¹ÑA½Í¥Ñ¥½¸ ¤¤¤ì(€€€€€€€€€€€€€€€€€€€ÑÙ}ÕÉÉ•¹ÑÁ½Ì¹Í•ÑQ•áĞ¡‘ÕÉ…Ñ¥½¹Q½MÑÉ¥¹œ¡Í…™•Q¥µ•5Ì¡µY¥‘•½Y¥•Ü¹•ÑÕÉÉ•¹ÑA½Í¥Ñ¥½¸ ¤¤¤¤ì(€€€€€€€€€€€€€€€€€€€ÑÙ}‘ÕÉ…Ñ¥½¸¹Í•ÑQ•áĞ¡‘ÕÉ…Ñ¥½¹Q½MÑÉ¥¹œ¡Í…™•Q¥µ•5Ì ¡±½¹œ¤Í¡¥å¥}Ñ¥µ•}Œ€¨€ÄÀÀÀ¤¤¤ì(€€€€€€€€€€€€€€€€€€€Í¡½İAÉ½É•ÍÍ	…ÉÌ¡ÑÉÕ”¤ì(€€€€€€€€€€€€€€€€€€€¥Í	…¬€ôÑÉÕ”ì(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€ô(€€€€€€€ô¤ì((€€€€€€€€¼¿š&/šrè¿š¢‡š.–f (€€€€€€€•Á1¥ÍÑ‘…ÁÑ•È¹Í•Ñ=¹%Ñ•µ±¥­1¥ÍÑ•¹•È¡¹•Ü	…Í•EÕ¥­‘…ÁÑ•È¹=¹%Ñ•µ±¥­1¥ÍÑ•¹•È ¤ì(€€€€€€€€€€€MÕÁÁÉ•ÍÍ1¥¹Ğ ‰9½Ñ¥™å…Ñ…M•Ñ¡…¹•ˆ¤(€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹%Ñ•µ±¥¬¡	…Í•EÕ¥­‘…ÁÑ•È…‘…ÁÑ•È°Y¥•ÜÙ¥•Ü°¥¹ĞÁ½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€¥˜¡Á½Í¥Ñ¥½¸ôõÕÉÉ•¹Ñ1¥Ù•1½½­	…­%¹‘•à¥É•ÑÕÉ¸ì(€€€€€€€€€€€€€€€…Ñ”‘…Ñ”€ô±¥Ù•Á…Ñ•‘…ÁÑ•È¹•ÑM•±•Ñ•‘%¹‘•à ¤€ğ€À€ü¹•Ü…Ñ” ¤€è(€€€€€€€€€€€€€€€€€€€€€€€±¥Ù•Á…Ñ•‘…ÁÑ•È¹•Ñ…Ñ„ ¤¹•Ğ¡±¥Ù•Á…Ñ•‘…ÁÑ•È¹•ÑM•±•Ñ•‘%¹‘•à ¤¤¹•Ñ…Ñ•A…É…µY…° ¤ì(€€€€€€€€€€€€€€€Á¥¹™¼Í•±•Ñ•‘…Ñ„€ô•Á1¥ÍÑ‘…ÁÑ•È¹•Ñ%Ñ•´¡Á½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€¥˜€¡Í•±•Ñ•‘…Ñ„€ôô¹Õ±°ñğÍ•±•Ñ•‘…Ñ„¹ÍÑ…ÉÑ‘…Ñ•Q¥µ”€ôô¹Õ±°ñğÍ•±•Ñ•‘…Ñ„¹•¹‘‘…Ñ•Q¥µ”€ôô¹Õ±°¤É•ÑÕÉ¸ì(€€€€€€€€€€€€€€€…Ñ”¹½Ü€ô¹•Ü…Ñ” ¤ì(€€€€€€€€€€€€€€€¥˜¡¹•Ü…Ñ” ¤¹½µÁ…É•Q¼¡Í•±•Ñ•‘…Ñ„¹ÍÑ…ÉÑ‘…Ñ•Q¥µ”¤€ğ€À¥ì(€€€€€€€€€€€€€€€€€€€É•ÑÕÉ¸ì(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€¥˜€¡¹½Ü¹…™Ñ•È¡Í•±•Ñ•‘…Ñ„¹•¹‘‘…Ñ•Q¥µ”¤€˜˜€……¹ÕÉÉ•¹Ñ¡…¹¹•±…Ñ¡ÕÀ ¤¤É•ÑÕÉ¸ì(€€€€€€€€€€€€€€€ÕÉÉ•¹Ñ1¥Ù•1½½­	…­%¹‘•àõÁ½Í¥Ñ¥½¸ì(€€€€€€€€€€€€€€€•Á1¥ÍÑ‘…ÁÑ•È¹Í•ÑM•±•Ñ•‘Á%¹‘•à¡Á½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€¥˜€¡¹½Ü¹½µÁ…É•Q¼¡Í•±•Ñ•‘…Ñ„¹ÍÑ…ÉÑ‘…Ñ•Q¥µ”¤€øô€À€˜˜¹½Ü¹½µÁ…É•Q¼¡Í•±•Ñ•‘…Ñ„¹•¹‘‘…Ñ•Q¥µ”¤€ğô€À¤ì(€€€€€€€€€€€€€€€€€€€µY¥‘•½Y¥•Ü¹É•±•…Í” ¤ì(€€€€€€€€€€€€€€€€€€€¥ÍM!%e$€ô™…±Í”ì(€€€€€€€€€€€€€€€€€€€µY¥‘•½Y¥•Ü¹Í•ÑUÉ°¡ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´¹•ÑUÉ° ¤±±¥Ù•¡…¹¹•±!•…‘•È ¤¤ì(€€€€€€€€€€€€€€€€€€€µY¥‘•½Y¥•Ü¹ÍÑ…ÉĞ ¤ì(€€€€€€€€€€€€€€€€€€€•Á1¥ÍÑ‘…ÁÑ•È¹Í•ÑM¡¥å¥M•±•Ñ¥½¸ ´Ä°™…±Í”±Ñ¥µ•½Éµ…Ğ¹™½Éµ…Ğ¡‘…Ñ”¤¤ì(€€€€€€€€€€€€€€€€€€€•Á1¥ÍÑ‘…ÁÑ•È¹¹½Ñ¥™å…Ñ…M•Ñ¡…¹• ¤ì(€€€€€€€€€€€€€€€€€€€Í¡½İAÉ½É•ÍÍ	…ÉÌ¡™…±Í”¤ì(€€€€€€€€€€€€€€€€€€€É•ÑÕÉ¸ì(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€MÑÉ¥¹œÍ¡¥å¥UÉ°€ôÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´¹•ÑUÉ° ¤ì(€€€€€€€€€€€€€€€¥˜€¡¹½Ü¹½µÁ…É•Q¼¡Í•±•Ñ•‘…Ñ„¹ÍÑ…ÉÑ‘…Ñ•Q¥µ”¤€ğ€À¤ì((€€€€€€€€€€€€€€€ô•±Í”¥˜€¡…¹ÕÉÉ•¹Ñ¡…¹¹•±…Ñ¡ÕÀ ¤¤ì(€€€€€€€€€€€€€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸¤ì(€€€€€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸°€ÄÀÀ¤ì(€€€€€€€€€€€€€€€€€€€µY¥‘•½Y¥•Ü¹É•±•…Í” ¤ì(€€€€€€€€€€€€€€€€€€€¥ÍM!%e$€ôÑÉÕ”ì(€€€€€€€€€€€€€€€€€€€€¼½µ…¹M••¬õÑÉÕ”ì(€€€€€€€€€€€€€€€€€€€Í¡¥å¥UÉ°€ô‰Õ¥±‘…Ñ¡ÕÁUÉ°¡Í¡¥å¥UÉ°°Í•±•Ñ•‘…Ñ„¤ì(€€€€€€€€€€€€€€€€€€€¥˜€¡Q•áÑUÑ¥±Ì¹¥ÍµÁÑä¡Í¡¥å¥UÉ°¤¤É•ÑÕÉ¸ì(€€€€€€€€€€€€€€€€€€€1=¹¤ ‰•¡¼·–n{r/–rÃ–vÁ±…åUÉ°€èˆ¬Í¡¥å¥UÉ°¤ì(€€€€€€€€€€€€€€€€€€€Á±…åUÉ°€ôÍ¡¥å¥UÉ°ì(€€€€€€€€€€€€€€€€€€€¥˜¡±¥Ù•¡…¹¹•±!•…‘•È ¤„õ¹Õ±°¥1=¹¤ ‰•¡¼µ±¥Ù•]•‰!•…‘•È€èˆ¬±¥Ù•¡…¹¹•±!•…‘•È ¤¹Ñ½MÑÉ¥¹œ ¤¤ì(€€€€€€€€€€€€€€€€€€€µY¥‘•½Y¥•Ü¹Í•ÑUÉ°¡Á±…åUÉ°±±¥Ù•¡…¹¹•±!•…‘•È ¤¤ì(€€€€€€€€€€€€€€€€€€€µY¥‘•½Y¥•Ü¹ÍÑ…ÉĞ ¤ì(€€€€€€€€€€€€€€€€€€€•Á1¥ÍÑ‘…ÁÑ•È¹Í•ÑM¡¥å¥M•±•Ñ¥½¸¡Á½Í¥Ñ¥½¸°ÑÉÕ”±Ñ¥µ•½Éµ…Ğ¹™½Éµ…Ğ¡‘…Ñ”¤¤ì(€€€€€€€€€€€€€€€€€€€•Á1¥ÍÑ‘…ÁÑ•È¹¹½Ñ¥™å…Ñ…M•Ñ¡…¹• ¤ì(€€€€€€€€€€€€€€€€€€€µI¥¡ÑÁ1¥ÍĞ¹Í•ÑM•±•Ñ•‘A½Í¥Ñ¥½¸¡Á½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€€€€€µI¥¡ÑÁ1¥ÍĞ¹Á½ÍĞ¡¹•ÜIÕ¹¹…‰±” ¤ì(€€€€€€€€€€€€€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€€€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥ÉÕ¸ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€µI¥¡ÑÁ1¥ÍĞ¹Íµ½½Ñ¡MÉ½±±Q½A½Í¥Ñ¥½¸¡Á½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€€€€€ô¤ì(€€€€€€€€€€€€€€€€€€€Í¡¥å¥}Ñ¥µ•}Œ€ô•Ñ…Ñ¡ÕÁÕÉ…Ñ¥½¹M•½¹‘Ì¡Í•±•Ñ•‘…Ñ„¤ì(€€€€€€€€€€€€€€€€€€€Y¥•İÉ½ÕÀ¹1…å½ÕÑA…É…µÌ±À€ô€¥Ù}Á±…ä¹•Ñ1…å½ÕÑA…É…µÌ ¤ì(€€€€€€€€€€€€€€€€€€€±À¹İ¥‘Ñ õÙ¥‘•½!•¥¡Ğ¼Üì(€€€€€€€€€€€€€€€€€€€±À¹¡•¥¡ĞõÙ¥‘•½!•¥¡Ğ¼Üì(€€€€€€€€€€€€€€€€€€€Í	…È€ô€¡M••­	…È¤™¥¹‘Y¥•İ	å%¡H¹¥¹Á‰}ÁÉ½É•ÍÍ‰…È¤ì(€€€€€€€€€€€€€€€€€€€Í	…È¹Í•Ñ5…à¡Í…™•Q¥µ•5Ì ¡±½¹œ¤Í¡¥å¥}Ñ¥µ•}Œ€¨€ÄÀÀÀ¤¤ì(€€€€€€€€€€€€€€€€€€€Í	…È¹Í•ÑAÉ½É•ÍÌ¡Í…™•Q¥µ•5Ì¡µY¥‘•½Y¥•Ü¹•ÑÕÉÉ•¹ÑA½Í¥Ñ¥½¸ ¤¤¤ì(€€€€€€€€€€€€€€€€€€€¼¼±½¹œ‘€ôµY¥‘•½Y¥•Ü¹•ÑÕÉ…Ñ¥½¸ ¤ì(€€€€€€€€€€€€€€€€€€€ÑÙ}ÕÉÉ•¹ÑÁ½Ì¹Í•ÑQ•áĞ¡‘ÕÉ…Ñ¥½¹Q½MÑÉ¥¹œ¡Í…™•Q¥µ•5Ì¡µY¥‘•½Y¥•Ü¹•ÑÕÉÉ•¹ÑA½Í¥Ñ¥½¸ ¤¤¤¤ì(€€€€€€€€€€€€€€€€€€€ÑÙ}‘ÕÉ…Ñ¥½¸¹Í•ÑQ•áĞ¡‘ÕÉ…Ñ¥½¹Q½MÑÉ¥¹œ¡Í…™•Q¥µ•5Ì ¡±½¹œ¤Í¡¥å¥}Ñ¥µ•}Œ€¨€ÄÀÀÀ¤¤¤ì(€€€€€€€€€€€€€€€€€€€Í¡½İAÉ½É•ÍÍ	…ÉÌ¡ÑÉÕ”¤ì(€€€€€€€€€€€€€€€€€€€¥Í	…¬€ôÑÉÕ”ì(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€ô(€€€€€€€ô¤ì(€€€ô(€€€€¼½±…½‘„ƒRš"@ß–’§–n{šRûš^—šr–"_¢†£šVÃš6¸(€€€ÁÉ¥Ù…Ñ”Ù½¥¥¹¥Ñ…å1¥ÍĞ ¤ì(€€€€€€€±¥Ù•…å1¥ÍĞ¹±•…È ¤ì(¼¼€€€€€€€…Ñ”™¥ÉÍÑ‘…ä€ô¹•Ü…Ñ”¡¹½İ‘…ä¹•ÑQ¥µ” ¤€´€È€¨€ÈĞ€¨€ØÀ€¨€ØÀ€¨€ÄÀÀÀ¤ì(¼¼€€€€€€€™½È€¡¥¹Ğ¤€ô€Àì¤€ğ€Äì¤¬¬¤ì(¼¼€€€€€€€€€€€1¥Ù•…å1¥ÍÑÉ½ÕÀ‘…å±¥ÍĞ€ô¹•Ü1¥Ù•…å1¥ÍÑÉ½ÕÀ ¤ì(¼¼€€€€€€€€€€€…Ñ”¹•İ‘…äô¹•Ü…Ñ”¡™¥ÉÍÑ‘…ä¹•ÑQ¥µ” ¤€¬¤€¨€ÈĞ€¨€ØÀ€¨€ØÀ€¨€ÄÀÀÀ¤ì(¼¼€€€€€€€€€€€MÑÉ¥¹œ‘…ä€ô™½Éµ…Ñ…Ñ”Ä¹™½Éµ…Ğ¡¹•İ‘…ä¤ì(¼¼€€€€€€€€€€€1=¹¤ ‰•¡¼µ‘…Ñ”ˆ­‘…ä¤ì(¼¼€€€€€€€€€€€‘…å±¥ÍĞ¹Í•ÑÉ½ÕÁ%¹‘•à¡¤¤ì(¼¼€€€€€€€€€€€‘…å±¥ÍĞ¹Í•ÑÉ½ÕÁ9…µ”¡‘…ä¤ì(¼¼€€€€€€€€€€€±¥Ù•…å1¥ÍĞ¹…‘¡‘…å±¥ÍĞ¤ì(¼¼€€€€€€€ô((€€€€€€€1¥Ù•…å1¥ÍÑÉ½ÕÀ‘…å±¥ÍĞ€ô¹•Ü1¥Ù•…å1¥ÍÑÉ½ÕÀ ¤ì(€€€€€€€…Ñ”¹•İ‘…äô¹•Ü…Ñ” ¡¹½İ‘…ä¹•ÑQ¥µ” ¤¤¤ì(€€€€€€€MÑÉ¥¹œ‘…ä€ô™½Éµ…Ñ…Ñ”Ä¹™½Éµ…Ğ¡¹•İ‘…ä¤ì(€€€€€€€1=¹¤ ‰•¡¼µ‘…Ñ”ˆ­‘…ä¤ì(€€€€€€€‘…å±¥ÍĞ¹Í•ÑÉ½ÕÁ%¹‘•à À¤ì(€€€€€€€‘…å±¥ÍĞ¹Í•ÑÉ½ÕÁ9…µ”¡‘…ä¤ì(€€€€€€€±¥Ù•…å1¥ÍĞ¹…‘¡‘…å±¥ÍĞ¤ì(€€€ô(€€€€¼½­•¹Ì€ß–’§–n{šRûšVÃš6»îG–ºk–J3–ÆW’è(€€€ÁÉ¥Ù…Ñ”Ù½¥¥¹¥ÑÁ…Ñ•Y¥•Ü ¤ì(¼¼€€€€€€€É•ÑÕÉ¸ì(€€€€€€€µÁ…Ñ•É¥‘Y¥•Ü¹Í•Ñ!…Í¥á•‘M¥é”¡ÑÉÕ”¤ì(€€€€€€€µÁ…Ñ•É¥‘Y¥•Ü¹Í•Ñ1…å½ÕÑ5…¹…•È¡¹•ÜXİ1¥¹•…É1…å½ÕÑ5…¹…•È¡Ñ¡¥Ì¹µ½¹Ñ•áĞ°€Ä°™…±Í”¤¤ì(€€€€€€€±¥Ù•Á…Ñ•‘…ÁÑ•È€ô¹•Ü1¥Ù•Á…Ñ•‘…ÁÑ•È ¤ì(€€€€€€€…±•¹‘…È…±•¹‘…È€ô…±•¹‘…È¹•Ñ%¹ÍÑ…¹” ¤ì(€€€€€€€…±•¹‘…È¹Í•ÑQ¥µ”¡¹•Ü…Ñ” ¤¤ì(€€€€€€€MÕÁÁÉ•ÍÍ1¥¹Ğ ‰M¥µÁ±•…Ñ•½Éµ…Ğˆ¤M¥µÁ±•…Ñ•½Éµ…Ğ‘…Ñ•AÉ•Í•¹Ñ½Éµ…Ğ€ô¹•ÜM¥µÁ±•…Ñ•½Éµ…Ğ ‰54µ‘ˆ¤ì(€€€€€€€…±•¹‘…È¹…‘¡…±•¹‘…È¹e}=}5=9Q °€À¤ì(€€€€€€€™½È€¡¥¹Ğ¤€ô€Àì¤€ğ€Äì¤¬¬¤ì(€€€€€€€€€€€…Ñ”‘…Ñ•%¹Ì€ô…±•¹‘…È¹•ÑQ¥µ” ¤ì(€€€€€€€€€€€1¥Ù•Á…Ñ”•Á…Ñ”€ô¹•Ü1¥Ù•Á…Ñ” ¤ì(€€€€€€€€€€€•Á…Ñ”¹Í•Ñ%¹‘•à¡¤¤ì(€€€€€€€€€€€•Á…Ñ”¹Í•Ñ…Ñ•AÉ•Í•¹Ñ•¡‘…Ñ•AÉ•Í•¹Ñ½Éµ…Ğ¹™½Éµ…Ğ¡‘…Ñ•%¹Ì¤¤ì(€€€€€€€€€€€•Á…Ñ”¹Í•Ñ…Ñ•A…É…µY…°¡‘…Ñ•%¹Ì¤ì(€€€€€€€€€€€±¥Ù•Á…Ñ•‘…ÁÑ•È¹…‘‘…Ñ„¡•Á…Ñ”¤ì(¼¼€€€€€€€€€€€…±•¹‘…È¹…‘¡…±•¹‘…È¹e}=}5=9Q °€´Ä¤ì(€€€€€€€ô(€€€€€€€µÁ…Ñ•É¥‘Y¥•Ü¹Í•Ñ‘…ÁÑ•È¡±¥Ù•Á…Ñ•‘…ÁÑ•È¤ì(€€€€€€€µÁ…Ñ•É¥‘Y¥•Ü¹…‘‘=¹MÉ½±±1¥ÍÑ•¹•È¡¹•ÜI•å±•ÉY¥•Ü¹=¹MÉ½±±1¥ÍÑ•¹•È ¤ì(€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹MÉ½±±MÑ…Ñ•¡…¹•¡9½¹9Õ±°I•å±•ÉY¥•ÜÉ•å±•ÉY¥•Ü°¥¹Ğ¹•İMÑ…Ñ”¤ì(€€€€€€€€€€€€€€€ÍÕÁ•È¹½¹MÉ½±±MÑ…Ñ•¡…¹•¡É•å±•ÉY¥•Ü°¹•İMÑ…Ñ”¤ì(€€€€€€€€€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸¤ì(€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸°Á½ÍÑQ¥µ•½ÕĞ¤ì(€€€€€€€€€€€ô(€€€€€€€ô¤ì((¼¼€€€€€€€€¼¿R×¢(¼¼€€€€€€€µÁ…Ñ•É¥‘Y¥•Ü¹Í•Ñ=¹%Ñ•µ1¥ÍÑ•¹•È¡¹•ÜQÙI•å±•ÉY¥•Ü¹=¹%Ñ•µ1¥ÍÑ•¹•È ¤ì(¼¼€€€€€€€€€€€=Ù•ÉÉ¥‘”(¼¼€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹%Ñ•µAÉ•M•±•Ñ•¡QÙI•å±•ÉY¥•ÜÁ…É•¹Ğ°Y¥•Ü¥Ñ•µY¥•Ü°¥¹ĞÁ½Í¥Ñ¥½¸¤ì(¼¼€€€€€€€€€€€€€€€±¥Ù•Á…Ñ•‘…ÁÑ•È¹Í•Ñ½ÕÍ•‘%¹‘•à ´Ä¤ì(¼¼€€€€€€€€€€€ô(¼¼(¼¼€€€€€€€€€€€=Ù•ÉÉ¥‘”(¼¼€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹%Ñ•µM•±•Ñ•¡QÙI•å±•ÉY¥•ÜÁ…É•¹Ğ°Y¥•Ü¥Ñ•µY¥•Ü°¥¹ĞÁ½Í¥Ñ¥½¸¤ì(¼¼€€€€€€€€€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸¤ì(¼¼€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸°Á½ÍÑQ¥µ•½ÕĞ¤ì(¼¼€€€€€€€€€€€€€€€±¥Ù•Á…Ñ•‘…ÁÑ•È¹Í•Ñ½ÕÍ•‘%¹‘•à¡Á½Í¥Ñ¥½¸¤ì(¼¼€€€€€€€€€€€ô(¼¼(¼¼€€€€€€€€€€€=Ù•ÉÉ¥‘”(¼¼€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹%Ñ•µ±¥¬¡QÙI•å±•ÉY¥•ÜÁ…É•¹Ğ°Y¥•Ü¥Ñ•µY¥•Ü°¥¹ĞÁ½Í¥Ñ¥½¸¤ì(¼¼€€€€€€€€€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸¤ì(¼¼€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸°Á½ÍÑQ¥µ•½ÕĞ¤ì(¼¼€€€€€€€€€€€€€€€±¥Ù•Á…Ñ•‘…ÁÑ•È¹Í•ÑM•±•Ñ•‘%¹‘•à¡Á½Í¥Ñ¥½¸¤ì(¼¼€€€€€€€€€€€€€€€•ÑÁœ¡±¥Ù•Á…Ñ•‘…ÁÑ•È¹•Ñ…Ñ„ ¤¹•Ğ¡Á½Í¥Ñ¥½¸¤¹•Ñ…Ñ•A…É…µY…° ¤¤ì(¼¼€€€€€€€€€€€ô(¼¼€€€€€€€ô¤ì(¼¼(¼¼€€€€€€€€¼¿š&/šrè¿š¢‡š.–f (¼¼€€€€€€€±¥Ù•Á…Ñ•‘…ÁÑ•È¹Í•Ñ=¹%Ñ•µ±¥­1¥ÍÑ•¹•È¡¹•Ü	…Í•EÕ¥­‘…ÁÑ•È¹=¹%Ñ•µ±¥­1¥ÍÑ•¹•È ¤ì(¼¼€€€€€€€€€€€=Ù•ÉÉ¥‘”(¼¼€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹%Ñ•µ±¥¬¡	…Í•EÕ¥­‘…ÁÑ•È…‘…ÁÑ•È°Y¥•ÜÙ¥•Ü°¥¹ĞÁ½Í¥Ñ¥½¸¤ì(¼¼€€€€€€€€€€€€€€€…ÍÑ±¥­¡•­UÑ¥°¹¡•¬¡Ù¥•Ü¤ì(¼¼€€€€€€€€€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸¤ì(¼¼€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸°Á½ÍÑQ¥µ•½ÕĞ¤ì(¼¼€€€€€€€€€€€€€€€±¥Ù•Á…Ñ•‘…ÁÑ•È¹Í•ÑM•±•Ñ•‘%¹‘•à¡Á½Í¥Ñ¥½¸¤ì(¼¼€€€€€€€€€€€€€€€•ÑÁœ¡±¥Ù•Á…Ñ•‘…ÁÑ•È¹•Ñ…Ñ„ ¤¹•Ğ¡Á½Í¥Ñ¥½¸¤¹•Ñ…Ñ•A…É…µY…° ¤¤ì(¼¼€€€€€€€€€€€ô(¼¼€€€€€€€ô¤ì(€€€€€€€±¥Ù•Á…Ñ•‘…ÁÑ•È¹Í•ÑM•±•Ñ•‘%¹‘•à À¤ì(€€€€€€€µÁ…Ñ•É¥‘Y¥•Ü¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹=9¤ì(€€€ô((((€€€ÁÉ¥Ù…Ñ”Ù½¥¥¹¥ÑY¥‘•½Y¥•Ü ¤ì(€€€€€€€1¥Ù•½¹ÑÉ½±±•È½¹ÑÉ½±±•È€ô¹•Ü1¥Ù•½¹ÑÉ½±±•È¡Ñ¡¥Ì¤ì(€€€€€€€½¹ÑÉ½±±•È¹Í•Ñ1¥ÍÑ•¹•È¡¹•Ü1¥Ù•½¹ÑÉ½±±•È¹1¥Ù•½¹ÑÉ½±1¥ÍÑ•¹•È ¤ì(€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥Œ‰½½±•…¸Í¥¹±•Q…À ¤ì(€€€€€€€€€€€€€€€Í¡½İ¡…¹¹•±1¥ÍĞ ¤ì(€€€€€€€€€€€€€€€É•ÑÕÉ¸ÑÉÕ”ì(€€€€€€€€€€€ô((€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥±½¹AÉ•ÍÌ ¤ì(€€€€€€€€€€€€€€€¥˜¡¥Í	…¬¥ì€€¼¿š&/šrëš6‹šêC–J3šbû’ëš^Ûïš:Ÿ–"Ûš‚<(€€€€€€€€€€€€€€€€€€€Í¡½İAÉ½É•ÍÍ	…ÉÌ¡ÑÉÕ”¤ì(€€€€€€€€€€€€€€€õ•±Í•ì(€€€€€€€€€€€€€€€€€€€Í¡½İM•ÑÑ¥¹É½ÕÀ ¤ì(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€ô((€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥Á±…åMÑ…Ñ•¡…¹•¡¥¹ĞÁ±…åMÑ…Ñ”¤ì(€€€€€€€€€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ½¹¹•ÑQ¥µ•½ÕÑ¡…¹•M½ÕÉ•IÕ¸¤ì(€€€€€€€€€€€€€€€Íİ¥Ñ €¡Á±…åMÑ…Ñ”¤ì(€€€€€€€€€€€€€€€€€€€…Í”Y¥‘•½Y¥•Ü¹MQQ}%1è(€€€€€€€€€€€€€€€€€€€€€€€€¼¼ƒ¦ë¦^Ë*Ûš¾òkšJ·šRû–f£–’’ê;¦ë¦^Ë¾ò3–Âkšr«–ò–/šJ·šRû’â¢"³’â7¦r¢š¢«–*£š6‹šêC(€€€€€€€€€€€€€€€€€€€…Í”Y¥‘•½Y¥•Ü¹MQQ}AUMè(€€€€€€€€€€€€€€€€€€€€€€€€¼¼ƒšj–s*Ûš¾òkšJ·šRû¢Š¯šj–s¾ò3¦k–âãšb¿R£š"ßšN7’ös¾ò3’â7¢›–>G¢«–*£š6‹šê@(€€€€€€€€€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€€€€€€€€€…Í”Y¥‘•½Y¥•Ü¹MQQ}AIAIè(€€€€€€€€€€€€€€€€€€€€€€€€¼¼ƒ––’–ÂÇî«¾òkšJ·šRû–f£–ŞËî?–*ƒ¢ö÷––÷–ªK’öOšVÃš6»¾ò3’ö–Âkšr«–ò–/šJ·šRû(€€€€€€€€€€€€€€€€€€€…Í”Y¥‘•½Y¥•Ü¹MQQ}	UIè(€€€€€€€€€€€€€€€€€€€€€€€Á•¹‘¥¹…¥±½Ù•ÉÙ•¹Ğ€ôÕÉÉ•¹ÑA±…å‰…­MÑ…ÉÑ•(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€üA±…å‰…­Ù•¹Ğ¹9=}Q|á}M=9L(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€èA±…å‰…­Ù•¹Ğ¹9=}%IMQ}I5|ÄÁ}M=9Lì(€€€€€€€€€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡µ½¹¹•ÑQ¥µ•½ÕÑ¡…¹•M½ÕÉ•IÕ¸°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€ÕÉÉ•¹ÑA±…å‰…­MÑ…ÉÑ•€ü€á|ÀÀÁ0€è€ÄÁ|ÀÀÁ0¤ì(€€€€€€€€€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€€€€€€€€€…Í”Y¥‘•½Y¥•Ü¹MQQ}A1e%9è(€€€€€€€€€€€€€€€€€€€€€€€€¼¼ƒšJ·šRû*Ûš¾òk–öOšJ·šRû–f£òO–Ë–º3š"Cš"[š¶–r£š¶–âãšJ·šRûš^Û¾ò3¢†£šb;–öO–&7šêCšb¿–>¿R£j¾ò0(€€€€€€€€€€€€€€€€€€€€€€€¡¥‘•Mİ¥Ñ¡¡…¹¹•±M¹…ÁÍ¡½Ğ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€¥˜€¡É•Í½±ÕÑ¥½¹%¹™½A•¹‘¥¹œ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€É•Í½±ÕÑ¥½¹%¹™½I•ÑÉå½Õ¹Ğ€ô€Àì(€€€€€€€€€€€€€€€€€€€€€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µUÁ‘…Ñ•I•Í½±ÕÑ¥½¹%¹™½IÕ¸¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍĞ¡µUÁ‘…Ñ•I•Í½±ÕÑ¥½¹%¹™½IÕ¸¤ì(€€€€€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€€€€€€€€€ÕÉÉ•¹Ñ1¥Ù•¡…¹•M½ÕÉ•Q¥µ•Ì€ô€Àì(€€€€€€€€€€€€€€€€€€€€€€€…±±½İ1¥Ù•Mİ¥Ñ¡A±…å•È€ôÑÉÕ”ì(€€€€€€€€€€€€€€€€€€€€€€€ÕÉÉ•¹ÑA±…å‰…­MÑ…ÉÑ•€ôÑÉÕ”ì(€€€€€€€€€€€€€€€€€€€€€€€™…¥±½Ù•ÉA½±¥ä¹½¹Ù•¹Ğ¡A±…å‰…­Ù•¹Ğ¹A1e	-}MQIQ°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€™…¥±½Ù•ÉMÑ…Ñ”°MåÍÑ•´¹ÕÉÉ•¹ÑQ¥µ•5¥±±¥Ì ¤¤ì(€€€€€€€€€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€€€€€€€€€…Í”Y¥‘•½Y¥•Ü¹MQQ}II=Hè(€€€€€€€€€€€€€€€€€€€…Í”Y¥‘•½Y¥•Ü¹MQQ}A1e	-}=5A1Qè(€€€€€€€€€€€€€€€€€€€€€€€€¼¼ƒ¦Rg¢¾¿š"[šJ·šRûîOšv*Ûš¾òkšJ·šRû–f£¦–"Ã¦Rg¢¾¿š"[šJ·šRû–º3š¾Wš^Û¾ò0(€€€€€€€€€€€€€€€€€€€€€€€€¼¼ƒ¦kR£šJ·šRû–f£–n{¢Âš^ƒšÎW–>¿¦vƒš>C–>X!QQ@ƒ*Ûš‚¾ò3š2'¦kR£–’Ç¢Ò—–’B(€€€€€€€€€€€€€€€€€€€€€€€¡¥‘•Mİ¥Ñ¡¡…¹¹•±M¹…ÁÍ¡½Ğ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€Á•¹‘¥¹…¥±½Ù•ÉÙ•¹Ğ€ôA±…å‰…­Ù•¹Ğ¹A1e	-}II=Hì(€€€€€€€€€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍĞ¡µ½¹¹•ÑQ¥µ•½ÕÑ¡…¹•M½ÕÉ•IÕ¸¤ì(€€€€€€€€€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€€€€€€€€€…Í”Y¥‘•½Y¥•Ü¹MQQ}AIAI%9è(€€€€€€€€€€€€€€€€€€€€€€€Á•¹‘¥¹…¥±½Ù•ÉÙ•¹Ğ€ôA±…å‰…­Ù•¹Ğ¹9=}%IMQ}I5|ÄÁ}M=9Lì(€€€€€€€€€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡µ½¹¹•ÑQ¥µ•½ÕÑ¡…¹•M½ÕÉ•IÕ¸°€ÄÁ|ÀÀÁ0¤ì(€€€€€€€€€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€€€€€€€€€…Í”Y¥‘•½Y¥•Ü¹MQQ}	UI%9è(€€€€€€€€€€€€€€€€€€€€€€€Á•¹‘¥¹…¥±½Ù•ÉÙ•¹Ğ€ôÕÉÉ•¹ÑA±…å‰…­MÑ…ÉÑ•(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€üA±…å‰…­Ù•¹Ğ¹9=}Q|á}M=9L(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€èA±…å‰…­Ù•¹Ğ¹9=}%IMQ}I5|ÄÁ}M=9Lì(€€€€€€€€€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡µ½¹¹•ÑQ¥µ•½ÕÑ¡…¹•M½ÕÉ•IÕ¸°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€ÕÉÉ•¹ÑA±…å‰…­MÑ…ÉÑ•€ü€á|ÀÀÁ0€è€ÄÁ|ÀÀÁ0¤ì(€€€€€€€€€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€€€€€€€€€‘•™…Õ±Ğè(€€€€€€€€€€€€€€€€€€€€€€€1=¹¤ ‰•¡¼µU¹•áÁ•Ñ•±¥Ù•}Á±…äÍÑ…Ñ”è€ˆ€¬Á±…åMÑ…Ñ”¤ì(€€€€€€€€€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€ô((€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥¡…¹•M½ÕÉ”¡¥¹Ğ‘¥É•Ñ¥½¸¤ì(€€€€€€€€€€€€€€€¥˜€¡‘¥É•Ñ¥½¸€ø€À¤(€€€€€€€€€€€€€€€€€€€¥˜¡¥Í	…¬¥ì€€¼¿š&/šrëš6‹šêC–J3šbû’ëš^Ûïš:Ÿ–"Ûš‚<(€€€€€€€€€€€€€€€€€€€€€€€Í¡½İAÉ½É•ÍÍ	…ÉÌ¡ÑÉÕ”¤ì(€€€€€€€€€€€€€€€€€€€õ•±Í•ì(€€€€€€€€€€€€€€€€€€€€€€€Á±…å9•áÑM½ÕÉ” ¤ì(€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€•±Í”(€€€€€€€€€€€€€€€€€€€Á±…åAÉ•M½ÕÉ” ¤ì(€€€€€€€€€€€ô(€€€€€€€ô¤ì(€€€€€€€½¹ÑÉ½±±•È¹Í•Ñ…¹¡…¹•A½Í¥Ñ¥½¸¡™…±Í”¤ì(€€€€€€€½¹ÑÉ½±±•È¹Í•Ñ¹…‰±•%¹9½Éµ…°¡ÑÉÕ”¤ì(€€€€€€€½¹ÑÉ½±±•È¹Í•Ñ•ÍÑÕÉ•¹…‰±•¡ÑÉÕ”¤ì(€€€€€€€½¹ÑÉ½±±•È¹Í•Ñ½Õ‰±•Q…ÁQ½±•A±…å¹…‰±•¡™…±Í”¤ì(€€€€€€€µY¥‘•½Y¥•Ü¹Í•ÑY¥‘•½½¹ÑÉ½±±•È¡½¹ÑÉ½±±•È¤ì(€€€€€€€µY¥‘•½Y¥•Ü¹Í•ÑAÉ½É•ÍÍ5…¹…•È¡¹Õ±°¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”‰½½±•…¸Íİ¥Ñ¡1¥Ù•A±…å•É¹‘I•Á±…ä ¤ì(€€€€€€€¥˜€ ……±±½İ1¥Ù•Mİ¥Ñ¡A±…å•ÈñğÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´€ôô¹Õ±°ñğµY¥‘•½Y¥•Ü€ôô¹Õ±°¤ì(€€€€€€€€€€€É•ÑÕÉ¸™…±Í”ì(€€€€€€€ô(€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ½¹¹•ÑQ¥µ•½ÕÑ¡…¹•M½ÕÉ•IÕ¸¤ì(€€€€€€€µY¥‘•½Y¥•Ü¹É•±•…Í” ¤ì(€€€€€€€¥˜€ …±¥Ù•A±…å•É5…¹…•È¹Íİ¥Ñ¡1¥Ù•A±…å•È¡µY¥‘•½Y¥•Ü¤¤ì(€€€€€€€€€€€…±±½İ1¥Ù•Mİ¥Ñ¡A±…å•È€ô™…±Í”ì(€€€€€€€€€€€É•ÑÕÉ¸™…±Í”ì(€€€€€€€ô(¼¼€€€€€€€1=¹¤ ‰•¡¼µ±¥Ù•ÕÑ½I•ÑÉäÍİ¥Ñ Á±…å•È…¹É•Á±…äÕÉÉ•¹ĞÍÑÉ•…´ˆ¤ì(€€€€€€€…±±½İ1¥Ù•Mİ¥Ñ¡A±…å•È€ô™…±Í”ì(€€€€€€€MÑÉ¥¹œÉ•ÑÉåUÉ°€ô¥ÍM!%e$€˜˜€…Q•áÑUÑ¥±Ì¹¥ÍµÁÑä¡Á±…åUÉ°¤€üÁ±…åUÉ°€èÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´¹•ÑUÉ° ¤ì(€€€€€€€µY¥‘•½Y¥•Ü¹Í•ÑUÉ°¡É•ÑÉåUÉ°°±¥Ù•¡…¹¹•±!•…‘•È ¤¤ì(€€€€€€€µY¥‘•½Y¥•Ü¹ÍÑ…ÉĞ ¤ì(€€€€€€€É•ÑÕÉ¸ÑÉÕ”ì(€€€ô((€€€ÁÉ¥Ù…Ñ”IÕ¹¹…‰±”µ½¹¹•ÑQ¥µ•½ÕÑ¡…¹•M½ÕÉ•IÕ¸€ô¹•ÜIÕ¹¹…‰±” ¤ì(€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€ÁÕ‰±¥ŒÙ½¥ÉÕ¸ ¤ì(€€€€€€€€€€€¥˜€ …¥ÍÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±Y…±¥ ¤¤É•ÑÕÉ¸ì(€€€€€€€€€€€…¥±½Ù•É•¥Í¥½¸‘•¥Í¥½¸€ô™…¥±½Ù•ÉA½±¥ä¹½¹Ù•¹Ğ (€€€€€€€€€€€€€€€€€€€Á•¹‘¥¹…¥±½Ù•ÉÙ•¹Ğ°™…¥±½Ù•ÉMÑ…Ñ”°MåÍÑ•´¹ÕÉÉ•¹ÑQ¥µ•5¥±±¥Ì ¤¤ì(€€€€€€€€€€€Íİ¥Ñ €¡‘•¥Í¥½¸¤ì(€€€€€€€€€€€€€€€…Í”IQIe}UII9Pè(€€€€€€€€€€€€€€€€€€€¥˜€ …Íİ¥Ñ¡1¥Ù•A±…å•É¹‘I•Á±…ä ¤¤É•Á±…åÕÉÉ•¹Ñ1¥¹” ¤ì(€€€€€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€€€€€…Í”QIe}9aPè(€€€€€€€€€€€€€€€€€€€ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´¹¹•áÑM½ÕÉ” ¤ì(€€€€€€€€€€€€€€€€€€€Á±…å¡…¹¹•°¡ÕÉÉ•¹Ñ¡…¹¹•±É½ÕÁ%¹‘•à°ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%¹‘•à°ÑÉÕ”¤ì(€€€€€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€€€€€…Í”IIM!}=9%è(€€€€€€€€€€€€€€€€€€€É•™É•Í¡1¥Ù•¡…¹¹•±1¥ÍÑ¹‘A±…ä¡ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´¹•Ñ¡…¹¹•±9…µ” ¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´¹•ÑM½ÕÉ•%¹‘•à ¤¤ì(€€€€€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€€€€€…Í”M!=]}a!UMQè(€€€€€€€€€€€€€€€€€€€¡¥‘•Mİ¥Ñ¡¡…¹¹•±M¹…ÁÍ¡½Ğ ¤ì(€€€€€€€€€€€€€€€€€€€Q½…ÍĞ¹µ…­•Q•áĞ¡1¥Ù•A±…åÑ¥Ù¥Ñä¹Ñ¡¥Ì°(€€€€€€€€€€€€€€€€€€€€€€€€€€€H¹ÍÑÉ¥¹œ¹±¥Ù•}Í½ÕÉ•}•á¡…ÕÍÑ•°Q½…ÍĞ¹19Q!}M!=IP¤¹Í¡½Ü ¤ì(€€€€€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€€€€€…Í”MQe}1=-è(€€€€€€€€€€€€€€€€€€€Q½…ÍĞ¹µ…­•Q•áĞ¡1¥Ù•A±…åÑ¥Ù¥Ñä¹Ñ¡¥Ì°(€€€€€€€€€€€€€€€€€€€€€€€€€€€H¹ÍÑÉ¥¹œ¹±¥Ù•}Í½ÕÉ•}±½­•‘}™…¥±ÕÉ”°Q½…ÍĞ¹19Q!}M!=IP¤¹Í¡½Ü ¤ì(€€€€€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€€€€€…Í”9=9è(€€€€€€€€€€€€€€€‘•™…Õ±Ğè(€€€€€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€ô(€€€€€€€ô(€€€ôì((€€€ÁÉ¥Ù…Ñ”Ù½¥É•Á±…åÕÉÉ•¹Ñ1¥¹” ¤ì(€€€€€€€¥˜€¡µY¥‘•½Y¥•Ü€ôô¹Õ±°ñğÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´€ôô¹Õ±°¤É•ÑÕÉ¸ì(€€€€€€€µY¥‘•½Y¥•Ü¹É•±•…Í” ¤ì(€€€€€€€MÑÉ¥¹œÉ•ÑÉåUÉ°€ô¥ÍM!%e$€˜˜€…Q•áÑUÑ¥±Ì¹¥ÍµÁÑä¡Á±…åUÉ°¤(€€€€€€€€€€€€€€€€üÁ±…åUÉ°€èÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´¹•ÑUÉ° ¤ì(€€€€€€€µY¥‘•½Y¥•Ü¹Í•ÑUÉ°¡É•ÑÉåUÉ°°±¥Ù•¡…¹¹•±!•…‘•È ¤¤ì(€€€€€€€µY¥‘•½Y¥•Ü¹ÍÑ…ÉĞ ¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥¥¹¥Ñ¡…¹¹•±É½ÕÁY¥•Ü ¤ì(€€€€€€€µ¡…¹¹•±É½ÕÁY¥•Ü¹Í•Ñ!…Í¥á•‘M¥é”¡ÑÉÕ”¤ì(€€€€€€€µ¡…¹¹•±É½ÕÁY¥•Ü¹Í•Ñ1…å½ÕÑ5…¹…•È¡¹•ÜXİ1¥¹•…É1…å½ÕÑ5…¹…•È¡Ñ¡¥Ì¹µ½¹Ñ•áĞ°€Ä°™…±Í”¤¤ì((€€€€€€€±¥Ù•¡…¹¹•±É½ÕÁ‘…ÁÑ•È€ô¹•Ü1¥Ù•¡…¹¹•±É½ÕÁ‘…ÁÑ•È ¤ì(€€€€€€€µ¡…¹¹•±É½ÕÁY¥•Ü¹Í•Ñ‘…ÁÑ•È¡±¥Ù•¡…¹¹•±É½ÕÁ‘…ÁÑ•È¤ì(€€€€€€€µ¡…¹¹•±É½ÕÁY¥•Ü¹…‘‘=¹MÉ½±±1¥ÍÑ•¹•È¡¹•ÜI•å±•ÉY¥•Ü¹=¹MÉ½±±1¥ÍÑ•¹•È ¤ì(€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹MÉ½±±MÑ…Ñ•¡…¹•¡9½¹9Õ±°I•å±•ÉY¥•ÜÉ•å±•ÉY¥•Ü°¥¹Ğ¹•İMÑ…Ñ”¤ì(€€€€€€€€€€€€€€€ÍÕÁ•È¹½¹MÉ½±±MÑ…Ñ•¡…¹•¡É•å±•ÉY¥•Ü°¹•İMÑ…Ñ”¤ì(€€€€€€€€€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸¤ì(€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸°Á½ÍÑQ¥µ•½ÕĞ¤ì(€€€€€€€€€€€ô(€€€€€€€ô¤ì((€€€€€€€€¼¿R×¢(€€€€€€€µ¡…¹¹•±É½ÕÁY¥•Ü¹Í•Ñ=¹%Ñ•µ1¥ÍÑ•¹•È¡¹•ÜQÙI•å±•ÉY¥•Ü¹=¹%Ñ•µ1¥ÍÑ•¹•È ¤ì(€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹%Ñ•µAÉ•M•±•Ñ•¡QÙI•å±•ÉY¥•ÜÁ…É•¹Ğ°Y¥•Ü¥Ñ•µY¥•Ü°¥¹ĞÁ½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€ô((€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹%Ñ•µM•±•Ñ•¡QÙI•å±•ÉY¥•ÜÁ…É•¹Ğ°Y¥•Ü¥Ñ•µY¥•Ü°¥¹ĞÁ½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€Í•±•Ñ¡…¹¹•±É½ÕÀ¡Á½Í¥Ñ¥½¸°ÑÉÕ”°€´Ä¤ì(€€€€€€€€€€€ô((€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹%Ñ•µ±¥¬¡QÙI•å±•ÉY¥•ÜÁ…É•¹Ğ°Y¥•Ü¥Ñ•µY¥•Ü°¥¹ĞÁ½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€¥˜€¡¥Í9••‘%¹ÁÕÑA…ÍÍİ½É¡Á½Í¥Ñ¥½¸¤¤ì(€€€€€€€€€€€€€€€€€€€Í¡½İA…ÍÍİ½É‘¥…±½œ¡Á½Í¥Ñ¥½¸°€´Ä¤ì(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€ô(€€€€€€€ô¤ì((€€€€€€€€¼¿š&/šrè¿š¢‡š.–f (€€€€€€€±¥Ù•¡…¹¹•±É½ÕÁ‘…ÁÑ•È¹Í•Ñ=¹%Ñ•µ±¥­1¥ÍÑ•¹•È¡¹•Ü	…Í•EÕ¥­‘…ÁÑ•È¹=¹%Ñ•µ±¥­1¥ÍÑ•¹•È ¤ì(€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹%Ñ•µ±¥¬¡	…Í•EÕ¥­‘…ÁÑ•È…‘…ÁÑ•È°Y¥•ÜÙ¥•Ü°¥¹ĞÁ½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€…ÍÑ±¥­¡•­UÑ¥°¹¡•¬¡Ù¥•Ü¤ì(€€€€€€€€€€€€€€€Í•±•Ñ¡…¹¹•±É½ÕÀ¡Á½Í¥Ñ¥½¸°™…±Í”°€´Ä¤ì(€€€€€€€€€€€ô(€€€€€€€ô¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥Í•±•Ñ¡…¹¹•±É½ÕÀ¡¥¹ĞÉ½ÕÁ%¹‘•à°‰½½±•…¸™½ÕÌ°¥¹Ğ±¥Ù•¡…¹¹•±%¹‘•à¤ì(€€€€€€€¥˜€¡™½ÕÌ€˜˜ÑÙ1•™Ñ¡…¹¹•±1¥ÍÑ1…å½ÕĞ¹•ÑY¥Í¥‰¥±¥Ñä ¤€„ôY¥•Ü¹Y%M%	1¤É•ÑÕÉ¸ì(€€€€€€€µ1…ÍÑ¡…¹¹•±É½ÕÁ%¹‘•àõÉ½ÕÁ%¹‘•àì(€€€€€€€¥˜€¡™½ÕÌ¤ì(€€€€€€€€€€€±¥Ù•¡…¹¹•±É½ÕÁ‘…ÁÑ•È¹Í•Ñ½ÕÍ•‘É½ÕÁ%¹‘•à¡É½ÕÁ%¹‘•à¤ì(€€€€€€€€€€€±•…É½ÕÍ•‘¡…¹¹•±%¹5•¹Ô ¤ì(€€€€€€€ô(€€€€€€€¥˜€ ¡É½ÕÁ%¹‘•à€ø€´Ä€˜˜É½ÕÁ%¹‘•à€„ô±¥Ù•¡…¹¹•±É½ÕÁ‘…ÁÑ•È¹•ÑM•±•Ñ•‘É½ÕÁ%¹‘•à ¤¤ñğ¥Í9••‘%¹ÁÕÑA…ÍÍİ½É¡É½ÕÁ%¹‘•à¤¤ì(€€€€€€€€€€€±¥Ù•¡…¹¹•±É½ÕÁ‘…ÁÑ•È¹Í•ÑM•±•Ñ•‘É½ÕÁ%¹‘•à¡É½ÕÁ%¹‘•à¤ì(€€€€€€€€€€€¥˜€¡¥Í9••‘%¹ÁÕÑA…ÍÍİ½É¡É½ÕÁ%¹‘•à¤¤ì(€€€€€€€€€€€€€€€Í¡½İA…ÍÍİ½É‘¥…±½œ¡É½ÕÁ%¹‘•à°±¥Ù•¡…¹¹•±%¹‘•à¤ì(€€€€€€€€€€€€€€€É•ÑÕÉ¸ì(€€€€€€€€€€€ô(€€€€€€€€€€€¥˜€¡™½ÕÌ€˜˜±¥Ù•¡…¹¹•±%¹‘•à€ğ€À¤ì(€€€€€€€€€€€€€€€±½…‘¡…¹¹•±É½ÕÁ…Ñ„¡É½ÕÁ%¹‘•à¤ì(€€€€€€€€€€€ô•±Í”ì(€€€€€€€€€€€€€€€±½…‘¡…¹¹•±É½ÕÁ…Ñ…¹‘A±…ä¡É½ÕÁ%¹‘•à°±¥Ù•¡…¹¹•±%¹‘•à¤ì(€€€€€€€€€€€ô(€€€€€€€ô(€€€€€€€¥˜€¡ÑÙ1•™Ñ¡…¹¹•±1¥ÍÑ1…å½ÕĞ¹•ÑY¥Í¥‰¥±¥Ñä ¤€ôôY¥•Ü¹Y%M%	1¤ì(€€€€€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸¤ì(€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸°Á½ÍÑQ¥µ•½ÕĞ¤ì(€€€€€€€ô(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥±•…É½ÕÍ•‘¡…¹¹•±%¹5•¹Ô ¤ì(€€€€€€€¥˜€¡ÑÙ1•™Ñ¡…¹¹•±1¥ÍÑ1…å½ÕĞ¹•ÑY¥Í¥‰¥±¥Ñä ¤€„ôY¥•Ü¹Y%M%	1¤É•ÑÕÉ¸ì(€€€€€€€¥˜€¡µ1¥Ù•¡…¹¹•±Y¥•Ü¹¥Í½µÁÕÑ¥¹1…å½ÕĞ ¤ñğµ1¥Ù•¡…¹¹•±Y¥•Ü¹¥ÍMÉ½±±¥¹œ ¤¤ì(€€€€€€€€€€€µ1¥Ù•¡…¹¹•±Y¥•Ü¹Á½ÍÑ•±…å•¡¹•ÜIÕ¹¹…‰±” ¤ì(€€€€€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥ÉÕ¸ ¤ì(€€€€€€€€€€€€€€€€€€€±•…É½ÕÍ•‘¡…¹¹•±%¹5•¹Ô ¤ì(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€ô°€ÔÀ¤ì(€€€€€€€€€€€É•ÑÕÉ¸ì(€€€€€€€ô(€€€€€€€±¥Ù•¡…¹¹•±%Ñ•µ‘…ÁÑ•È¹Í•Ñ½ÕÍ•‘¡…¹¹•±%¹‘•à ´Ä¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥¥¹¥Ñ1¥Ù•¡…¹¹•±Y¥•Ü ¤ì(€€€€€€€µ1¥Ù•¡…¹¹•±Y¥•Ü¹Í•Ñ!…Í¥á•‘M¥é”¡ÑÉÕ”¤ì(€€€€€€€µ1¥Ù•¡…¹¹•±Y¥•Ü¹Í•Ñ1…å½ÕÑ5…¹…•È¡¹•ÜXİ1¥¹•…É1…å½ÕÑ5…¹…•È¡Ñ¡¥Ì¹µ½¹Ñ•áĞ°€Ä°™…±Í”¤¤ì((€€€€€€€±¥Ù•¡…¹¹•±%Ñ•µ‘…ÁÑ•È€ô¹•Ü1¥Ù•¡…¹¹•±%Ñ•µ‘…ÁÑ•È ¤ì(€€€€€€€µ1¥Ù•¡…¹¹•±Y¥•Ü¹Í•Ñ‘…ÁÑ•È¡±¥Ù•¡…¹¹•±%Ñ•µ‘…ÁÑ•È¤ì(€€€€€€€µ1¥Ù•¡…¹¹•±Y¥•Ü¹…‘‘=¹MÉ½±±1¥ÍÑ•¹•È¡¹•ÜI•å±•ÉY¥•Ü¹=¹MÉ½±±1¥ÍÑ•¹•È ¤ì(€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹MÉ½±±MÑ…Ñ•¡…¹•¡9½¹9Õ±°I•å±•ÉY¥•ÜÉ•å±•ÉY¥•Ü°¥¹Ğ¹•İMÑ…Ñ”¤ì(€€€€€€€€€€€€€€€ÍÕÁ•È¹½¹MÉ½±±MÑ…Ñ•¡…¹•¡É•å±•ÉY¥•Ü°¹•İMÑ…Ñ”¤ì(€€€€€€€€€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸¤ì(€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸°Á½ÍÑQ¥µ•½ÕĞ¤ì(€€€€€€€€€€€ô(€€€€€€€ô¤ì((€€€€€€€€¼¿R×¢(€€€€€€€µ1¥Ù•¡…¹¹•±Y¥•Ü¹Í•Ñ=¹%Ñ•µ1¥ÍÑ•¹•È¡¹•ÜQÙI•å±•ÉY¥•Ü¹=¹%Ñ•µ1¥ÍÑ•¹•È ¤ì(€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹%Ñ•µAÉ•M•±•Ñ•¡QÙI•å±•ÉY¥•ÜÁ…É•¹Ğ°Y¥•Ü¥Ñ•µY¥•Ü°¥¹ĞÁ½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€ô((€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹%Ñ•µM•±•Ñ•¡QÙI•å±•ÉY¥•ÜÁ…É•¹Ğ°Y¥•Ü¥Ñ•µY¥•Ü°¥¹ĞÁ½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€¥˜€¡Á½Í¥Ñ¥½¸€ğ€À¤É•ÑÕÉ¸ì(€€€€€€€€€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸¤ì(€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸°Á½ÍÑQ¥µ•½ÕĞ¤ì(€€€€€€€€€€€€€€€±¥Ù•¡…¹¹•±É½ÕÁ‘…ÁÑ•È¹Í•Ñ½ÕÍ•‘É½ÕÁ%¹‘•à ´Ä¤ì(€€€€€€€€€€€€€€€±¥Ù•¡…¹¹•±%Ñ•µ‘…ÁÑ•È¹Í•Ñ½ÕÍ•‘¡…¹¹•±%¹‘•à¡Á½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€ô((€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹%Ñ•µ±¥¬¡QÙI•å±•ÉY¥•ÜÁ…É•¹Ğ°Y¥•Ü¥Ñ•µY¥•Ü°¥¹ĞÁ½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€±¥­1¥Ù•¡…¹¹•°¡Á½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€ô(€€€€€€€ô¤ì((€€€€€€€€¼¿š&/šrè¿š¢‡š.–f (€€€€€€€±¥Ù•¡…¹¹•±%Ñ•µ‘…ÁÑ•È¹Í•Ñ=¹%Ñ•µ±¥­1¥ÍÑ•¹•È¡¹•Ü	…Í•EÕ¥­‘…ÁÑ•È¹=¹%Ñ•µ±¥­1¥ÍÑ•¹•È ¤ì(€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹%Ñ•µ±¥¬¡	…Í•EÕ¥­‘…ÁÑ•È…‘…ÁÑ•È°Y¥•ÜÙ¥•Ü°¥¹ĞÁ½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€…ÍÑ±¥­¡•­UÑ¥°¹¡•¬¡Ù¥•Ü¤ì(€€€€€€€€€€€€€€€±¥Ù•¡…¹¹•±%Ñ•µ‘…ÁÑ•È¹Í•ÑM•±•Ñ•‘¡…¹¹•±%¹‘•à¡Á½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€±¥­1¥Ù•¡…¹¹•°¡Á½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€ô(€€€€€€€ô¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥±¥­1¥Ù•¡…¹¹•°¡¥¹ĞÁ½Í¥Ñ¥½¸¤ì(€€€€€€€¥˜€¡ÑÙ1•™Ñ¡…¹¹•±1¥ÍÑ1…å½ÕĞ¹•ÑY¥Í¥‰¥±¥Ñä ¤€ôôY¥•Ü¹Y%M%	1¤ì(€€€€€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸¤ì(€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸°Á½ÍÑQ¥µ•½ÕĞ¤ì(€€€€€€€ô(€€€€€€€Á±…å¡…¹¹•°¡±¥Ù•¡…¹¹•±É½ÕÁ‘…ÁÑ•È¹•ÑM•±•Ñ•‘É½ÕÁ%¹‘•à ¤°Á½Í¥Ñ¥½¸°™…±Í”¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥¥¹¥ÑM•ÑÑ¥¹É½ÕÁY¥•Ü ¤ì(€€€€€€€µM•ÑÑ¥¹É½ÕÁY¥•Ü¹Í•Ñ!…Í¥á•‘M¥é”¡ÑÉÕ”¤ì(€€€€€€€µM•ÑÑ¥¹É½ÕÁY¥•Ü¹Í•Ñ1…å½ÕÑ5…¹…•È¡¹•ÜXİ1¥¹•…É1…å½ÕÑ5…¹…•È¡Ñ¡¥Ì¹µ½¹Ñ•áĞ°€Ä°™…±Í”¤¤ì((€€€€€€€±¥Ù•M•ÑÑ¥¹É½ÕÁ‘…ÁÑ•È€ô¹•Ü1¥Ù•M•ÑÑ¥¹É½ÕÁ‘…ÁÑ•È ¤ì(€€€€€€€µM•ÑÑ¥¹É½ÕÁY¥•Ü¹Í•Ñ‘…ÁÑ•È¡±¥Ù•M•ÑÑ¥¹É½ÕÁ‘…ÁÑ•È¤ì(€€€€€€€µM•ÑÑ¥¹É½ÕÁY¥•Ü¹…‘‘=¹MÉ½±±1¥ÍÑ•¹•È¡¹•ÜI•å±•ÉY¥•Ü¹=¹MÉ½±±1¥ÍÑ•¹•È ¤ì(€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹MÉ½±±MÑ…Ñ•¡…¹•¡9½¹9Õ±°I•å±•ÉY¥•ÜÉ•å±•ÉY¥•Ü°¥¹Ğ¹•İMÑ…Ñ”¤ì(€€€€€€€€€€€€€€€ÍÕÁ•È¹½¹MÉ½±±MÑ…Ñ•¡…¹•¡É•å±•ÉY¥•Ü°¹•İMÑ…Ñ”¤ì(€€€€€€€€€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ!¥‘•M•ÑÑ¥¹1…å½ÕÑIÕ¸¤ì(€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡µ!¥‘•M•ÑÑ¥¹1…å½ÕÑIÕ¸°Á½ÍÑQ¥µ•½ÕĞ¤ì(€€€€€€€€€€€ô(€€€€€€€ô¤ì((€€€€€€€€¼¿R×¢(€€€€€€€µM•ÑÑ¥¹É½ÕÁY¥•Ü¹Í•Ñ=¹%Ñ•µ1¥ÍÑ•¹•È¡¹•ÜQÙI•å±•ÉY¥•Ü¹=¹%Ñ•µ1¥ÍÑ•¹•È ¤ì(€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹%Ñ•µAÉ•M•±•Ñ•¡QÙI•å±•ÉY¥•ÜÁ…É•¹Ğ°Y¥•Ü¥Ñ•µY¥•Ü°¥¹ĞÁ½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€ô((€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹%Ñ•µM•±•Ñ•¡QÙI•å±•ÉY¥•ÜÁ…É•¹Ğ°Y¥•Ü¥Ñ•µY¥•Ü°¥¹ĞÁ½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ!¥‘•M•ÑÑ¥¹1…å½ÕÑIÕ¸¤ì(€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡µ!¥‘•M•ÑÑ¥¹1…å½ÕÑIÕ¸°Á½ÍÑQ¥µ•½ÕĞ¤ì(€€€€€€€€€€€€€€€Í•±•ÑY¥Í¥‰±•M•ÑÑ¥¹É½ÕÀ¡Á½Í¥Ñ¥½¸°ÑÉÕ”¤ì(€€€€€€€€€€€ô((€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹%Ñ•µ±¥¬¡QÙI•å±•ÉY¥•ÜÁ…É•¹Ğ°Y¥•Ü¥Ñ•µY¥•Ü°¥¹ĞÁ½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€ô(€€€€€€€ô¤ì((€€€€€€€€¼¿š&/šrè¿š¢‡š.–f (€€€€€€€±¥Ù•M•ÑÑ¥¹É½ÕÁ‘…ÁÑ•È¹Í•Ñ=¹%Ñ•µ±¥­1¥ÍÑ•¹•È¡¹•Ü	…Í•EÕ¥­‘…ÁÑ•È¹=¹%Ñ•µ±¥­1¥ÍÑ•¹•È ¤ì(€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹%Ñ•µ±¥¬¡	…Í•EÕ¥­‘…ÁÑ•È…‘…ÁÑ•È°Y¥•ÜÙ¥•Ü°¥¹ĞÁ½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€…ÍÑ±¥­¡•­UÑ¥°¹¡•¬¡Ù¥•Ü¤ì(€€€€€€€€€€€€€€€Í•±•ÑY¥Í¥‰±•M•ÑÑ¥¹É½ÕÀ¡Á½Í¥Ñ¥½¸°™…±Í”¤ì(€€€€€€€€€€€ô(€€€€€€€ô¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥Í•±•ÑY¥Í¥‰±•M•ÑÑ¥¹É½ÕÀ¡¥¹ĞÁ½Í¥Ñ¥½¸°‰½½±•…¸™½ÕÌ¤ì(€€€€€€€¥˜€¡Á½Í¥Ñ¥½¸€ğ€ÀñğÁ½Í¥Ñ¥½¸€øô±¥Ù•M•ÑÑ¥¹É½ÕÁ‘…ÁÑ•È¹•Ñ…Ñ„ ¤¹Í¥é” ¤¤É•ÑÕÉ¸ì(€€€€€€€Í•±•ÑM•ÑÑ¥¹É½ÕÀ¡±¥Ù•M•ÑÑ¥¹É½ÕÁ‘…ÁÑ•È¹•Ñ…Ñ„ ¤¹•Ğ¡Á½Í¥Ñ¥½¸¤¹•ÑÉ½ÕÁ%¹‘•à ¤°™½ÕÌ¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥Í•±•ÑM•ÑÑ¥¹É½ÕÀ¡¥¹ĞÁ½Í¥Ñ¥½¸°‰½½±•…¸™½ÕÌ¤ì(€€€€€€€¥˜€¡™½ÕÌ¤ì(€€€€€€€€€€€±¥Ù•M•ÑÑ¥¹É½ÕÁ‘…ÁÑ•È¹Í•Ñ½ÕÍ•‘É½ÕÁ%¹‘•à¡Á½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€±¥Ù•M•ÑÑ¥¹%Ñ•µ‘…ÁÑ•È¹Í•Ñ½ÕÍ•‘%Ñ•µ%¹‘•à ´Ä¤ì(€€€€€€€ô(€€€€€€€¥˜€¡Á½Í¥Ñ¥½¸€ôô±¥Ù•M•ÑÑ¥¹É½ÕÁ‘…ÁÑ•È¹•ÑM•±•Ñ•‘É½ÕÁ%¹‘•à ¤ñğÁ½Í¥Ñ¥½¸€ğ€ÀñğÁ½Í¥Ñ¥½¸€øô±¥Ù•M•ÑÑ¥¹É½ÕÁ1¥ÍĞ¹Í¥é” ¤¤(€€€€€€€€€€€É•ÑÕÉ¸ì((€€€€€€€±¥Ù•M•ÑÑ¥¹É½ÕÁ‘…ÁÑ•È¹Í•ÑM•±•Ñ•‘É½ÕÁ%¹‘•à¡Á½Í¥Ñ¥½¸¤ì(€€€€€€€±¥Ù•M•ÑÑ¥¹%Ñ•µ‘…ÁÑ•È¹Í•Ñ9•İ…Ñ„¡±¥Ù•M•ÑÑ¥¹É½ÕÁ1¥ÍĞ¹•Ğ¡Á½Í¥Ñ¥½¸¤¹•Ñ1¥Ù•M•ÑÑ¥¹%Ñ•µÌ ¤¤ì((€€€€€€€Íİ¥Ñ €¡Á½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€…Í”€Àè(€€€€€€€€€€€€€€€¥˜€¡ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´€„ô¹Õ±°(€€€€€€€€€€€€€€€€€€€€€€€€˜˜ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´¹•ÑM½ÕÉ•%¹‘•à ¤€øô€À(€€€€€€€€€€€€€€€€€€€€€€€€˜˜ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´¹•ÑM½ÕÉ•%¹‘•à ¤€ğ±¥Ù•M•ÑÑ¥¹%Ñ•µ‘…ÁÑ•È¹•Ñ…Ñ„ ¤¹Í¥é” ¤¤ì(€€€€€€€€€€€€€€€€€€€±¥Ù•M•ÑÑ¥¹%Ñ•µ‘…ÁÑ•È¹Í•±•Ñ%Ñ•´¡ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´¹•ÑM½ÕÉ•%¹‘•à ¤°ÑÉÕ”°™…±Í”¤ì(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€…Í”€Äè(€€€€€€€€€€€€€€€±¥Ù•M•ÑÑ¥¹%Ñ•µ‘…ÁÑ•È¹Í•±•Ñ%Ñ•´¡±¥Ù•A±…å•É5…¹…•È¹•Ñ1¥Ù•A±…å•ÉM…±” ¤°ÑÉÕ”°ÑÉÕ”¤ì(€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€…Í”€Èè(€€€€€€€€€€€€€€€±¥Ù•M•ÑÑ¥¹%Ñ•µ‘…ÁÑ•È¹Í•±•Ñ%Ñ•´¡±¥Ù•A±…å•É5…¹…•È¹•Ñ1¥Ù•A±…å•ÉQåÁ” ¤°ÑÉÕ”°ÑÉÕ”¤ì(€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€…Í”€Øè(€€€€€€€€€€€€€€€±¥Ù•M•ÑÑ¥¹%Ñ•µ‘…ÁÑ•È¹Í•±•Ñ%Ñ•´¡•ÑÕÉÉ•¹Ñ1¥Ù•Á¥!¥ÍÑ½Éå%¹‘•à ¤°ÑÉÕ”°ÑÉÕ”¤ì(€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€ô(€€€€€€€¥¹ĞÍÉ½±±Q½A½Í¥Ñ¥½¸€ô±¥Ù•M•ÑÑ¥¹%Ñ•µ‘…ÁÑ•È¹•ÑM•±•Ñ•‘%Ñ•µ%¹‘•à ¤ì(€€€€€€€¥˜€¡ÍÉ½±±Q½A½Í¥Ñ¥½¸€ğ€À¤ÍÉ½±±Q½A½Í¥Ñ¥½¸€ô€Àì(€€€€€€€µM•ÑÑ¥¹%Ñ•µY¥•Ü¹ÍÉ½±±Q½A½Í¥Ñ¥½¸¡ÍÉ½±±Q½A½Í¥Ñ¥½¸¤ì(€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ!¥‘•M•ÑÑ¥¹1…å½ÕÑIÕ¸¤ì(€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡µ!¥‘•M•ÑÑ¥¹1…å½ÕÑIÕ¸°Á½ÍÑQ¥µ•½ÕĞ¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥¥¹¥ÑM•ÑÑ¥¹%Ñ•µY¥•Ü ¤ì(€€€€€€€µM•ÑÑ¥¹%Ñ•µY¥•Ü¹Í•Ñ!…Í¥á•‘M¥é”¡ÑÉÕ”¤ì(€€€€€€€µM•ÑÑ¥¹%Ñ•µY¥•Ü¹Í•Ñ1…å½ÕÑ5…¹…•È¡¹•ÜXİ1¥¹•…É1…å½ÕÑ5…¹…•È¡Ñ¡¥Ì¹µ½¹Ñ•áĞ°€Ä°™…±Í”¤¤ì((€€€€€€€±¥Ù•M•ÑÑ¥¹%Ñ•µ‘…ÁÑ•È€ô¹•Ü1¥Ù•M•ÑÑ¥¹%Ñ•µ‘…ÁÑ•È ¤ì(€€€€€€€µM•ÑÑ¥¹%Ñ•µY¥•Ü¹Í•Ñ‘…ÁÑ•È¡±¥Ù•M•ÑÑ¥¹%Ñ•µ‘…ÁÑ•È¤ì(€€€€€€€µM•ÑÑ¥¹%Ñ•µY¥•Ü¹…‘‘=¹MÉ½±±1¥ÍÑ•¹•È¡¹•ÜI•å±•ÉY¥•Ü¹=¹MÉ½±±1¥ÍÑ•¹•È ¤ì(€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹MÉ½±±MÑ…Ñ•¡…¹•¡9½¹9Õ±°I•å±•ÉY¥•ÜÉ•å±•ÉY¥•Ü°¥¹Ğ¹•İMÑ…Ñ”¤ì(€€€€€€€€€€€€€€€ÍÕÁ•È¹½¹MÉ½±±MÑ…Ñ•¡…¹•¡É•å±•ÉY¥•Ü°¹•İMÑ…Ñ”¤ì(€€€€€€€€€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ!¥‘•M•ÑÑ¥¹1…å½ÕÑIÕ¸¤ì(€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡µ!¥‘•M•ÑÑ¥¹1…å½ÕÑIÕ¸°Á½ÍÑQ¥µ•½ÕĞ¤ì(€€€€€€€€€€€ô(€€€€€€€ô¤ì((€€€€€€€€¼¿R×¢(€€€€€€€µM•ÑÑ¥¹%Ñ•µY¥•Ü¹Í•Ñ=¹%Ñ•µ1¥ÍÑ•¹•È¡¹•ÜQÙI•å±•ÉY¥•Ü¹=¹%Ñ•µ1¥ÍÑ•¹•È ¤ì(€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹%Ñ•µAÉ•M•±•Ñ•¡QÙI•å±•ÉY¥•ÜÁ…É•¹Ğ°Y¥•Ü¥Ñ•µY¥•Ü°¥¹ĞÁ½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€ô((€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹%Ñ•µM•±•Ñ•¡QÙI•å±•ÉY¥•ÜÁ…É•¹Ğ°Y¥•Ü¥Ñ•µY¥•Ü°¥¹ĞÁ½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€¥˜€¡Á½Í¥Ñ¥½¸€ğ€À¤É•ÑÕÉ¸ì(€€€€€€€€€€€€€€€±¥Ù•M•ÑÑ¥¹É½ÕÁ‘…ÁÑ•È¹Í•Ñ½ÕÍ•‘É½ÕÁ%¹‘•à ´Ä¤ì(€€€€€€€€€€€€€€€±¥Ù•M•ÑÑ¥¹%Ñ•µ‘…ÁÑ•È¹Í•Ñ½ÕÍ•‘%Ñ•µ%¹‘•à¡Á½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ!¥‘•M•ÑÑ¥¹1…å½ÕÑIÕ¸¤ì(€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡µ!¥‘•M•ÑÑ¥¹1…å½ÕÑIÕ¸°Á½ÍÑQ¥µ•½ÕĞ¤ì(€€€€€€€€€€€ô((€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹%Ñ•µ±¥¬¡QÙI•å±•ÉY¥•ÜÁ…É•¹Ğ°Y¥•Ü¥Ñ•µY¥•Ü°¥¹ĞÁ½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€±¥­M•ÑÑ¥¹%Ñ•´¡Á½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€ô(€€€€€€€ô¤ì((€€€€€€€€¼¿š&/šrè¿š¢‡š.–f (€€€€€€€±¥Ù•M•ÑÑ¥¹%Ñ•µ‘…ÁÑ•È¹Í•Ñ=¹%Ñ•µ±¥­1¥ÍÑ•¹•È¡¹•Ü	…Í•EÕ¥­‘…ÁÑ•È¹=¹%Ñ•µ±¥­1¥ÍÑ•¹•È ¤ì(€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹%Ñ•µ±¥¬¡	…Í•EÕ¥­‘…ÁÑ•È…‘…ÁÑ•È°Y¥•ÜÙ¥•Ü°¥¹ĞÁ½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€…ÍÑ±¥­¡•­UÑ¥°¹¡•¬¡Ù¥•Ü¤ì(€€€€€€€€€€€€€€€±¥­M•ÑÑ¥¹%Ñ•´¡Á½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€ô(€€€€€€€ô¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥±¥­M•ÑÑ¥¹%Ñ•´¡¥¹ĞÁ½Í¥Ñ¥½¸¤ì(€€€€€€€¥¹ĞÍ•ÑÑ¥¹É½ÕÁ%¹‘•à€ô±¥Ù•M•ÑÑ¥¹É½ÕÁ‘…ÁÑ•È¹•ÑM•±•Ñ•‘É½ÕÁ%¹‘•à ¤ì(€€€€€€€¥˜€¡Í•ÑÑ¥¹É½ÕÁ%¹‘•à€øô€À€˜˜Í•ÑÑ¥¹É½ÕÁ%¹‘•à€ğ€Ì€˜˜€…¥ÍÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±Y…±¥ ¤¤ì(€€€€€€€€€€€É•ÑÕÉ¸ì(€€€€€€€ô(€€€€€€€¥˜€¡Í•ÑÑ¥¹É½ÕÁ%¹‘•à€ğ€Ğ¤ì(€€€€€€€€€€€¥˜€¡Á½Í¥Ñ¥½¸€ôô±¥Ù•M•ÑÑ¥¹%Ñ•µ‘…ÁÑ•È¹•ÑM•±•Ñ•‘%Ñ•µ%¹‘•à ¤¤(€€€€€€€€€€€€€€€É•ÑÕÉ¸ì(€€€€€€€€€€€±¥Ù•M•ÑÑ¥¹%Ñ•µ‘…ÁÑ•È¹Í•±•Ñ%Ñ•´¡Á½Í¥Ñ¥½¸°ÑÉÕ”°ÑÉÕ”¤ì(€€€€€€€ô(€€€€€€€Íİ¥Ñ €¡Í•ÑÑ¥¹É½ÕÁ%¹‘•à¤ì(€€€€€€€€€€€…Í”€Àè¼¿êÿ¢Ş¿–"š6ˆ(€€€€€€€€€€€€€€€¥˜€¡Á½Í¥Ñ¥½¸€ğ€ÀñğÁ½Í¥Ñ¥½¸€øôÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´¹•ÑM½ÕÉ•9Õ´ ¤¤‰É•…¬ì(€€€€€€€€€€€€€€€™…¥±½Ù•ÉMÑ…Ñ”¹Í•ÑUÍ•É1½­•¡ÑÉÕ”¤ì(€€€€€€€€€€€€€€€ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´¹Í•ÑM½ÕÉ•%¹‘•à¡Á½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€Á±…å¡…¹¹•°¡ÕÉÉ•¹Ñ¡…¹¹•±É½ÕÁ%¹‘•à°ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%¹‘•à±ÑÉÕ”¤ì(€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€…Í”€Äè¼¿Rï¦v‹š¾S’ú,(€€€€€€€€€€€€€€€±¥Ù•A±…å•É5…¹…•È¹¡…¹•1¥Ù•A±…å•ÉM…±”¡µY¥‘•½Y¥•Ü°Á½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€…Í”€Èè¼¿šJ·šRû¢‚(€€€€€€€€€€€€€€€µY¥‘•½Y¥•Ü¹É•±•…Í” ¤ì(€€€€€€€€€€€€€€€±¥Ù•A±…å•É5…¹…•È¹¡…¹•1¥Ù•A±…å•ÉQåÁ”¡µY¥‘•½Y¥•Ü°Á½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€µY¥‘•½Y¥•Ü¹Í•ÑUÉ°¡ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´¹•ÑUÉ° ¤±±¥Ù•¡…¹¹•±!•…‘•È ¤¤ì(€€€€€€€€€€€€€€€µY¥‘•½Y¥•Ü¹ÍÑ…ÉĞ ¤ì(€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€…Í”€Ìè¼¿¢Úš^Ûš6‹šê@(€€€€€€€€€€€€€€€!…İ¬¹ÁÕĞ¡!…İ­½¹™¥œ¹1%Y}=99Q}Q%5=UP°Á½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€…Í”€Ğè¼¿–?––÷¢ºûö¸(€€€€€€€€€€€€€€€‰½½±•…¸Í•±•Ğ€ô™…±Í”ì(€€€€€€€€€€€€€€€Íİ¥Ñ €¡Á½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€€€€€…Í”€Àè(€€€€€€€€€€€€€€€€€€€€€€€Í•±•Ğ€ô€…!…İ¬¹•Ğ¡!…İ­½¹™¥œ¹1%Y}M!=]}Q%5°™…±Í”¤ì(€€€€€€€€€€€€€€€€€€€€€€€!…İ¬¹ÁÕĞ¡!…İ­½¹™¥œ¹1%Y}M!=]}Q%5°Í•±•Ğ¤ì(€€€€€€€€€€€€€€€€€€€€€€€Í¡½İQ¥µ” ¤ì(€€€€€€€€€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€€€€€€€€€…Í”€Äè(€€€€€€€€€€€€€€€€€€€€€€€Í•±•Ğ€ô€…!…İ¬¹•Ğ¡!…İ­½¹™¥œ¹1%Y}M!=]}9Q}MA°™…±Í”¤ì(€€€€€€€€€€€€€€€€€€€€€€€!…İ¬¹ÁÕĞ¡!…İ­½¹™¥œ¹1%Y}M!=]}9Q}MA°Í•±•Ğ¤ì(€€€€€€€€€€€€€€€€€€€€€€€Í¡½İ9•ÑMÁ•• ¤ì(€€€€€€€€€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€€€€€€€€€…Í”€Èè(€€€€€€€€€€€€€€€€€€€€€€€Í•±•Ğ€ô€…!…İ¬¹•Ğ¡!…İ­½¹™¥œ¹1%Y}!991}IYIM°™…±Í”¤ì(€€€€€€€€€€€€€€€€€€€€€€€!…İ¬¹ÁÕĞ¡!…İ­½¹™¥œ¹1%Y}!991}IYIM°Í•±•Ğ¤ì(€€€€€€€€€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€€€€€€€€€…Í”€Ìè(€€€€€€€€€€€€€€€€€€€€€€€Í•±•Ğ€ô€…!…İ¬¹•Ğ¡!…İ­½¹™¥œ¹1%Y}I=MM}I=U@°™…±Í”¤ì(€€€€€€€€€€€€€€€€€€€€€€€!…İ¬¹ÁÕĞ¡!…İ­½¹™¥œ¹1%Y}I=MM}I=U@°Í•±•Ğ¤ì(€€€€€€€€€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€±¥Ù•M•ÑÑ¥¹%Ñ•µ‘…ÁÑ•È¹Í•±•Ñ%Ñ•´¡Á½Í¥Ñ¥½¸°Í•±•Ğ°™…±Í”¤ì(€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€…Í”€Ôè¼¿–’kšêC–"š6ˆ(€€€€€€€€€€€€€€€€¼½Q=<(€€€€€€€€€€€€€€€¥˜¡Á½Í¥Ñ¥½¸ôõÁ¥½¹™¥œ¹•Ñ1¥Ù•É½ÕÁ%¹‘•à ¤¥‰É•…¬ì(€€€€€€€€€€€€€€€MÑÉ¥¹œÕÉÉ•¹Ñ¡…¹¹•±9…µ”€ô•ÑAÉ•™•ÉÉ•‘1¥Ù•I•™É•Í¡¡…¹¹•±9…µ” ¤ì(€€€€€€€€€€€€€€€¥¹ĞÕÉÉ•¹ÑM½ÕÉ•%¹‘•à€ô•ÑAÉ•™•ÉÉ•‘1¥Ù•I•™É•Í¡M½ÕÉ•%¹‘•à ¤ì(€€€€€€€€€€€€€€€)Í½¹ÉÉ…ä±¥Ù•}É½ÕÁÌõ!…İ¬¹•Ğ¡!…İ­½¹™¥œ¹1%Y}I=UA}1%MP±¹•Ü)Í½¹ÉÉ…ä ¤¤ì(€€€€€€€€€€€€€€€¥˜€¡±¥Ù•}É½ÕÁÌ€ôô¹Õ±°ñğÁ½Í¥Ñ¥½¸€øô±¥Ù•}É½ÕÁÌ¹Í¥é” ¤¤‰É•…¬ì(€€€€€€€€€€€€€€€±¥Ù•½¹™¥I•ÅÕ•ÍÑ%¬¬ì(€€€€€€€€€€€€€€€)Í½¹=‰©•Ğ±¥Ù•Í=	(€ô±¥Ù•}É½ÕÁÌ¹•Ğ¡Á½Í¥Ñ¥½¸¤¹•ÑÍ)Í½¹=‰©•Ğ ¤ì(€€€€€€€€€€€€€€€±¥Ù•M•ÑÑ¥¹%Ñ•µ‘…ÁÑ•È¹Í•±•Ñ%Ñ•´¡Á½Í¥Ñ¥½¸°ÑÉÕ”°ÑÉÕ”¤ì(€€€€€€€€€€€€€€€Á¥½¹™¥œ¹Í•Ñ1¥Ù•É½ÕÁ%¹‘•à¡Á½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€Á¥½¹™¥œ¹•Ğ ¤¹±½…‘1¥Ù•Á¤¡±¥Ù•Í=	(¤ì(€€€€€€€€€€€€€€€¥˜€¡Á¥½¹™¥œ¹•Ğ ¤¹•Ñ¡…¹¹•±É½ÕÁ1¥ÍĞ ¤¹¥ÍµÁÑä ¤¤ì(€€€€€€€€€€€€€€€€€€€¥˜€¡µY¥‘•½Y¥•Ü€„ô¹Õ±°¤µY¥‘•½Y¥•Ü¹É•±•…Í” ¤ì(€€€€€€€€€€€€€€€€€€€Í•ÑµÁÑå1¥Ù•¡…¹¹•±1¥ÍĞ¡™…±Í”¤ì(€€€€€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€É•™É•Í¡1¥Ù•¡…¹¹•±1¥ÍÑ¹‘A±…ä¡ÕÉÉ•¹Ñ¡…¹¹•±9…µ”°ÕÉÉ•¹ÑM½ÕÉ•%¹‘•à¤ì(€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€…Í”€Øèì¼¿¦7ö»–"š6ˆ(€€€€€€€€€€€€€€€ÉÉ…å1¥ÍĞñMÑÉ¥¹œø¡¥ÍÑ½Éä€ô!…İ¬¹•Ğ¡!…İ­½¹™¥œ¹1%Y}A%}!%MQ=Id°¹•ÜÉÉ…å1¥ÍĞñMÑÉ¥¹œø ¤¤ì(€€€€€€€€€€€€€€€¥˜€¡¡¥ÍÑ½Éä¹¥ÍµÁÑä ¤ñğÁ½Í¥Ñ¥½¸€ğ€ÀñğÁ½Í¥Ñ¥½¸€øô¡¥ÍÑ½Éä¹Í¥é” ¤¤‰É•…¬ì(€€€€€€€€€€€€€€€MÑÉ¥¹œÙ…±Õ”€ô¡¥ÍÑ½Éä¹•Ğ¡Á½Í¥Ñ¥½¸¤ì(€€€€€€€€€€€€€€€MÑÉ¥¹œ½±‘1¥Ù•Á¤€ô!…İ¬¹•Ğ¡!…İ­½¹™¥œ¹1%Y}A%}UI0°€ˆˆ¤ì(€€€€€€€€€€€€€€€MÑÉ¥¹œ½¹™¥¡…¹¹•±9…µ”€ô•ÑAÉ•™•ÉÉ•‘1¥Ù•I•™É•Í¡¡…¹¹•±9…µ” ¤ì(€€€€€€€€€€€€€€€¥¹Ğ½¹™¥M½ÕÉ•%¹‘•à€ô•ÑAÉ•™•ÉÉ•‘1¥Ù•I•™É•Í¡M½ÕÉ•%¹‘•à ¤ì(€€€€€€€€€€€€€€€±¥Ù•M•ÑÑ¥¹%Ñ•µ‘…ÁÑ•È¹Í•±•Ñ%Ñ•´¡Á½Í¥Ñ¥½¸°ÑÉÕ”°ÑÉÕ”¤ì(€€€€€€€€€€€€€€€¥˜€¡Ù…±Õ”¹•ÅÕ…±Ì¡½±‘1¥Ù•Á¤¤¤‰É•…¬ì(€€€€€€€€€€€€€€€™¥¹…°¥¹ĞÉ•ÅÕ•ÍÑ%€ô€¬­±¥Ù•½¹™¥I•ÅÕ•ÍÑ%ì(€€€€€€€€€€€€€€€!…İ¬¹ÁÕĞ¡!…İ­½¹™¥œ¹1%Y}A%}UI0°Ù…±Õ”¤ì(€€€€€€€€€€€€€€€!¥ÍÑ½Éå!•±Á•È¹Í•Ñ1¥Ù•Á¥!¥ÍÑ½Éä¡Ù…±Õ”¤ì(€€€€€€€€€€€€€€€Á¥½¹™¥œ¹•Ğ ¤¹É•™É•Í¡1¥Ù•Á¥!¥ÍÑ½Éå%Ñ•µÌ ¤ì(€€€€€€€€€€€€€€€Á¥½¹™¥œ¹•Ğ ¤¹±½…‘1¥Ù•½¹™¥œ¡™…±Í”°¹•ÜÁ¥½¹™¥œ¹1½…‘½¹™¥…±±‰…¬ ¤ì(€€€€€€€€€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥ÍÕ•ÍÌ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍĞ¡¹•ÜIÕ¹¹…‰±” ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€€€€€€€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥ÉÕ¸ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¥˜€¡É•ÅÕ•ÍÑ%€„ô±¥Ù•½¹™¥I•ÅÕ•ÍÑ%ñğ¥Í¥¹¥Í¡¥¹œ ¤¤É•ÑÕÉ¸ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€É•™É•Í¡1¥Ù•¡…¹¹•±1¥ÍÑ¹‘A±…ä¡½¹™¥¡…¹¹•±9…µ”°½¹™¥M½ÕÉ•%¹‘•à¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€€€€€€€€€ô¤ì(€€€€€€€€€€€€€€€€€€€ô((€€€€€€€€€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥•ÉÉ½È¡MÑÉ¥¹œµÍœ¤ì(€€€€€€€€€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍĞ¡¹•ÜIÕ¹¹…‰±” ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€€€€€€€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥ÉÕ¸ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¥˜€¡É•ÅÕ•ÍÑ%€„ô±¥Ù•½¹™¥I•ÅÕ•ÍÑ%ñğ¥Í¥¹¥Í¡¥¹œ ¤¤É•ÑÕÉ¸ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¥˜€¡µY¥‘•½Y¥•Ü€„ô¹Õ±°¤µY¥‘•½Y¥•Ü¹É•±•…Í” ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€Á¥½¹™¥œ¹•Ğ ¤¹É•™É•Í¡1¥Ù•Á¥!¥ÍÑ½Éå%Ñ•µÌ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€Í•ÑµÁÑå1¥Ù•¡…¹¹•±1¥ÍĞ¡™…±Í”¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€Q½…ÍĞ¹µ…­•Q•áĞ¡1¥Ù•A±…åÑ¥Ù¥Ñä¹Ñ¡¥Ì°µÍœ°Q½…ÍĞ¹19Q!}M!=IP¤¹Í¡½Ü ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€€€€€€€€€ô¤ì(€€€€€€€€€€€€€€€€€€€ô((€€€€€€€€€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥¹½Ñ¥”¡MÑÉ¥¹œµÍœ¤ì(€€€€€€€€€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍĞ¡¹•ÜIÕ¹¹…‰±” ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€€€€€€€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥ÉÕ¸ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¥˜€¡É•ÅÕ•ÍÑ%€„ô±¥Ù•½¹™¥I•ÅÕ•ÍÑ%ñğ¥Í¥¹¥Í¡¥¹œ ¤¤É•ÑÕÉ¸ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€Q½…ÍĞ¹µ…­•Q•áĞ¡1¥Ù•A±…åÑ¥Ù¥Ñä¹Ñ¡¥Ì°µÍœ°Q½…ÍĞ¹19Q!}M!=IP¤¹Í¡½Ü ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€€€€€€€€€ô¤ì(€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€ô¤ì(€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€ô(€€€€€€€ô(€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ!¥‘•M•ÑÑ¥¹1…å½ÕÑIÕ¸¤ì(€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡µ!¥‘•M•ÑÑ¥¹1…å½ÕÑIÕ¸°Á½ÍÑQ¥µ•½ÕĞ¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”MÑÉ¥¹œ•ÑAÉ•™•ÉÉ•‘1¥Ù•I•™É•Í¡¡…¹¹•±9…µ” ¤ì(€€€€€€€¥˜€¡ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´€„ô¹Õ±°¤É•ÑÕÉ¸ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´¹•Ñ¡…¹¹•±9…µ” ¤ì(€€€€€€€É•ÑÕÉ¸!…İ¬¹•Ğ¡!…İ­½¹™¥œ¹1%Y}!990°€ˆˆ¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”¥¹Ğ•ÑAÉ•™•ÉÉ•‘1¥Ù•I•™É•Í¡M½ÕÉ•%¹‘•à ¤ì(€€€€€€€¥˜€¡ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´€„ô¹Õ±°¤É•ÑÕÉ¸ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´¹•ÑM½ÕÉ•%¹‘•à ¤ì(€€€€€€€É•ÑÕÉ¸€´Äì(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥É•™É•Í¡1¥Ù•¡…¹¹•±1¥ÍÑ¹‘A±…ä¡MÑÉ¥¹œ¡…¹¹•±9…µ”°¥¹ĞÍ½ÕÉ•%¹‘•à¤ì(€€€€€€€É•™É•Í¡¥¹1¥Ù•¡…¹¹•±1¥ÍĞ€ôÑÉÕ”ì(€€€€€€€Á•¹‘¥¹1¥Ù•I•™É•Í¡¡…¹¹•±9…µ”€ô¡…¹¹•±9…µ”ì(€€€€€€€Á•¹‘¥¹1¥Ù•I•™É•Í¡M½ÕÉ•%¹‘•à€ôÍ½ÕÉ•%¹‘•àì(€€€€€€€ÕÉÉ•¹Ñ1¥Ù•1½½­	…­%¹‘•à€ô€´Äì(€€€€€€€ÕÉÉ•¹Ñ1¥Ù•¡…¹•M½ÕÉ•Q¥µ•Ì€ô€Àì(€€€€€€€…±±½İ1¥Ù•Mİ¥Ñ¡A±…å•È€ôÑÉÕ”ì(€€€€€€€¡…¹¹•±É½ÕÁA…ÍÍİ½É‘½¹™¥Éµ•¹±•…È ¤ì(€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ½¹¹•ÑQ¥µ•½ÕÑ¡…¹•M½ÕÉ•IÕ¸¤ì(€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ1½…‘ÁIÕ¸¤ì(€€€€€€€¡¥‘•Mİ¥Ñ¡¡…¹¹•±M¹…ÁÍ¡½Ğ ¤ì(€€€€€€€¥˜€¡ÑÙ1•™Ñ¡…¹¹•±1¥ÍÑ1…å½ÕĞ€„ô¹Õ±°¤ÑÙ1•™Ñ¡…¹¹•±1¥ÍÑ1…å½ÕĞ¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹%9Y%M%	1¤ì(€€€€€€€¥˜€¡ÑÙI¥¡ÑM•ÑÑ¥¹1…å½ÕĞ€„ô¹Õ±°¤ÑÙI¥¡ÑM•ÑÑ¥¹1…å½ÕĞ¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹%9Y%M%	1¤ì(€€€€€€€¥˜€¡±¥Ù•¡…¹¹•±É½ÕÁ‘…ÁÑ•È€„ô¹Õ±°¤ì(€€€€€€€€€€€±¥Ù•¡…¹¹•±É½ÕÁ‘…ÁÑ•È¹±•…ÉÉ½ÕÁMÑ…Ñ” ¤ì(€€€€€€€ô(€€€€€€€¥˜€¡±¥Ù•¡…¹¹•±%Ñ•µ‘…ÁÑ•È€„ô¹Õ±°¤ì(€€€€€€€€€€€±¥Ù•¡…¹¹•±%Ñ•µ‘…ÁÑ•È¹Í•Ñ½ÕÍ•‘¡…¹¹•±%¹‘•à ´Ä¤ì(€€€€€€€€€€€±¥Ù•¡…¹¹•±%Ñ•µ‘…ÁÑ•È¹Í•ÑM•±•Ñ•‘¡…¹¹•±%¹‘•à ´Ä¤ì(€€€€€€€€€€€±¥Ù•¡…¹¹•±%Ñ•µ‘…ÁÑ•È¹Í•Ñ9•İ…Ñ„¡¹•ÜÉÉ…å1¥ÍĞñ1¥Ù•¡…¹¹•±%Ñ•´ø ¤¤ì(€€€€€€€ô(€€€€€€€¥¹¥Ñ1¥Ù•¡…¹¹•±1¥ÍĞ ¤ì(€€€€€€€¥¹¥Ñ1¥Ù•M•ÑÑ¥¹É½ÕÁ1¥ÍĞ ¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”¥¹Ğ•ÑÕÉÉ•¹Ñ1¥Ù•Á¥!¥ÍÑ½Éå%¹‘•à ¤ì(€€€€€€€ÉÉ…å1¥ÍĞñMÑÉ¥¹œø¡¥ÍÑ½Éä€ô!…İ¬¹•Ğ¡!…İ­½¹™¥œ¹1%Y}A%}!%MQ=Id°¹•ÜÉÉ…å1¥ÍĞñMÑÉ¥¹œø ¤¤ì(€€€€€€€¥˜€¡¡¥ÍÑ½Éä¹¥ÍµÁÑä ¤¤É•ÑÕÉ¸€´Äì(€€€€€€€MÑÉ¥¹œÕÉÉ•¹Ğ€ô!…İ¬¹•Ğ¡!…İ­½¹™¥œ¹1%Y}A%}UI0°€ˆˆ¤ì(€€€€€€€¥¹Ğ¥‘à€ô¡¥ÍÑ½Éä¹¥¹‘•á=˜¡ÕÉÉ•¹Ğ¤ì(€€€€€€€É•ÑÕÉ¸¥‘à€øô€À€ü¥‘à€è€´Äì(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥¥¹¥Ñ1¥Ù•¡…¹¹•±1¥ÍĞ ¤ì(€€€€€€€¥˜€¡Á¥½¹™¥œ¹•Ğ ¤¹Í¡½Õ±‘I•±½…‘1¥Ù•½¹™¥œ ¤¤ì(€€€€€€€€€€€±½…‘1¥Ù•½¹™¥=¹¹Ñ•È ¤ì(€€€€€€€€€€€É•ÑÕÉ¸ì(€€€€€€€ô(€€€€€€€1¥ÍĞñ1¥Ù•¡…¹¹•±É½ÕÀø±¥ÍĞ€ôÁ¥½¹™¥œ¹•Ğ ¤¹•Ñ¡…¹¹•±É½ÕÁ1¥ÍĞ ¤ì(€€€€€€€¥˜€¡±¥ÍĞ¹¥ÍµÁÑä ¤¤ì(€€€€€€€€€€€±½…‘1¥Ù•½¹™¥=¹¹Ñ•È ¤ì(€€€€€€€€€€€É•ÑÕÉ¸ì(€€€€€€€ô(€€€€€€€¥¹¥Ñ1¥Ù•=‰¨ ¤ì(€€€€€€€¥˜€¡±¥ÍĞ¹Í¥é” ¤€ôô€Ä€˜˜±¥ÍĞ¹•Ğ À¤¹•ÑÉ½ÕÁ9…µ” ¤¹ÍÑ…ÉÑÍ]¥Ñ  ‰¡ÑÑÀè¼¼ÄÈÜ¸À¸À¸Äˆ¤¤ì(€€€€€€€€€€€±½…‘AÉ½áå1¥Ù•Ì¡±¥ÍĞ¹•Ğ À¤¹•ÑÉ½ÕÁ9…µ” ¤¤ì(€€€€€€€ô•±Í”ì(€€€€€€€€€€€…ÁÁ±å1¥Ù•¡…¹¹•±É½ÕÁÌ¡±¥ÍĞ¤ì(€€€€€€€ô(€€€ô((€€€ÁÉ¥Ù…Ñ”‰½½±•…¸±½…‘¥¹1¥Ù•½¹™¥=¹¹Ñ•È€ô™…±Í”ì((€€€ÁÉ¥Ù…Ñ”Ù½¥±½…‘1¥Ù•½¹™¥=¹¹Ñ•È ¤ì(€€€€€€€¥˜€¡±½…‘¥¹1¥Ù•½¹™¥=¹¹Ñ•È¤É•ÑÕÉ¸ì(€€€€€€€±½…‘¥¹1¥Ù•½¹™¥=¹¹Ñ•È€ôÑÉÕ”ì(€€€€€€€Í¡½İ1½…‘¥¹œ ¤ì(€€€€€€€Á¥½¹™¥œ¹•Ğ ¤¹±½…‘1¥Ù•½¹™¥œ¡ÑÉÕ”°¹•ÜÁ¥½¹™¥œ¹1½…‘½¹™¥…±±‰…¬ ¤ì(€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥ÍÕ•ÍÌ ¤ì(€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍĞ¡¹•ÜIÕ¹¹…‰±” ¤ì(€€€€€€€€€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥ÉÕ¸ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€±½…‘¥¹1¥Ù•½¹™¥=¹¹Ñ•È€ô™…±Í”ì(€€€€€€€€€€€€€€€€€€€€€€€¥¹¥Ñ1¥Ù•¡…¹¹•±1¥ÍĞ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€¥¹¥Ñ1¥Ù•M•ÑÑ¥¹É½ÕÁ1¥ÍĞ ¤ì(€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€ô¤ì(€€€€€€€€€€€ô((€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥•ÉÉ½È¡MÑÉ¥¹œµÍœ¤ì(€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍĞ¡¹•ÜIÕ¹¹…‰±” ¤ì(€€€€€€€€€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥ÉÕ¸ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€±½…‘¥¹1¥Ù•½¹™¥=¹¹Ñ•È€ô™…±Í”ì(€€€€€€€€€€€€€€€€€€€€€€€Í•ÑµÁÑå1¥Ù•¡…¹¹•±1¥ÍĞ ¤ì(€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€ô¤ì(€€€€€€€€€€€ô((€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥¹½Ñ¥”¡MÑÉ¥¹œµÍœ¤ì(€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍĞ¡¹•ÜIÕ¹¹…‰±” ¤ì(€€€€€€€€€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥ÉÕ¸ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€Q½…ÍĞ¹µ…­•Q•áĞ¡1¥Ù•A±…åÑ¥Ù¥Ñä¹Ñ¡¥Ì°µÍœ°Q½…ÍĞ¹19Q!}M!=IP¤¹Í¡½Ü ¤ì(€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€ô¤ì(€€€€€€€€€€€ô(€€€€€€€ô¤ì(€€€ô((€€€ÁÕ‰±¥ŒÙ½¥±½…‘AÉ½áå1¥Ù•Ì¡MÑÉ¥¹œÕÉ°¤ì(€€€€€€€ÑÉäì(€€€€€€€€€€€UÉ¤Á…ÉÍ•‘UÉ°€ôUÉ¤¹Á…ÉÍ”¡ÕÉ°¤ì(€€€€€€€€€€€ÕÉ°€ô¹•ÜMÑÉ¥¹œ¡	…Í”ØĞ¹‘•½‘”¡Á…ÉÍ•‘UÉ°¹•ÑEÕ•ÉåA…É…µ•Ñ•È ‰•áĞˆ¤°	…Í”ØĞ¹U1Pğ	…Í”ØĞ¹UI1}Mğ	…Í”ØĞ¹9=}]I@¤°€‰UQ´àˆ¤ì(€€€€€€€ô…Ñ €¡Q¡É½İ…‰±”Ñ ¤ì(€€€€€€€€€€€¥˜€ …ÕÉ°¹ÍÑ…ÉÑÍ]¥Ñ  ‰¡ÑÑÀè¼¼ÄÈÜ¸À¸À¸Äˆ¤¤ì(€€€€€€€€€€€€€€€Í•ÑµÁÑå1¥Ù•¡…¹¹•±1¥ÍĞ ¤ì(€€€€€€€€€€€€€€€É•ÑÕÉ¸ì(€€€€€€€€€€€ô(€€€€€€€ô(€€€€€€€¥˜€ …¥ÍY…±¥‘1¥Ù•AÉ½áåUÉ°¡ÕÉ°¤¤ì(€€€€€€€€€€€Í•ÑµÁÑå1¥Ù•¡…¹¹•±1¥ÍĞ ¤ì(€€€€€€€€€€€É•ÑÕÉ¸ì(€€€€€€€ô(€€€€€€€¥˜€ …É•™É•Í¡¥¹1¥Ù•¡…¹¹•±1¥ÍĞ¤ì(€€€€€€€€€€€Í¡½İ1½…‘¥¹œ ¤ì(€€€€€€€ô((€€€€€€€1=¹¤ ‰•¡¼µ±¥Ù”µÕÉ°èˆ­ÕÉ°¤ì((€€€€€€€¥˜¡ÕÉ°¹½¹Ñ…¥¹Ì ˆ¹Áäˆ¤ñğÕÉ°¹½¹Ñ…¥¹Ì ˆ¹©Ìˆ¤¥ì(€€€€€€€€€€€MÑÉ¥¹œ™¥¹…±UÉ°€ôÕÉ°ì(€€€€€€€€€€€IÕ¹¹…‰±”İ…¥ÑI•ÍÁ½¹Í”€ô¹•ÜIÕ¹¹…‰±” ¤ì(€€€€€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥ÉÕ¸ ¤ì(€€€€€€€€€€€€€€€€€€€á•ÕÑ½ÉM•ÉÙ¥”•á•ÕÑ½È€ôá•ÕÑ½ÉÌ¹¹•İM¥¹±•Q¡É•…‘á•ÕÑ½È ¤ì(€€€€€€€€€€€€€€€€€€€ÕÑÕÉ”ñMÑÉ¥¹œø™ÕÑÕÉ”€ô•á•ÕÑ½È¹ÍÕ‰µ¥Ğ¡¹•Ü…±±…‰±”ñMÑÉ¥¹œø ¤ì(€€€€€€€€€€€€€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€€€€€€€€€€€€€ÁÕ‰±¥ŒMÑÉ¥¹œ…±° ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€MÁ¥‘•ÈÍÀ€ôÁ¥½¹™¥œ¹•Ğ ¤¹•Ñ1¥Ù•M@¡™¥¹…±UÉ°¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€MÑÉ¥¹œ©Í½¸õÍÀ¹±¥Ù•½¹Ñ•¹Ğ¡™¥¹…±UÉ°¤ì(¼¼€€€€€€€€€€€€€€€€€€€€€€€€€€€1=¹¤ ‰•¡¼´µ±½…‘AÉ½áå1¥Ù•Ìµ©Í½¸´´ˆ­©Í½¸¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€É•ÑÕÉ¸©Í½¸ì(€€€€€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€€€€€ô¤ì(€€€€€€€€€€€€€€€€€€€MÑÉ¥¹œÍ½ÉÑ)Í½¸€ô¹Õ±°ì(€€€€€€€€€€€€€€€€€€€ÑÉäì(€€€€€€€€€€€€€€€€€€€€€€€Í½ÉÑ)Í½¸€ô™ÕÑÕÉ”¹•Ğ¡Á¥½¹™¥œ¹•Ğ ¤¹•Ñ1¥Ù•½¹¹•ÑQ¥µ•½ÕÑM•½¹‘Ì ¤°Q¥µ•U¹¥Ğ¹M=9L¤ì(€€€€€€€€€€€€€€€€€€€ô…Ñ €¡Q¥µ•½ÕÑá•ÁÑ¥½¸”¤ì(€€€€€€€€€€€€€€€€€€€€€€€”¹ÁÉ¥¹ÑMÑ…­QÉ…” ¤ì(€€€€€€€€€€€€€€€€€€€€€€€™ÕÑÕÉ”¹…¹•°¡ÑÉÕ”¤ì(€€€€€€€€€€€€€€€€€€€ô…Ñ €¡%¹Ñ•ÉÉÕÁÑ•‘á•ÁÑ¥½¸ğá•ÕÑ¥½¹á•ÁÑ¥½¸”¤ì(€€€€€€€€€€€€€€€€€€€€€€€”¹ÁÉ¥¹ÑMÑ…­QÉ…” ¤ì(€€€€€€€€€€€€€€€€€€€ô™¥¹…±±äì(€€€€€€€€€€€€€€€€€€€€€€€¥˜€¡Í½ÉÑ)Í½¸ôõ¹Õ±°ñğÍ½ÉÑ)Í½¸¹¥ÍµÁÑä ¤¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€€¼¼ƒ¦ŠG¦O–"_¢†£’âë¦ëš^Û¾ò3’öÿR£¦îc¢º“šJ·šRû–"_¢† (€€€€€€€€€€€€€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍĞ¡¹•ÜIÕ¹¹…‰±” ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥ÉÕ¸ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€Í•ÑµÁÑå1¥Ù•¡…¹¹•±1¥ÍĞ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€€€€€€€€€€€€€ô¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€É•ÑÕÉ¸ì(€€€€€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€€€€€€€€€)Í½¹ÉÉ…ä±¥Ù•ÍÉÉ…ä€ôQáÑMÕ‰ÍÉ¥‰”¹Á…ÉÍ•Q½)Í½¹ÉÉ…ä¡Í½ÉÑ)Í½¸¤ì((€€€€€€€€€€€€€€€€€€€€€€€Á¥½¹™¥œ¹•Ğ ¤¹±½…‘1¥Ù•Ì¡±¥Ù•ÍÉÉ…ä¤ì(€€€€€€€€€€€€€€€€€€€€€€€1¥ÍĞñ1¥Ù•¡…¹¹•±É½ÕÀø±¥ÍĞ€ôÁ¥½¹™¥œ¹•Ğ ¤¹•Ñ¡…¹¹•±É½ÕÁ1¥ÍĞ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€¥˜€¡±¥ÍĞ¹¥ÍµÁÑä ¤¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍĞ¡¹•ÜIÕ¹¹…‰±” ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥ÉÕ¸ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€Í•ÑµÁÑå1¥Ù•¡…¹¹•±1¥ÍĞ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€€€€€€€€€€€€€ô¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€É•ÑÕÉ¸ì(€€€€€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€€€€€€€€€™¥¹…°ÉÉ…å1¥ÍĞñ1¥Ù•¡…¹¹•±É½ÕÀø±½…‘•‘É½ÕÁÌ€ô¹•ÜÉÉ…å1¥ÍĞğø¡±¥ÍĞ¤ì((€€€€€€€€€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍĞ¡¹•ÜIÕ¹¹…‰±” ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€€€€€€€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥ÉÕ¸ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€…ÁÁ±å1¥Ù•¡…¹¹•±É½ÕÁÌ¡±½…‘•‘É½ÕÁÌ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€€€€€€€€€ô¤ì(€€€€€€€€€€€€€€€€€€€€€€€ÑÉäì(€€€€€€€€€€€€€€€€€€€€€€€€€€€•á•ÕÑ½È¹Í¡ÕÑ‘½İ¸ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€ô…Ñ €¡Q¡É½İ…‰±”Ñ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€Ñ ¹ÁÉ¥¹ÑMÑ…­QÉ…” ¤ì(€€€€€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€ôì(€€€€€€€€€€€á•ÕÑ½ÉÌ¹¹•İM¥¹±•Q¡É•…‘á•ÕÑ½È ¤¹•á•ÕÑ”¡İ…¥ÑI•ÍÁ½¹Í”¤ì(€€€€€€€õ•±Í”ì(€€€€€€€€€€€=­¼¸ñMÑÉ¥¹œù•Ğ¡ÕÉ°¤¹•á•ÕÑ”¡¹•Ü‰Í…±±‰…¬ñMÑÉ¥¹œø ¤ì((€€€€€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€€€€€ÁÕ‰±¥ŒMÑÉ¥¹œ½¹Ù•ÉÑI•ÍÁ½¹Í”¡½­¡ÑÑÀÌ¹I•ÍÁ½¹Í”É•ÍÁ½¹Í”¤Ñ¡É½İÌQ¡É½İ…‰±”ì(€€€€€€€€€€€€€€€€€€€…ÍÍ•ÉĞÉ•ÍÁ½¹Í”¹‰½‘ä ¤€„ô¹Õ±°ì(€€€€€€€€€€€€€€€€€€€É•ÑÕÉ¸É•ÍÁ½¹Í”¹‰½‘ä ¤¹ÍÑÉ¥¹œ ¤ì(€€€€€€€€€€€€€€€ô((€€€€€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹MÕ•ÍÌ¡I•ÍÁ½¹Í”ñMÑÉ¥¹œøÉ•ÍÁ½¹Í”¤ì(€€€€€€€€€€€€€€€€€€€)Í½¹ÉÉ…ä±¥Ù•ÍÉÉ…ä€ôQáÑMÕ‰ÍÉ¥‰”¹Á…ÉÍ•Q½)Í½¹ÉÉ…ä¡É•ÍÁ½¹Í”¹‰½‘ä ¤¤ì((€€€€€€€€€€€€€€€€€€€Á¥½¹™¥œ¹•Ğ ¤¹±½…‘1¥Ù•Ì¡±¥Ù•ÍÉÉ…ä¤ì(€€€€€€€€€€€€€€€€€€€1¥ÍĞñ1¥Ù•¡…¹¹•±É½ÕÀø±¥ÍĞ€ôÁ¥½¹™¥œ¹•Ğ ¤¹•Ñ¡…¹¹•±É½ÕÁ1¥ÍĞ ¤ì(€€€€€€€€€€€€€€€€€€€¥˜€¡±¥ÍĞ¹¥ÍµÁÑä ¤¤ì(€€€€€€€€€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍĞ¡¹•ÜIÕ¹¹…‰±” ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€€€€€€€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥ÉÕ¸ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€Í•ÑµÁÑå1¥Ù•¡…¹¹•±1¥ÍĞ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€€€€€€€€€ô¤ì(€€€€€€€€€€€€€€€€€€€€€€€É•ÑÕÉ¸ì(€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€€€€€™¥¹…°ÉÉ…å1¥ÍĞñ1¥Ù•¡…¹¹•±É½ÕÀø±½…‘•‘É½ÕÁÌ€ô¹•ÜÉÉ…å1¥ÍĞğø¡±¥ÍĞ¤ì((€€€€€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍĞ¡¹•ÜIÕ¹¹…‰±” ¤ì(€€€€€€€€€€€€€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€€€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥ÉÕ¸ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€…ÁÁ±å1¥Ù•¡…¹¹•±É½ÕÁÌ¡±½…‘•‘É½ÕÁÌ¤ì(€€€€€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€€€€€ô¤ì(€€€€€€€€€€€€€€€ô((€€€€€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹ÉÉ½È¡I•ÍÁ½¹Í”ñMÑÉ¥¹œøÉ•ÍÁ½¹Í”¤ì(€€€€€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍĞ¡¹•ÜIÕ¹¹…‰±” ¤ì(€€€€€€€€€€€€€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€€€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥ÉÕ¸ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€Í•ÑµÁÑå1¥Ù•¡…¹¹•±1¥ÍĞ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€€€€€ô¤ì(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€ô¤ì(€€€€€€€ô(€€€ô((€€€ÁÉ¥Ù…Ñ”‰½½±•…¸¥ÍY…±¥‘1¥Ù•AÉ½áåUÉ°¡MÑÉ¥¹œÕÉ°¤ì(€€€€€€€¥˜€¡Q•áÑUÑ¥±Ì¹¥ÍµÁÑä¡ÕÉ°¤¤É•ÑÕÉ¸™…±Í”ì(€€€€€€€MÑÉ¥¹œ±½İ•ÉUÉ°€ôÕÉ°¹ÑÉ¥´ ¤¹Ñ½1½İ•É…Í”¡1½…±”¹UL¤ì(€€€€€€€É•ÑÕÉ¸±½İ•ÉUÉ°¹ÍÑ…ÉÑÍ]¥Ñ  ‰¡ÑÑÀè¼¼ˆ¤(€€€€€€€€€€€€€€€ñğ±½İ•ÉUÉ°¹ÍÑ…ÉÑÍ]¥Ñ  ‰¡ÑÑÁÌè¼¼ˆ¤(€€€€€€€€€€€€€€€ñğ±½İ•ÉUÉ°¹ÍÑ…ÉÑÍ]¥Ñ  ‰ÉÑÍÀè¼¼ˆ¤(€€€€€€€€€€€€€€€ñğ±½İ•ÉUÉ°¹ÍÑ…ÉÑÍ]¥Ñ  ‰ÉÑµÀè¼¼ˆ¤(€€€€€€€€€€€€€€€ñğ±½İ•ÉUÉ°¹ÍÑ…ÉÑÍ]¥Ñ  ‰ÉÑÀè¼¼ˆ¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥…ÁÁ±å1¥Ù•¡…¹¹•±É½ÕÁÌ¡1¥ÍĞñ1¥Ù•¡…¹¹•±É½ÕÀøÉ½ÕÁÌ¤ì(€€€€€€€±¥Ù•¡…¹¹•±É½ÕÁ1¥ÍĞ¹±•…È ¤ì(€€€€€€€±¥Ù•¡…¹¹•±É½ÕÁ1¥ÍĞ¹…‘‘±°¡É½ÕÁÌ¤ì(€€€€€€€Í¡½İMÕ•ÍÌ ¤ì(€€€€€€€¥¹¥Ñ1¥Ù•MÑ…Ñ” ¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥¥¹¥Ñ1¥Ù•MÑ…Ñ” ¤ì(€€€€€€€É•™É•Í¡¥¹1¥Ù•¡…¹¹•±1¥ÍĞ€ô™…±Í”ì(€€€€€€€MÑÉ¥¹œ±…ÍÑ¡…¹¹•±9…µ”€ôÁ•¹‘¥¹1¥Ù•I•™É•Í¡¡…¹¹•±9…µ”€ôô¹Õ±°€ü!…İ¬¹•Ğ¡!…İ­½¹™¥œ¹1%Y}!990°€ˆˆ¤€èÁ•¹‘¥¹1¥Ù•I•™É•Í¡¡…¹¹•±9…µ”ì(€€€€€€€¥¹ĞÍ½ÕÉ•%¹‘•à€ôÁ•¹‘¥¹1¥Ù•I•™É•Í¡M½ÕÉ•%¹‘•àì(€€€€€€€Á•¹‘¥¹1¥Ù•I•™É•Í¡¡…¹¹•±9…µ”€ô¹Õ±°ì(€€€€€€€Á•¹‘¥¹1¥Ù•I•™É•Í¡M½ÕÉ•%¹‘•à€ô€´Äì((€€€€€€€¥¹Ğ±…ÍÑ¡…¹¹•±É½ÕÁ%¹‘•à€ô€´Äì(€€€€€€€¥¹Ğ±…ÍÑ1¥Ù•¡…¹¹•±%¹‘•à€ô€´Äì(€€€€€€€1¥Ù•¡…¹¹•±%Ñ•´±…ÍÑ1¥Ù•¡…¹¹•±%Ñ•´€ô¹Õ±°ì(€€€€€€€™½È€¡1¥Ù•¡…¹¹•±É½ÕÀ±¥Ù•¡…¹¹•±É½ÕÀ€è±¥Ù•¡…¹¹•±É½ÕÁ1¥ÍĞ¤ì(€€€€€€€€€€€ÉÉ…å1¥ÍĞñ1¥Ù•¡…¹¹•±%Ñ•´øÉ½ÕÁ¡…¹¹•±Ì€ô±¥Ù•¡…¹¹•±É½ÕÀ¹•Ñ1¥Ù•¡…¹¹•±Ì ¤ì(€€€€€€€€€€€¥˜€¡É½ÕÁ¡…¹¹•±Ì€ôô¹Õ±°ñğÉ½ÕÁ¡…¹¹•±Ì¹¥ÍµÁÑä ¤¤ì(€€€€€€€€€€€€€€€½¹Ñ¥¹Õ”ì(€€€€€€€€€€€ô(€€€€€€€€€€€™½È€¡1¥Ù•¡…¹¹•±%Ñ•´±¥Ù•¡…¹¹•±%Ñ•´€èÉ½ÕÁ¡…¹¹•±Ì¤ì(€€€€€€€€€€€€€€€¥˜€¡±¥Ù•¡…¹¹•±%Ñ•´¹•Ñ¡…¹¹•±9…µ” ¤¹•ÅÕ…±Ì¡±…ÍÑ¡…¹¹•±9…µ”¤¤ì(€€€€€€€€€€€€€€€€€€€±…ÍÑ¡…¹¹•±É½ÕÁ%¹‘•à€ô±¥Ù•¡…¹¹•±É½ÕÀ¹•ÑÉ½ÕÁ%¹‘•à ¤ì(€€€€€€€€€€€€€€€€€€€±…ÍÑ1¥Ù•¡…¹¹•±%¹‘•à€ô±¥Ù•¡…¹¹•±%Ñ•´¹•Ñ¡…¹¹•±%¹‘•à ¤ì(€€€€€€€€€€€€€€€€€€€±…ÍÑ1¥Ù•¡…¹¹•±%Ñ•´€ô±¥Ù•¡…¹¹•±%Ñ•´ì(€€€€€€€€€€€€€€€€€€€‰É•…¬ì(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€ô(€€€€€€€€€€€¥˜€¡±…ÍÑ¡…¹¹•±É½ÕÁ%¹‘•à€„ô€´Ä¤‰É•…¬ì(€€€€€€€ô(€€€€€€€¥˜€¡±…ÍÑ¡…¹¹•±É½ÕÁ%¹‘•à€ôô€´Ä¤ì(€€€€€€€€€€€%¹Ñ••ÉmtÑØÅ¡…¹¹•°€ô•Ñ¥ÉÍÑ¡…¹¹•±	å9…µ” ‰QXÄˆ¤ì(€€€€€€€€€€€¥˜€¡ÑØÅ¡…¹¹•°€„ô¹Õ±°¤ì(€€€€€€€€€€€€€€€±…ÍÑ¡…¹¹•±É½ÕÁ%¹‘•à€ôÑØÅ¡…¹¹•±lÁtì(€€€€€€€€€€€€€€€±…ÍÑ1¥Ù•¡…¹¹•±%¹‘•à€ôÑØÅ¡…¹¹•±lÅtì(€€€€€€€€€€€ô•±Í”ì(€€€€€€€€€€€€€€€±…ÍÑ¡…¹¹•±É½ÕÁ%¹‘•à€ô•Ñ¥ÉÍÑ9½A…ÍÍİ½É‘¡…¹¹•±É½ÕÀ ¤ì(€€€€€€€€€€€€€€€¥˜€¡±…ÍÑ¡…¹¹•±É½ÕÁ%¹‘•à€ôô€´Ä¤(€€€€€€€€€€€€€€€€€€€±…ÍÑ¡…¹¹•±É½ÕÁ%¹‘•à€ô€Àì(€€€€€€€€€€€€€€€±…ÍÑ1¥Ù•¡…¹¹•±%¹‘•à€ô€Àì(€€€€€€€€€€€ô(€€€€€€€ô(€€€€€€€¥˜€¡±…ÍÑ1¥Ù•¡…¹¹•±%Ñ•´€„ô¹Õ±°€˜˜Í½ÕÉ•%¹‘•à€øô€À€˜˜±…ÍÑ1¥Ù•¡…¹¹•±%Ñ•´¹•ÑM½ÕÉ•9Õ´ ¤€ø€À¤ì(€€€€€€€€€€€±…ÍÑ1¥Ù•¡…¹¹•±%Ñ•´¹Í•ÑM½ÕÉ•%¹‘•à¡5…Ñ ¹µ¥¸¡Í½ÕÉ•%¹‘•à°±…ÍÑ1¥Ù•¡…¹¹•±%Ñ•´¹•ÑM½ÕÉ•9Õ´ ¤€´€Ä¤¤ì(€€€€€€€ô((€€€€€€€±¥Ù•A±…å•É5…¹…•È¹¥¹¥Ğ¡µY¥‘•½Y¥•Ü¤ì(€€€€€€€Í¡½İQ¥µ” ¤ì(€€€€€€€Í¡½İ9•ÑMÁ•• ¤ì(€€€€€€€ÑÙ1•™Ñ¡…¹¹•±1¥ÍÑ1…å½ÕĞ¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹%9Y%M%	1¤ì(€€€€€€€ÑÙI¥¡ÑM•ÑÑ¥¹1…å½ÕĞ¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹%9Y%M%	1¤ì((€€€€€€€±¥Ù•¡…¹¹•±É½ÕÁ‘…ÁÑ•È¹±•…ÉÉ½ÕÁMÑ…Ñ” ¤ì(€€€€€€€±¥Ù•¡…¹¹•±É½ÕÁ‘…ÁÑ•È¹Í•Ñ9•İ…Ñ„¡¹•ÜÉÉ…å1¥ÍĞğø¡±¥Ù•¡…¹¹•±É½ÕÁ1¥ÍĞ¤¤ì(€€€€€€€ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%¹‘•à€ô€´Äì(€€€€€€€Í•±•Ñ¡…¹¹•±É½ÕÀ¡±…ÍÑ¡…¹¹•±É½ÕÁ%¹‘•à°™…±Í”°±…ÍÑ1¥Ù•¡…¹¹•±%¹‘•à¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”‰½½±•…¸¥Í1¥ÍÑ=ÉM•ÑÑ¥¹1…å½ÕÑY¥Í¥‰±” ¤ì(€€€€€€€É•ÑÕÉ¸ÑÙ1•™Ñ¡…¹¹•±1¥ÍÑ1…å½ÕĞ¹•ÑY¥Í¥‰¥±¥Ñä ¤€ôôY¥•Ü¹Y%M%	1ñğÑÙI¥¡ÑM•ÑÑ¥¹1…å½ÕĞ¹•ÑY¥Í¥‰¥±¥Ñä ¤€ôôY¥•Ü¹Y%M%	1ì(€€€ô((€€€ÁÉ¥Ù…Ñ”‰½½±•…¸¡…ÍÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±M½ÕÉ” ¤ì(€€€€€€€É•ÑÕÉ¸ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´€„ô¹Õ±°(€€€€€€€€€€€€€€€€˜˜ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´¹•Ñ¡…¹¹•±UÉ±Ì ¤€„ô¹Õ±°(€€€€€€€€€€€€€€€€˜˜ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´¹•ÑM½ÕÉ•9Õ´ ¤€ø€À(€€€€€€€€€€€€€€€€˜˜ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´¹•ÑM½ÕÉ•%¹‘•à ¤€øô€À(€€€€€€€€€€€€€€€€˜˜ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´¹•ÑM½ÕÉ•%¹‘•à ¤€ğÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´¹•Ñ¡…¹¹•±UÉ±Ì ¤¹Í¥é” ¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”¥¹Ğ•Ñ•™…Õ±ÑM•ÑÑ¥¹É½ÕÁ%¹‘•à ¤ì(€€€€€€€¥˜€¡¡…ÍÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±M½ÕÉ” ¤¤É•ÑÕÉ¸€Àì(€€€€€€€É•ÑÕÉ¸±¥Ù•M•ÑÑ¥¹É½ÕÁ1¥ÍĞ€„ô¹Õ±°€˜˜±¥Ù•M•ÑÑ¥¹É½ÕÁ1¥ÍĞ¹Í¥é” ¤€ø€Ø€ü€Ø€è€Àì(€€€ô((€€€ÁÉ¥Ù…Ñ”ÉÉ…å1¥ÍĞñ1¥Ù•M•ÑÑ¥¹É½ÕÀø•ÑY¥Í¥‰±•1¥Ù•M•ÑÑ¥¹É½ÕÁ1¥ÍĞ ¤ì(€€€€€€€ÉÉ…å1¥ÍĞñ1¥Ù•M•ÑÑ¥¹É½ÕÀøÙ¥Í¥‰±•É½ÕÁÌ€ô¹•ÜÉÉ…å1¥ÍĞğø ¤ì(€€€€€€€¥˜€¡±¥Ù•M•ÑÑ¥¹É½ÕÁ1¥ÍĞ€ôô¹Õ±°¤É•ÑÕÉ¸Ù¥Í¥‰±•É½ÕÁÌì(€€€€€€€‰½½±•…¸Í¡½İ¡…¹¹•±=ÁÑ¥½¹Ì€ô¡…ÍÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±M½ÕÉ” ¤ì(€€€€€€€™½È€¡1¥Ù•M•ÑÑ¥¹É½ÕÀÉ½ÕÀ€è±¥Ù•M•ÑÑ¥¹É½ÕÁ1¥ÍĞ¤ì(€€€€€€€€€€€¥˜€¡É½ÕÀ€ôô¹Õ±°¤½¹Ñ¥¹Õ”ì(€€€€€€€€€€€¥¹ĞÉ½ÕÁ%¹‘•à€ôÉ½ÕÀ¹•ÑÉ½ÕÁ%¹‘•à ¤ì(€€€€€€€€€€€¥˜€ …Í¡½İ¡…¹¹•±=ÁÑ¥½¹Ì€˜˜É½ÕÁ%¹‘•à€øô€À€˜˜É½ÕÁ%¹‘•à€ğô€È¤½¹Ñ¥¹Õ”ì(€€€€€€€€€€€Ù¥Í¥‰±•É½ÕÁÌ¹…‘¡É½ÕÀ¤ì(€€€€€€€ô(€€€€€€€É•ÑÕÉ¸Ù¥Í¥‰±•É½ÕÁÌì(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥¥¹¥Ñ1¥Ù•M•ÑÑ¥¹É½ÕÁ1¥ÍĞ ¤ì(€€€€€€€±¥Ù•M•ÑÑ¥¹É½ÕÁ1¥ÍĞõÁ¥½¹™¥œ¹•Ğ ¤¹•Ñ1¥Ù•M•ÑÑ¥¹É½ÕÁ1¥ÍĞ ¤ì(€€€€€€€¥˜€¡±¥Ù•M•ÑÑ¥¹É½ÕÁ1¥ÍĞ¹Í¥é” ¤€ğ€Ü¤É•ÑÕÉ¸ì(€€€€€€€±¥Ù•M•ÑÑ¥¹É½ÕÁ1¥ÍĞ¹•Ğ Ì¤¹•Ñ1¥Ù•M•ÑÑ¥¹%Ñ•µÌ ¤¹•Ğ¡!…İ¬¹•Ğ¡!…İ­½¹™¥œ¹1%Y}=99Q}Q%5=UP°€Ä¤¤¹Í•Ñ%Ñ•µM•±•Ñ•¡ÑÉÕ”¤ì(€€€€€€€±¥Ù•M•ÑÑ¥¹É½ÕÁ1¥ÍĞ¹•Ğ Ğ¤¹•Ñ1¥Ù•M•ÑÑ¥¹%Ñ•µÌ ¤¹•Ğ À¤¹Í•Ñ%Ñ•µM•±•Ñ•¡!…İ¬¹•Ğ¡!…İ­½¹™¥œ¹1%Y}M!=]}Q%5°™…±Í”¤¤ì(€€€€€€€±¥Ù•M•ÑÑ¥¹É½ÕÁ1¥ÍĞ¹•Ğ Ğ¤¹•Ñ1¥Ù•M•ÑÑ¥¹%Ñ•µÌ ¤¹•Ğ Ä¤¹Í•Ñ%Ñ•µM•±•Ñ•¡!…İ¬¹•Ğ¡!…İ­½¹™¥œ¹1%Y}M!=]}9Q}MA°™…±Í”¤¤ì(€€€€€€€±¥Ù•M•ÑÑ¥¹É½ÕÁ1¥ÍĞ¹•Ğ Ğ¤¹•Ñ1¥Ù•M•ÑÑ¥¹%Ñ•µÌ ¤¹•Ğ È¤¹Í•Ñ%Ñ•µM•±•Ñ•¡!…İ¬¹•Ğ¡!…İ­½¹™¥œ¹1%Y}!991}IYIM°™…±Í”¤¤ì(€€€€€€€±¥Ù•M•ÑÑ¥¹É½ÕÁ1¥ÍĞ¹•Ğ Ğ¤¹•Ñ1¥Ù•M•ÑÑ¥¹%Ñ•µÌ ¤¹•Ğ Ì¤¹Í•Ñ%Ñ•µM•±•Ñ•¡!…İ¬¹•Ğ¡!…İ­½¹™¥œ¹1%Y}I=MM}I=U@°™…±Í”¤¤ì(€€€€€€€¥¹Ğ±¥Ù•É½ÕÁ%¹‘•à€ôÁ¥½¹™¥œ¹•Ñ1¥Ù•É½ÕÁ%¹‘•à ¤ì(€€€€€€€¥˜€¡±¥Ù•É½ÕÁ%¹‘•à€øô€À€˜˜±¥Ù•É½ÕÁ%¹‘•à€ğ±¥Ù•M•ÑÑ¥¹É½ÕÁ1¥ÍĞ¹•Ğ Ô¤¹•Ñ1¥Ù•M•ÑÑ¥¹%Ñ•µÌ ¤¹Í¥é” ¤¤ì(€€€€€€€€€€€±¥Ù•M•ÑÑ¥¹É½ÕÁ1¥ÍĞ¹•Ğ Ô¤¹•Ñ1¥Ù•M•ÑÑ¥¹%Ñ•µÌ ¤¹•Ğ¡±¥Ù•É½ÕÁ%¹‘•à¤¹Í•Ñ%Ñ•µM•±•Ñ•¡ÑÉÕ”¤ì(€€€€€€€ô(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥±½…‘ÕÉÉ•¹ÑM½ÕÉ•1¥ÍĞ ¤ì(€€€€€€€ÉÉ…å1¥ÍĞñ1¥Ù•M•ÑÑ¥¹%Ñ•´ø±¥Ù•M•ÑÑ¥¹%Ñ•µ1¥ÍĞ€ô¹•ÜÉÉ…å1¥ÍĞğø ¤ì(€€€€€€€¥˜€¡ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´€„ô¹Õ±°€˜˜ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´¹•Ñ¡…¹¹•±M½ÕÉ•9…µ•Ì ¤€„ô¹Õ±°¤ì(€€€€€€€€€€€ÉÉ…å1¥ÍĞñMÑÉ¥¹œøÕÉÉ•¹ÑM½ÕÉ•9…µ•Ì€ôÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´¹•Ñ¡…¹¹•±M½ÕÉ•9…µ•Ì ¤ì(€€€€€€€€€€€™½È€¡¥¹Ğ¨€ô€Àì¨€ğÕÉÉ•¹ÑM½ÕÉ•9…µ•Ì¹Í¥é” ¤ì¨¬¬¤ì(€€€€€€€€€€€€€€€1¥Ù•M•ÑÑ¥¹%Ñ•´±¥Ù•M•ÑÑ¥¹%Ñ•´€ô¹•Ü1¥Ù•M•ÑÑ¥¹%Ñ•´ ¤ì(€€€€€€€€€€€€€€€±¥Ù•M•ÑÑ¥¹%Ñ•´¹Í•Ñ%Ñ•µ%¹‘•à¡¨¤ì(€€€€€€€€€€€€€€€±¥Ù•M•ÑÑ¥¹%Ñ•´¹Í•Ñ%Ñ•µ9…µ”¡ÕÉÉ•¹ÑM½ÕÉ•9…µ•Ì¹•Ğ¡¨¤¤ì(€€€€€€€€€€€€€€€±¥Ù•M•ÑÑ¥¹%Ñ•µ1¥ÍĞ¹…‘¡±¥Ù•M•ÑÑ¥¹%Ñ•´¤ì(€€€€€€€€€€€ô(€€€€€€€ô(€€€€€€€±¥Ù•M•ÑÑ¥¹É½ÕÁ1¥ÍĞ¹•Ğ À¤¹Í•Ñ1¥Ù•M•ÑÑ¥¹%Ñ•µÌ¡±¥Ù•M•ÑÑ¥¹%Ñ•µ1¥ÍĞ¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥Í¡½İI•Í½±ÕÑ¥½¹™Ñ•É¡…¹¹•±Mİ¥Ñ  ¤ì(€€€€€€€É•Í½±ÕÑ¥½¹%¹™½A•¹‘¥¹œ€ôÑÉÕ”ì(€€€€€€€É•Í½±ÕÑ¥½¹%¹™½I•ÑÉå½Õ¹Ğ€ô€Àì(€€€€€€€¥˜€¡ÑÙI•Í½±ÕÑ¥½¸€„ô¹Õ±°¤ì(€€€€€€€€€€€ÑÙI•Í½±ÕÑ¥½¸¹Í•ÑQ•áĞ ˆˆ¤ì(€€€€€€€€€€€ÑÙI•Í½±ÕÑ¥½¸¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹=9¤ì(€€€€€€€ô(€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ!¥‘•I•Í½±ÕÑ¥½¹%¹™½IÕ¸¤ì(€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µUÁ‘…Ñ•I•Í½±ÕÑ¥½¹%¹™½IÕ¸¤ì(€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡µUÁ‘…Ñ•I•Í½±ÕÑ¥½¹%¹™½IÕ¸°IM=1UQ%=9}%9=}IQIe}1d¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥Í¡½İI•Í½±ÕÑ¥½¹M•ÑÑ¥¹œ ¤ì(€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ!¥‘•I•Í½±ÕÑ¥½¹%¹™½IÕ¸¤ì(€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µUÁ‘…Ñ•I•Í½±ÕÑ¥½¹%¹™½IÕ¸¤ì(€€€€€€€¥˜€¡!…İ¬¹•Ğ¡!…İ­½¹™¥œ¹1%Y}M!=]}IM=1UQ%=8°™…±Í”¤¤ì(€€€€€€€€€€€É•Í½±ÕÑ¥½¹%¹™½A•¹‘¥¹œ€ôÑÉÕ”ì(€€€€€€€€€€€É•Í½±ÕÑ¥½¹%¹™½I•ÑÉå½Õ¹Ğ€ô€Àì(€€€€€€€€€€€¥˜€¡ÑÙI•Í½±ÕÑ¥½¸€„ô¹Õ±°¤ì(€€€€€€€€€€€€€€€ÑÙI•Í½±ÕÑ¥½¸¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹=9¤ì(€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡µUÁ‘…Ñ•I•Í½±ÕÑ¥½¹%¹™½IÕ¸°IM=1UQ%=9}%9=}IQIe}1d¤ì(€€€€€€€€€€€ô(€€€€€€€ô•±Í”ì(€€€€€€€€€€€Í¡½İI•Í½±ÕÑ¥½¹™Ñ•É¡…¹¹•±Mİ¥Ñ  ¤ì(€€€€€€€ô(€€€ô((€€€ÁÉ¥Ù…Ñ”™¥¹…°IÕ¹¹…‰±”µ!¥‘•I•Í½±ÕÑ¥½¹%¹™½IÕ¸€ô¹•ÜIÕ¹¹…‰±” ¤ì(€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€ÁÕ‰±¥ŒÙ½¥ÉÕ¸ ¤ì(€€€€€€€€€€€¥˜€¡ÑÙI•Í½±ÕÑ¥½¸€„ô¹Õ±°¤ì(€€€€€€€€€€€€€€€ÑÙI•Í½±ÕÑ¥½¸¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹=9¤ì(€€€€€€€€€€€ô(€€€€€€€ô(€€€ôì((€€€ÁÉ¥Ù…Ñ”™¥¹…°IÕ¹¹…‰±”µUÁ‘…Ñ•I•Í½±ÕÑ¥½¹%¹™½IÕ¸€ô¹•ÜIÕ¹¹…‰±” ¤ì(€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€ÁÕ‰±¥ŒÙ½¥ÉÕ¸ ¤ì(€€€€€€€€€€€¥˜€¡ÑÙI•Í½±ÕÑ¥½¸€ôô¹Õ±°ñğµY¥‘•½Y¥•Ü€ôô¹Õ±°¤ì(€€€€€€€€€€€€€€€É•ÑÕÉ¸ì(€€€€€€€€€€€ô(€€€€€€€€€€€¥˜€¡µY¥‘•½Y¥•Ü¹•ÑÕÉÉ•¹ÑA±…åMÑ…Ñ” ¤€„ôY¥‘•½Y¥•Ü¹MQQ}AIAI(€€€€€€€€€€€€€€€€€€€€˜˜µY¥‘•½Y¥•Ü¹•ÑÕÉÉ•¹ÑA±…åMÑ…Ñ” ¤€„ôY¥‘•½Y¥•Ü¹MQQ}	UI(€€€€€€€€€€€€€€€€€€€€˜˜µY¥‘•½Y¥•Ü¹•ÑÕÉÉ•¹ÑA±…åMÑ…Ñ” ¤€„ôY¥‘•½Y¥•Ü¹MQQ}A1e%9¤ì(€€€€€€€€€€€€€€€É•ÑÉå=É!¥‘•I•Í½±ÕÑ¥½¹%¹™¼ ¤ì(€€€€€€€€€€€€€€€É•ÑÕÉ¸ì(€€€€€€€€€€€ô(€€€€€€€€€€€¥¹ÑmtÙ¥‘•½M¥é”€ôµY¥‘•½Y¥•Ü¹•ÑY¥‘•½M¥é” ¤ì(€€€€€€€€€€€¥˜€¡Ù¥‘•½M¥é”€„ô¹Õ±°€˜˜Ù¥‘•½M¥é”¹±•¹Ñ €øô€È€˜˜Ù¥‘•½M¥é•lÁt€ø€À€˜˜Ù¥‘•½M¥é•lÅt€ø€À¤ì(€€€€€€€€€€€€€€€ÕÁ‘…Ñ•I•Í½±ÕÑ¥½¹Q•áĞ¡Ù¥‘•½M¥é•lÁt°Ù¥‘•½M¥é•lÅt¤ì(€€€€€€€€€€€€€€€É•ÑÕÉ¸ì(€€€€€€€€€€€ô(€€€€€€€€€€€É•ÑÉå=É!¥‘•I•Í½±ÕÑ¥½¹%¹™¼ ¤ì(€€€€€€€ô(€€€ôì((€€€ÁÉ¥Ù…Ñ”Ù½¥ÕÁ‘…Ñ•I•Í½±ÕÑ¥½¹Q•áĞ¡¥¹Ğİ¥‘Ñ °¥¹Ğ¡•¥¡Ğ¤ì(€€€€€€€É•Í½±ÕÑ¥½¹%¹™½A•¹‘¥¹œ€ô™…±Í”ì(€€€€€€€ÑÙI•Í½±ÕÑ¥½¸¹Í•ÑQ•áĞ¡İ¥‘Ñ €¬€ˆà€ˆ€¬¡•¥¡Ğ¤ì(€€€€€€€ÑÙI•Í½±ÕÑ¥½¸¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹Y%M%	1¤ì(€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ!¥‘•I•Í½±ÕÑ¥½¹%¹™½IÕ¸¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥É•ÑÉå=É!¥‘•I•Í½±ÕÑ¥½¹%¹™¼ ¤ì(€€€€€€€¥˜€¡É•Í½±ÕÑ¥½¹%¹™½A•¹‘¥¹œ€˜˜É•Í½±ÕÑ¥½¹%¹™½I•ÑÉå½Õ¹Ğ¬¬€ğIM=1UQ%=9}%9=}5a}IQId¤ì(€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡µUÁ‘…Ñ•I•Í½±ÕÑ¥½¹%¹™½IÕ¸°IM=1UQ%=9}%9=}IQIe}1d¤ì(€€€€€€€ô•±Í”ì(€€€€€€€€€€€ÑÙI•Í½±ÕÑ¥½¸¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹=9¤ì(€€€€€€€ô(€€€ô((€€€Ù½¥Í¡½İQ¥µ” ¤ì(€€€€€€€¥˜€¡!…İ¬¹•Ğ¡!…İ­½¹™¥œ¹1%Y}M!=]}Q%5°™…±Í”¤¤ì(€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍĞ¡µUÁ‘…Ñ•Q¥µ•IÕ¸¤ì(€€€€€€€€€€€ÑÙQ¥µ”¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹Y%M%	1¤ì(€€€€€€€ô•±Í”ì(€€€€€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µUÁ‘…Ñ•Q¥µ•IÕ¸¤ì(€€€€€€€€€€€ÑÙQ¥µ”¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹=9¤ì(€€€€€€€ô(€€€ô((€€€ÁÉ¥Ù…Ñ”IÕ¹¹…‰±”µUÁ‘…Ñ•Q¥µ•IÕ¸€ô¹•ÜIÕ¹¹…‰±” ¤ì(€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€ÁÕ‰±¥ŒÙ½¥ÉÕ¸ ¤ì(€€€€€€€€€€€…Ñ”‘…äõ¹•Ü…Ñ” ¤ì(€€€€€€€€€€€MÕÁÁÉ•ÍÍ1¥¹Ğ ‰M¥µÁ±•…Ñ•½Éµ…Ğˆ¤M¥µÁ±•…Ñ•½Éµ…Ğ‘˜€ô¹•ÜM¥µÁ±•…Ñ•½Éµ…Ğ ‰! éµ´ˆ¤ì(€€€€€€€€€€€ÑÙQ¥µ”¹Í•ÑQ•áĞ¡‘˜¹™½Éµ…Ğ¡‘…ä¤¤ì(€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡Ñ¡¥Ì°€ÄÀÀÀ¤ì(€€€€€€€ô(€€€ôì((€€€ÁÉ¥Ù…Ñ”Ù½¥Í¡½İ9•ÑMÁ•• ¤ì(¼¼€€€€€€€ÑÙ}É¥¡Ñ}Ñ½Á}Ñ¥Á¹•ÑÍÁ••¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹Y%M%	1¤ì(€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µUÁ‘…Ñ•9•ÑMÁ••‘IÕ¸¤ì(€€€€€€€¥˜€¡!…İ¬¹•Ğ¡!…İ­½¹™¥œ¹1%Y}M!=]}9Q}MA°™…±Í”¤¤ì(€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍĞ¡µUÁ‘…Ñ•9•ÑMÁ••‘IÕ¸¤ì(€€€€€€€€€€€ÑÙ9•ÑMÁ••¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹Y%M%	1¤ì(€€€€€€€ô•±Í”ì(€€€€€€€€€€€ÑÙ9•ÑMÁ••¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹=9¤ì(€€€€€€€ô(€€€ô((€€€ÁÉ¥Ù…Ñ”IÕ¹¹…‰±”µUÁ‘…Ñ•9•ÑMÁ••‘IÕ¸€ô¹•ÜIÕ¹¹…‰±” ¤ì(€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€ÁÕ‰±¥ŒÙ½¥ÉÕ¸ ¤ì(€€€€€€€€€€€¥˜€¡µY¥‘•½Y¥•Ü€ôô¹Õ±°¤É•ÑÕÉ¸ì(€€€€€€€€€€€MÑÉ¥¹œÍÁ••€ôA±…å•É!•±Á•È¹•Ñ¥ÍÁ±…åMÁ••‘	ÁÌ¡µY¥‘•½Y¥•Ü¹•ÑQÁMÁ•• ¤°ÑÉÕ”¤ì(€€€€€€€€€€€ÑÙ9•ÑMÁ••¹Í•ÑQ•áĞ¡ÍÁ••¤ì(¼¼€€€€€€€€€€€ÑÙ}É¥¡Ñ}Ñ½Á}Ñ¥Á¹•ÑÍÁ••¹Í•ÑQ•áĞ¡ÍÁ••¤ì(€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡Ñ¡¥Ì°€ÄÀÀÀ¤ì(€€€€€€€ô(€€€ôì((€€€ÁÉ¥Ù…Ñ”Ù½¥Í¡½İA…ÍÍİ½É‘¥…±½œ¡¥¹ĞÉ½ÕÁ%¹‘•à°¥¹Ğ±¥Ù•¡…¹¹•±%¹‘•à¤ì(€€€€€€€¥˜€¡ÑÙ1•™Ñ¡…¹¹•±1¥ÍÑ1…å½ÕĞ¹•ÑY¥Í¥‰¥±¥Ñä ¤€ôôY¥•Ü¹Y%M%	1¤(€€€€€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸¤ì((€€€€€€€1¥Ù•A…ÍÍİ½É‘¥…±½œ‘¥…±½œ€ô¹•Ü1¥Ù•A…ÍÍİ½É‘¥…±½œ¡Ñ¡¥Ì¤ì(€€€€€€€‘¥…±½œ¹Í•Ñ=¹1¥ÍÑ•¹•È¡¹•Ü1¥Ù•A…ÍÍİ½É‘¥…±½œ¹=¹1¥ÍÑ•¹•È ¤ì(€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹¡…¹”¡MÑÉ¥¹œÁ…ÍÍİ½É¤ì(€€€€€€€€€€€€€€€¥˜€¡Á…ÍÍİ½É¹•ÅÕ…±Ì¡±¥Ù•¡…¹¹•±É½ÕÁ1¥ÍĞ¹•Ğ¡É½ÕÁ%¹‘•à¤¹•ÑÉ½ÕÁA…ÍÍİ½É ¤¤¤ì(€€€€€€€€€€€€€€€€€€€¡…¹¹•±É½ÕÁA…ÍÍİ½É‘½¹™¥Éµ•¹…‘¡É½ÕÁ%¹‘•à¤ì(€€€€€€€€€€€€€€€€€€€±½…‘¡…¹¹•±É½ÕÁ…Ñ…¹‘A±…ä¡É½ÕÁ%¹‘•à°±¥Ù•¡…¹¹•±%¹‘•à¤ì(€€€€€€€€€€€€€€€ô•±Í”ì(€€€€€€€€€€€€€€€€€€€Q½…ÍĞ¹µ…­•Q•áĞ¡ÁÀ¹•Ñ%¹ÍÑ…¹” ¤°€‹–¾‚¦Rg¢¾¼ˆ°Q½…ÍĞ¹19Q!}M!=IP¤¹Í¡½Ü ¤ì(€€€€€€€€€€€€€€€ô((€€€€€€€€€€€€€€€¥˜€¡ÑÙ1•™Ñ¡…¹¹•±1¥ÍÑ1…å½ÕĞ¹•ÑY¥Í¥‰¥±¥Ñä ¤€ôôY¥•Ü¹Y%M%	1¤(€€€€€€€€€€€€€€€€€€€µ!…¹‘±•È¹Á½ÍÑ•±…å•¡µ!¥‘•¡…¹¹•±1¥ÍÑIÕ¸°Á½ÍÑQ¥µ•½ÕĞ¤ì(€€€€€€€€€€€ô((€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹…¹•° ¤ì(€€€€€€€€€€€€€€€¥˜€¡ÑÙ1•™Ñ¡…¹¹•±1¥ÍÑ1…å½ÕĞ¹•ÑY¥Í¥‰¥±¥Ñä ¤€ôôY¥•Ü¹Y%M%	1¤ì(€€€€€€€€€€€€€€€€€€€¥¹ĞÉ½ÕÁ%¹‘•à€ô±¥Ù•¡…¹¹•±É½ÕÁ‘…ÁÑ•È¹•ÑM•±•Ñ•‘É½ÕÁ%¹‘•à ¤ì(€€€€€€€€€€€€€€€€€€€±¥Ù•¡…¹¹•±%Ñ•µ‘…ÁÑ•È¹Í•Ñ9•İ…Ñ„¡•Ñ1¥Ù•¡…¹¹•±Ì¡É½ÕÁ%¹‘•à¤¤ì(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€ô(€€€€€€€ô¤ì(€€€€€€€‘¥…±½œ¹Í¡½Ü ¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥±½…‘¡…¹¹•±É½ÕÁ…Ñ…¹‘A±…ä¡¥¹ĞÉ½ÕÁ%¹‘•à°¥¹Ğ±¥Ù•¡…¹¹•±%¹‘•à¤ì(€€€€€€€±¥Ù•¡…¹¹•±É½ÕÁ‘…ÁÑ•È¹Í•ÑM•±•Ñ•‘É½ÕÁ%¹‘•à¡É½ÕÁ%¹‘•à¤ì(€€€€€€€±½…‘¡…¹¹•±É½ÕÁ…Ñ„¡É½ÕÁ%¹‘•à¤ì((€€€€€€€¥˜€¡±¥Ù•¡…¹¹•±%¹‘•à€ø€´Ä¤ì(€€€€€€€€€€€±¥­1¥Ù•¡…¹¹•°¡±¥Ù•¡…¹¹•±%¹‘•à¤ì(€€€€€€€€€€€µ¡…¹¹•±É½ÕÁY¥•Ü¹ÍÉ½±±Q½A½Í¥Ñ¥½¸¡É½ÕÁ%¹‘•à¤ì(€€€€€€€€€€€µ1¥Ù•¡…¹¹•±Y¥•Ü¹ÍÉ½±±Q½A½Í¥Ñ¥½¸¡±¥Ù•¡…¹¹•±%¹‘•à¤ì(€€€€€€€ô(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥±½…‘¡…¹¹•±É½ÕÁ…Ñ„¡¥¹ĞÉ½ÕÁ%¹‘•à¤ì(€€€€€€€±¥Ù•¡…¹¹•±%Ñ•µ‘…ÁÑ•È¹Í•Ñ9•İ…Ñ„¡•Ñ1¥Ù•¡…¹¹•±Ì¡É½ÕÁ%¹‘•à¤¤ì(€€€€€€€¥˜€¡É½ÕÁ%¹‘•à€ôôÕÉÉ•¹Ñ¡…¹¹•±É½ÕÁ%¹‘•à¤ì(€€€€€€€€€€€¥˜€¡ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%¹‘•à€ø€´Ä¤(€€€€€€€€€€€€€€€µ1¥Ù•¡…¹¹•±Y¥•Ü¹ÍÉ½±±Q½A½Í¥Ñ¥½¸¡ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%¹‘•à¤ì(€€€€€€€€€€€±¥Ù•¡…¹¹•±%Ñ•µ‘…ÁÑ•È¹Í•ÑM•±•Ñ•‘¡…¹¹•±%¹‘•à¡ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%¹‘•à¤ì(€€€€€€€ô(€€€€€€€•±Í”ì(€€€€€€€€€€€µ1¥Ù•¡…¹¹•±Y¥•Ü¹ÍÉ½±±Q½A½Í¥Ñ¥½¸ À¤ì(€€€€€€€€€€€±¥Ù•¡…¹¹•±%Ñ•µ‘…ÁÑ•È¹Í•ÑM•±•Ñ•‘¡…¹¹•±%¹‘•à ´Ä¤ì(€€€€€€€ô(€€€ô((€€€ÁÉ¥Ù…Ñ”‰½½±•…¸¥Í9••‘%¹ÁÕÑA…ÍÍİ½É¡¥¹ĞÉ½ÕÁ%¹‘•à¤ì(€€€€€€€É•ÑÕÉ¸€…±¥Ù•¡…¹¹•±É½ÕÁ1¥ÍĞ¹•Ğ¡É½ÕÁ%¹‘•à¤¹•ÑÉ½ÕÁA…ÍÍİ½É ¤¹¥ÍµÁÑä ¤(€€€€€€€€€€€€€€€€˜˜€…¥ÍA…ÍÍİ½É‘½¹™¥Éµ•¡É½ÕÁ%¹‘•à¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”‰½½±•…¸¥ÍA…ÍÍİ½É‘½¹™¥Éµ•¡¥¹ĞÉ½ÕÁ%¹‘•à¤ì(€€€€€€€™½È€¡%¹Ñ••È½¹™¥Éµ•‘9Õ´€è¡…¹¹•±É½ÕÁA…ÍÍİ½É‘½¹™¥Éµ•¤ì(€€€€€€€€€€€¥˜€¡½¹™¥Éµ•‘9Õ´€ôôÉ½ÕÁ%¹‘•à¤(€€€€€€€€€€€€€€€É•ÑÕÉ¸ÑÉÕ”ì(€€€€€€€ô(€€€€€€€É•ÑÕÉ¸™…±Í”ì(€€€ô((€€€ÁÉ¥Ù…Ñ”ÉÉ…å1¥ÍĞñ1¥Ù•¡…¹¹•±%Ñ•´ø•Ñ1¥Ù•¡…¹¹•±Ì¡¥¹ĞÉ½ÕÁ%¹‘•à¤ì(€€€€€€€¥˜€ …¥Í9••‘%¹ÁÕÑA…ÍÍİ½É¡É½ÕÁ%¹‘•à¤¤ì(€€€€€€€€€€€É•ÑÕÉ¸±¥Ù•¡…¹¹•±É½ÕÁ1¥ÍĞ¹•Ğ¡É½ÕÁ%¹‘•à¤¹•Ñ1¥Ù•¡…¹¹•±Ì ¤ì(€€€€€€€ô•±Í”ì(€€€€€€€€€€€É•ÑÕÉ¸¹•ÜÉÉ…å1¥ÍĞğø ¤ì(€€€€€€€ô(€€€ô((€€€ÁÉ¥Ù…Ñ”%¹Ñ••Émt•Ñ¥ÉÍÑ¡…¹¹•±	å9…µ”¡MÑÉ¥¹œ­•åİ½É¤ì(€€€€€€€¥˜€¡Q•áÑUÑ¥±Ì¹¥ÍµÁÑä¡­•åİ½É¤¤É•ÑÕÉ¸¹Õ±°ì(€€€€€€€MÑÉ¥¹œÕÁÁ•É-•åİ½É€ô­•åİ½É¹Ñ½UÁÁ•É…Í”¡1½…±”¹UL¤ì(€€€€€€€™½È€¡1¥Ù•¡…¹¹•±É½ÕÀ±¥Ù•¡…¹¹•±É½ÕÀ€è±¥Ù•¡…¹¹•±É½ÕÁ1¥ÍĞ¤ì(€€€€€€€€€€€¥˜€¡±¥Ù•¡…¹¹•±É½ÕÀ€ôô¹Õ±°ñğ¥Í9••‘%¹ÁÕÑA…ÍÍİ½É¡±¥Ù•¡…¹¹•±É½ÕÀ¹•ÑÉ½ÕÁ%¹‘•à ¤¤¤½¹Ñ¥¹Õ”ì(€€€€€€€€€€€ÉÉ…å1¥ÍĞñ1¥Ù•¡…¹¹•±%Ñ•´øÉ½ÕÁ¡…¹¹•±Ì€ô±¥Ù•¡…¹¹•±É½ÕÀ¹•Ñ1¥Ù•¡…¹¹•±Ì ¤ì(€€€€€€€€€€€¥˜€¡É½ÕÁ¡…¹¹•±Ì€ôô¹Õ±°ñğÉ½ÕÁ¡…¹¹•±Ì¹¥ÍµÁÑä ¤¤½¹Ñ¥¹Õ”ì(€€€€€€€€€€€™½È€¡1¥Ù•¡…¹¹•±%Ñ•´¥Ñ•´€èÉ½ÕÁ¡…¹¹•±Ì¤ì(€€€€€€€€€€€€€€€¥˜€¡¥Ñ•´€ôô¹Õ±°ñğQ•áÑUÑ¥±Ì¹¥ÍµÁÑä¡¥Ñ•´¹•Ñ¡…¹¹•±9…µ” ¤¤¤½¹Ñ¥¹Õ”ì(€€€€€€€€€€€€€€€¥˜€¡¥Ñ•´¹•Ñ¡…¹¹•±9…µ” ¤¹Ñ½UÁÁ•É…Í”¡1½…±”¹UL¤¹½¹Ñ…¥¹Ì¡ÕÁÁ•É-•åİ½É¤¤ì(€€€€€€€€€€€€€€€€€€€É•ÑÕÉ¸¹•Ü%¹Ñ••Émuí±¥Ù•¡…¹¹•±É½ÕÀ¹•ÑÉ½ÕÁ%¹‘•à ¤°¥Ñ•´¹•Ñ¡…¹¹•±%¹‘•à ¥ôì(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€ô(€€€€€€€ô(€€€€€€€É•ÑÕÉ¸¹Õ±°ì(€€€ô((€€€ÁÉ¥Ù…Ñ”%¹Ñ••Émt•Ñ9•áÑ¡…¹¹•°¡¥¹Ğ‘¥É•Ñ¥½¸¤ì(€€€€€€€¥¹Ğ¡…¹¹•±É½ÕÁ%¹‘•à€ôÕÉÉ•¹Ñ¡…¹¹•±É½ÕÁ%¹‘•àì(€€€€€€€¥¹Ğ±¥Ù•¡…¹¹•±%¹‘•à€ôÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%¹‘•àì((€€€€€€€€¼¿¢Ş£¦'–"îš¢‡–ò?’â/¢ŞÏ¢ş–*ƒ–¾¦ŠG¦O–"î¾ò#¦—š:Ÿ–f£’â+’â/¦R»š6‹–>À¿¢Úš^Ûš6‹šêC¾ò$(€€€€€€€¥˜€¡‘¥É•Ñ¥½¸€ø€À¤ì(€€€€€€€€€€€±¥Ù•¡…¹¹•±%¹‘•à¬¬ì(€€€€€€€€€€€¥˜€¡±¥Ù•¡…¹¹•±%¹‘•à€øô•Ñ1¥Ù•¡…¹¹•±Ì¡¡…¹¹•±É½ÕÁ%¹‘•à¤¹Í¥é” ¤¤ì(€€€€€€€€€€€€€€€±¥Ù•¡…¹¹•±%¹‘•à€ô€Àì(€€€€€€€€€€€€€€€¥˜€¡!…İ¬¹•Ğ¡!…İ­½¹™¥œ¹1%Y}I=MM}I=U@°™…±Í”¤¤ì(€€€€€€€€€€€€€€€€€€€‘¼ì(€€€€€€€€€€€€€€€€€€€€€€€¡…¹¹•±É½ÕÁ%¹‘•à¬¬ì(€€€€€€€€€€€€€€€€€€€€€€€¥˜€¡¡…¹¹•±É½ÕÁ%¹‘•à€øô±¥Ù•¡…¹¹•±É½ÕÁ1¥ÍĞ¹Í¥é” ¤¤(€€€€€€€€€€€€€€€€€€€€€€€€€€€¡…¹¹•±É½ÕÁ%¹‘•à€ô€Àì(€€€€€€€€€€€€€€€€€€€ôİ¡¥±”€ …±¥Ù•¡…¹¹•±É½ÕÁ1¥ÍĞ¹•Ğ¡¡…¹¹•±É½ÕÁ%¹‘•à¤¹•ÑÉ½ÕÁA…ÍÍİ½É ¤¹¥ÍµÁÑä ¤ñğ¡…¹¹•±É½ÕÁ%¹‘•à€ôôÕÉÉ•¹Ñ¡…¹¹•±É½ÕÁ%¹‘•à¤ì(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€ô(€€€€€€€ô•±Í”ì(€€€€€€€€€€€±¥Ù•¡…¹¹•±%¹‘•à´´ì(€€€€€€€€€€€¥˜€¡±¥Ù•¡…¹¹•±%¹‘•à€ğ€À¤ì(€€€€€€€€€€€€€€€¥˜€¡!…İ¬¹•Ğ¡!…İ­½¹™¥œ¹1%Y}I=MM}I=U@°™…±Í”¤¤ì(€€€€€€€€€€€€€€€€€€€‘¼ì(€€€€€€€€€€€€€€€€€€€€€€€¡…¹¹•±É½ÕÁ%¹‘•à´´ì(€€€€€€€€€€€€€€€€€€€€€€€¥˜€¡¡…¹¹•±É½ÕÁ%¹‘•à€ğ€À¤(€€€€€€€€€€€€€€€€€€€€€€€€€€€¡…¹¹•±É½ÕÁ%¹‘•à€ô±¥Ù•¡…¹¹•±É½ÕÁ1¥ÍĞ¹Í¥é” ¤€´€Äì(€€€€€€€€€€€€€€€€€€€ôİ¡¥±”€ …±¥Ù•¡…¹¹•±É½ÕÁ1¥ÍĞ¹•Ğ¡¡…¹¹•±É½ÕÁ%¹‘•à¤¹•ÑÉ½ÕÁA…ÍÍİ½É ¤¹¥ÍµÁÑä ¤ñğ¡…¹¹•±É½ÕÁ%¹‘•à€ôôÕÉÉ•¹Ñ¡…¹¹•±É½ÕÁ%¹‘•à¤ì(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€±¥Ù•¡…¹¹•±%¹‘•à€ô•Ñ1¥Ù•¡…¹¹•±Ì¡¡…¹¹•±É½ÕÁ%¹‘•à¤¹Í¥é” ¤€´€Äì(€€€€€€€€€€€ô(€€€€€€€ô((€€€€€€€%¹Ñ••ÉmtÉ½ÕÁ¡…¹¹•±%¹‘•à€ô¹•Ü%¹Ñ••ÉlÉtì(€€€€€€€É½ÕÁ¡…¹¹•±%¹‘•álÁt€ô¡…¹¹•±É½ÕÁ%¹‘•àì(€€€€€€€É½ÕÁ¡…¹¹•±%¹‘•álÅt€ô±¥Ù•¡…¹¹•±%¹‘•àì((€€€€€€€É•ÑÕÉ¸É½ÕÁ¡…¹¹•±%¹‘•àì(€€€ô((€€€ÁÉ¥Ù…Ñ”¥¹Ğ•Ñ¥ÉÍÑ9½A…ÍÍİ½É‘¡…¹¹•±É½ÕÀ ¤ì(€€€€€€€™½È€¡1¥Ù•¡…¹¹•±É½ÕÀ±¥Ù•¡…¹¹•±É½ÕÀ€è±¥Ù•¡…¹¹•±É½ÕÁ1¥ÍĞ¤ì(€€€€€€€€€€€¥˜€¡±¥Ù•¡…¹¹•±É½ÕÀ¹•ÑÉ½ÕÁA…ÍÍİ½É ¤¹¥ÍµÁÑä ¤¤(€€€€€€€€€€€€€€€É•ÑÕÉ¸±¥Ù•¡…¹¹•±É½ÕÀ¹•ÑÉ½ÕÁ%¹‘•à ¤ì(€€€€€€€ô(€€€€€€€É•ÑÕÉ¸€´Äì(€€€ô((€€€ÁÉ¥Ù…Ñ”‰½½±•…¸¥ÍÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±Y…±¥ ¤ì(€€€€€€€¥˜€¡ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´€ôô¹Õ±°¤ì(€€€€€€€€€€€Q½…ÍĞ¹µ…­•Q•áĞ¡ÁÀ¹•Ñ%¹ÍÑ…¹” ¤°€‹¢¾ß–#¦'š.§¦ŠG¦Lˆ°Q½…ÍĞ¹19Q!}M!=IP¤¹Í¡½Ü ¤ì(€€€€€€€€€€€É•ÑÕÉ¸™…±Í”ì(€€€€€€€ô(€€€€€€€É•ÑÕÉ¸ÑÉÕ”ì(€€€ô((€€€€¼¿¢º‡º_’â“’â«š^Û¦^Ónã–Ş»jKšVÀ(€€€ÁÕ‰±¥ŒÍÑ…Ñ¥Œ±½¹œ•ÑQ¥µ”¡MÑÉ¥¹œÍÑ…ÉÑQ¥µ”°MÑÉ¥¹œ•¹‘Q¥µ”¤€ì(€€€€€€€M¥µÁ±•…Ñ•½Éµ…Ğ‘˜€ô¹•ÜM¥µÁ±•…Ñ•½Éµ…Ğ ‰åååäµ54µ‘! éµ´éÍÌˆ¤ì(€€€€€€€±½¹œ•Q¥µ”€ô€Àì(€€€€€€€ÑÉäì(€€€€€€€€€€€•Q¥µ”€ô‘˜¹Á…ÉÍ”¡•¹‘Q¥µ”¤¹•ÑQ¥µ” ¤ì(€€€€€€€ô…Ñ €¡A…ÉÍ•á•ÁÑ¥½¸”¤ì(€€€€€€€€€€€”¹ÁÉ¥¹ÑMÑ…­QÉ…” ¤ì(€€€€€€€ô(€€€€€€€±½¹œÍQ¥µ”€ô€Àì(€€€€€€€ÑÉäì(€€€€€€€€€€€ÍQ¥µ”€ô‘˜¹Á…ÉÍ”¡ÍÑ…ÉÑQ¥µ”¤¹•ÑQ¥µ” ¤ì(€€€€€€€ô…Ñ €¡A…ÉÍ•á•ÁÑ¥½¸”¤ì(€€€€€€€€€€€”¹ÁÉ¥¹ÑMÑ…­QÉ…” ¤ì(€€€€€€€ô(€€€€€€€±½¹œ‘¥™˜€ô€¡•Q¥µ”€´ÍQ¥µ”¤€¼€ÄÀÀÀì(€€€€€€€É•ÑÕÉ¸‘¥™˜ì(€€€ô(€€€ÁÉ¥Ù…Ñ”€MÑÉ¥¹œ‘ÕÉ…Ñ¥½¹Q½MÑÉ¥¹œ¡¥¹Ğ‘ÕÉ…Ñ¥½¸¤ì(€€€€€€€¥˜€¡‘ÕÉ…Ñ¥½¸€ğ€À¤ì(€€€€€€€€€€€‘ÕÉ…Ñ¥½¸€ô€Àì(€€€€€€€ô(€€€€€€€MÑÉ¥¹œÉ•ÍÕ±Ğ€ô€ˆˆì(€€€€€€€¥¹Ğ‘ÕÈ€ô‘ÕÉ…Ñ¥½¸€¼€ÄÀÀÀì(€€€€€€€¥¹Ğ¡½ÕÈõ‘ÕÈ¼ÌØÀÀì(€€€€€€€¥¹Ğµ¥¸€ô€¡‘ÕÈ€¼€ØÀ¤€”€ØÀì(€€€€€€€¥¹ĞÍ•Œ€ô‘ÕÈ€”€ØÀì(€€€€€€€¥˜¡¡½ÕÈøÀ¥ì(€€€€€€€€€€€¥˜€¡µ¥¸€ø€ä¤ì(€€€€€€€€€€€€€€€¥˜€¡Í•Œ€ø€ä¤ì(€€€€€€€€€€€€€€€€€€€É•ÍÕ±Ğ€õ¡½ÕÈ¬ˆèˆ¬µ¥¸€¬€ˆèˆ€¬Í•Œì(€€€€€€€€€€€€€€€ô•±Í”ì(€€€€€€€€€€€€€€€€€€€É•ÍÕ±Ğ€õ¡½ÕÈ¬ˆèˆ¬µ¥¸€¬€ˆèÀˆ€¬Í•Œì(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€ô•±Í”ì(€€€€€€€€€€€€€€€¥˜€¡Í•Œ€ø€ä¤ì(€€€€€€€€€€€€€€€€€€€É•ÍÕ±Ğ€õ¡½ÕÈ¬ˆèˆ¬€ˆÀˆ€¬µ¥¸€¬€ˆèˆ€¬Í•Œì(€€€€€€€€€€€€€€€ô•±Í”ì(€€€€€€€€€€€€€€€€€€€É•ÍÕ±Ğ€ô¡½ÕÈ¬ˆèˆ¬ˆÀˆ€¬µ¥¸€¬€ˆèÀˆ€¬Í•Œì(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€ô(€€€€€€€õ•±Í•ì(€€€€€€€€€€€¥˜€¡µ¥¸€ø€ä¤ì(€€€€€€€€€€€€€€€¥˜€¡Í•Œ€ø€ä¤ì(€€€€€€€€€€€€€€€€€€€É•ÍÕ±Ğ€ôµ¥¸€¬€ˆèˆ€¬Í•Œì(€€€€€€€€€€€€€€€ô•±Í”ì(€€€€€€€€€€€€€€€€€€€É•ÍÕ±Ğ€ôµ¥¸€¬€ˆèÀˆ€¬Í•Œì(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€ô•±Í”ì(€€€€€€€€€€€€€€€¥˜€¡Í•Œ€ø€ä¤ì(€€€€€€€€€€€€€€€€€€€É•ÍÕ±Ğ€ôˆÀˆ€¬µ¥¸€¬€ˆèˆ€¬Í•Œì(€€€€€€€€€€€€€€€ô•±Í”ì(€€€€€€€€€€€€€€€€€€€É•ÍÕ±Ğ€ô€ˆÀˆ€¬µ¥¸€¬€ˆèÀˆ€¬Í•Œì(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€ô(€€€€€€€ô(€€€€€€€É•ÑÕÉ¸É•ÍÕ±Ğì(€€€ô(€€€ÁÕ‰±¥ŒÙ½¥Í¡½İAÉ½É•ÍÍ	…ÉÌ ‰½½±•…¸Í¡½Ü¥ì((€€€€€€€Í	…È¹É•ÅÕ•ÍÑ½ÕÌ ¤ì(€€€€€€€¥˜¡Í¡½Ü¥ì(€€€€€€€€€€€±±}É¥¡Ñ}Ñ½Á}¡Õ¥­…¸¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹Y%M%	1¤ì(€€€€€€€€€€€‰…­½¹ÑÉ½±±•È¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹Y%M%	1¤ì(€€€€€€€€€€€±±}•Áœ¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹=9¤ì(€€€€€€€õ•±Í•ì(€€€€€€€€€€€‰…­½¹ÑÉ½±±•È¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹=9¤ì(€€€€€€€€€€€±±}É¥¡Ñ}Ñ½Á}¡Õ¥­…¸¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹=9¤ì(€€€€€€€€€€€¥˜ …Ñ¥Á}•ÁœÄ¹•ÑQ•áĞ ¤¹•ÅÕ…±Ì ‹šjš^ƒ’ş‡š¼ˆ¤¥ì(€€€€€€€€€€€€€€€±±}•Áœ¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹Y%M%	1¤ì(€€€€€€€€€€€ô(€€€€€€€ô((((€€€€€€€¥Ù}Á±…ä¹Í•Ñ=¹±¥­1¥ÍÑ•¹•È¡¹•ÜY¥•Ü¹=¹±¥­1¥ÍÑ•¹•È ¤ì((€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹±¥¬¡Y¥•Ü…ÉœÀ¤ì(€€€€€€€€€€€€€€€µY¥‘•½Y¥•Ü¹ÍÑ…ÉĞ ¤ì(€€€€€€€€€€€€€€€¥Ù}Á±…ä¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹%9Y%M%	1¤ì(€€€€€€€€€€€€€€€½Õ¹Ñ½İ¹Q¥µ•È¹ÍÑ…ÉĞ ¤ì(€€€€€€€€€€€€€€€¥Ù}Á±…åÁ…ÕÍ”¹Í•Ñ	…­É½Õ¹¡½¹Ñ•áÑ½µÁ…Ğ¹•ÑÉ…İ…‰±”¡1¥Ù•A±…åÑ¥Ù¥Ñä¹½¹Ñ•áĞ°H¹‘É…İ…‰±”¹Ù½‘}Á…ÕÍ”¤¤ì(€€€€€€€€€€€ô(€€€€€€€ô¤ì((€€€€€€€¥Ù}Á±…åÁ…ÕÍ”¹Í•Ñ=¹±¥­1¥ÍÑ•¹•È¡¹•ÜY¥•Ü¹=¹±¥­1¥ÍÑ•¹•È ¤ì(€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹±¥¬¡Y¥•Ü…ÉœÀ¤ì(€€€€€€€€€€€€€€€¥˜¡µY¥‘•½Y¥•Ü¹¥ÍA±…å¥¹œ ¤¥ì(€€€€€€€€€€€€€€€€€€€µY¥‘•½Y¥•Ü¹Á…ÕÍ” ¤ì(€€€€€€€€€€€€€€€€€€€½Õ¹Ñ½İ¹Q¥µ•È¹…¹•° ¤ì(€€€€€€€€€€€€€€€€€€€¥Ù}Á±…ä¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹Y%M%	1¤ì(€€€€€€€€€€€€€€€€€€€¥Ù}Á±…åÁ…ÕÍ”¹Í•Ñ	…­É½Õ¹¡½¹Ñ•áÑ½µÁ…Ğ¹•ÑÉ…İ…‰±”¡1¥Ù•A±…åÑ¥Ù¥Ñä¹½¹Ñ•áĞ°H¹‘É…İ…‰±”¹¥½¹}Á±…ä¤¤ì(€€€€€€€€€€€€€€€õ•±Í•ì(€€€€€€€€€€€€€€€€€€€µY¥‘•½Y¥•Ü¹ÍÑ…ÉĞ ¤ì(€€€€€€€€€€€€€€€€€€€¥Ù}Á±…ä¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹%9Y%M%	1¤ì(€€€€€€€€€€€€€€€€€€€½Õ¹Ñ½İ¹Q¥µ•È¹ÍÑ…ÉĞ ¤ì(€€€€€€€€€€€€€€€€€€€¥Ù}Á±…åÁ…ÕÍ”¹Í•Ñ	…­É½Õ¹¡½¹Ñ•áÑ½µÁ…Ğ¹•ÑÉ…İ…‰±”¡1¥Ù•A±…åÑ¥Ù¥Ñä¹½¹Ñ•áĞ°H¹‘É…İ…‰±”¹Ù½‘}Á…ÕÍ”¤¤ì(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€ô(€€€€€€€ô¤ì(€€€€€€€Í	…È¹Í•Ñ=¹M••­	…É¡…¹•1¥ÍÑ•¹•È¡¹•ÜM••­	…È¹=¹M••­	…É¡…¹•1¥ÍÑ•¹•È ¤ì(((€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹MÑ½ÁQÉ…­¥¹Q½Õ ¡M••­	…È…ÉœÀ¤ì((€€€€€€€€€€€ô((€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹MÑ…ÉÑQÉ…­¥¹Q½Õ ¡M••­	…È…ÉœÀ¤ì((€€€€€€€€€€€ô((€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹AÉ½É•ÍÍ¡…¹•¡M••­	…ÈÍˆ°¥¹ĞÁÉ½É•ÍÌ°‰½½±•…¸™É½µÕÍ•È¤ì(€€€€€€€€€€€€€€€¥˜¡™É½µÕÍ•È¥ì(€€€€€€€€€€€€€€€€€€€¥˜¡½Õ¹Ñ½İ¹Q¥µ•È„õ¹Õ±°¥ì(€€€€€€€€€€€€€€€€€€€€€€€µY¥‘•½Y¥•Ü¹Í••­Q¼¡ÁÉ½É•ÍÌ¤ì(€€€€€€€€€€€€€€€€€€€€€€€½Õ¹Ñ½İ¹Q¥µ•È¹…¹•° ¤ì(€€€€€€€€€€€€€€€€€€€€€€€½Õ¹Ñ½İ¹Q¥µ•È¹ÍÑ…ÉĞ ¤ì(€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€ô(€€€€€€€ô¤ì(€€€€€€€Í	…È¹Í•Ñ=¹-•å1¥ÍÑ•¹•È¡¹•ÜY¥•Ü¹=¹-•å1¥ÍÑ•¹•È ¤ì(€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€ÁÕ‰±¥Œ‰½½±•…¸½¹-•ä¡Y¥•Ü…ÉœÀ°¥¹Ğ­•å½‘”°-•åÙ•¹Ğ•Ù•¹Ğ¤ì(€€€€€€€€€€€€€€€¥˜¡•Ù•¹Ğ¹•ÑÑ¥½¸ ¤ôõ-•åÙ•¹Ğ¹Q%=9}=]8¥ì(€€€€€€€€€€€€€€€€€€€¥˜¡­•å½‘”ôõ-•åÙ•¹Ğ¹-e=}A}9QIññ­•å½‘”ôõ-•åÙ•¹Ğ¹-e=}9QH¥ì(€€€€€€€€€€€€€€€€€€€€€€€¥˜¡µY¥‘•½Y¥•Ü¹¥ÍA±…å¥¹œ ¤¥ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€µY¥‘•½Y¥•Ü¹Á…ÕÍ” ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€½Õ¹Ñ½İ¹Q¥µ•È¹…¹•° ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€¥Ù}Á±…ä¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹Y%M%	1¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€¥Ù}Á±…åÁ…ÕÍ”¹Í•Ñ	…­É½Õ¹¡½¹Ñ•áÑ½µÁ…Ğ¹•ÑÉ…İ…‰±”¡1¥Ù•A±…åÑ¥Ù¥Ñä¹½¹Ñ•áĞ°H¹‘É…İ…‰±”¹¥½¹}Á±…ä¤¤ì(€€€€€€€€€€€€€€€€€€€€€€€õ•±Í•ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€µY¥‘•½Y¥•Ü¹ÍÑ…ÉĞ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€¥Ù}Á±…ä¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹%9Y%M%	1¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€½Õ¹Ñ½İ¹Q¥µ•È¹ÍÑ…ÉĞ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€¥Ù}Á±…åÁ…ÕÍ”¹Í•Ñ	…­É½Õ¹¡½¹Ñ•áÑ½µÁ…Ğ¹•ÑÉ…İ…‰±”¡1¥Ù•A±…åÑ¥Ù¥Ñä¹½¹Ñ•áĞ°H¹‘É…İ…‰±”¹Ù½‘}Á…ÕÍ”¤¤ì(€€€€€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€É•ÑÕÉ¸™…±Í”ì(€€€€€€€€€€€ô(€€€€€€€ô¤ì(€€€€€€€¥˜¡µY¥‘•½Y¥•Ü¹¥ÍA±…å¥¹œ ¤¥ì(€€€€€€€€€€€¥Ù}Á±…ä¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹%9Y%M%	1¤ì(€€€€€€€€€€€¥Ù}Á±…åÁ…ÕÍ”¹Í•Ñ	…­É½Õ¹¡½¹Ñ•áÑ½µÁ…Ğ¹•ÑÉ…İ…‰±”¡1¥Ù•A±…åÑ¥Ù¥Ñä¹½¹Ñ•áĞ°H¹‘É…İ…‰±”¹Ù½‘}Á…ÕÍ”¤¤ì(€€€€€€€õ•±Í•ì(€€€€€€€€€€€¥Ù}Á±…ä¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹Y%M%	1¤ì(€€€€€€€€€€€¥Ù}Á±…åÁ…ÕÍ”¹Í•Ñ	…­É½Õ¹¡½¹Ñ•áÑ½µÁ…Ğ¹•ÑÉ…İ…‰±”¡1¥Ù•A±…åÑ¥Ù¥Ñä¹½¹Ñ•áĞ°H¹‘É…İ…‰±”¹¥½¹}Á±…ä¤¤ì(€€€€€€€ô(€€€€€€€¥˜¡½Õ¹Ñ½İ¹Q¥µ•ÈÌôõ¹Õ±°¥ì(€€€€€€€€€€€½Õ¹Ñ½İ¹Q¥µ•ÈÌ€ô¹•Ü½Õ¹Ñ½İ¹Q¥µ•È¡Á½ÍÑQ¥µ•½ÕĞ°€ÄÀÀÀ¤ì((€€€€€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹Q¥¬¡±½¹œ…ÉœÀ¤ì((€€€€€€€€€€€€€€€€€€€¥˜¡µY¥‘•½Y¥•Ü€„ô¹Õ±°¥ì(€€€€€€€€€€€€€€€€€€€€€€€Í	…È¹Í•ÑAÉ½É•ÍÌ¡Í…™•Q¥µ•5Ì¡µY¥‘•½Y¥•Ü¹•ÑÕÉÉ•¹ÑA½Í¥Ñ¥½¸ ¤¤¤ì(€€€€€€€€€€€€€€€€€€€€€€€ÑÙ}ÕÉÉ•¹ÑÁ½Ì¹Í•ÑQ•áĞ¡‘ÕÉ…Ñ¥½¹Q½MÑÉ¥¹œ¡Í…™•Q¥µ•5Ì¡µY¥‘•½Y¥•Ü¹•ÑÕÉÉ•¹ÑA½Í¥Ñ¥½¸ ¤¤¤¤ì(€€€€€€€€€€€€€€€€€€€ô((€€€€€€€€€€€€€€€ô((€€€€€€€€€€€€€€€=Ù•ÉÉ¥‘”(€€€€€€€€€€€€€€€ÁÕ‰±¥ŒÙ½¥½¹¥¹¥Í  ¤ì(€€€€€€€€€€€€€€€€€€€¥˜¡‰…­½¹ÑÉ½±±•È¹•ÑY¥Í¥‰¥±¥Ñä ¤€ôôY¥•Ü¹Y%M%	1¥ì(€€€€€€€€€€€€€€€€€€€€€€€‰…­½¹ÑÉ½±±•È¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹=9¤ì(€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€ôì(€€€€€€€õ•±Í•ì(€€€€€€€€€€€½Õ¹Ñ½İ¹Q¥µ•ÈÌ¹…¹•° ¤ì(€€€€€€€ô(€€€€€€€½Õ¹Ñ½İ¹Q¥µ•ÈÌ¹ÍÑ…ÉĞ ¤ì(€€€ô((€€€€¼¨¨(€€€€€¨ƒ–öOšJ·šRû–"_¢†£’âë¦ëš"[–*ƒ¢ö÷–’Ç¢Ò—š^Û¾ò3¢ºûö»’â’â«¦îc¢º“jšJ·šRû–"_¢†£¾ò3’şw¢¾šJ·šRûV3¦v‹’â7’òk–Ò§šê(€€€€€¨¼(€€€ÁÉ¥Ù…Ñ”Ù½¥±•…É1¥Ù•¡…¹¹•±1¥ÍĞ ¤ì(€€€€€€€±•…É1¥Ù•¡…¹¹•±1¥ÍĞ¡ÑÉÕ”¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥±•…É1¥Ù•¡…¹¹•±1¥ÍĞ¡‰½½±•…¸É•±•…Í•A±…å•È¤ì(€€€€€€€É•™É•Í¡¥¹1¥Ù•¡…¹¹•±1¥ÍĞ€ô™…±Í”ì(€€€€€€€Á•¹‘¥¹1¥Ù•I•™É•Í¡¡…¹¹•±9…µ”€ô¹Õ±°ì(€€€€€€€Á•¹‘¥¹1¥Ù•I•™É•Í¡M½ÕÉ•%¹‘•à€ô€´Äì(€€€€€€€ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%Ñ•´€ô¹Õ±°ì(€€€€€€€ÕÉÉ•¹Ñ1¥Ù•¡…¹¹•±%¹‘•à€ô€´Äì(€€€€€€€ÕÉÉ•¹Ñ1¥Ù•1½½­	…­%¹‘•à€ô€´Äì(€€€€€€€ÕÉÉ•¹Ñ1¥Ù•¡…¹•M½ÕÉ•Q¥µ•Ì€ô€Àì(€€€€€€€±¥Ù•¡…¹¹•±É½ÕÁ1¥ÍĞ¹±•…È ¤ì(€€€€€€€Á¥½¹™¥œ¹•Ğ ¤¹•Ñ¡…¹¹•±É½ÕÁ1¥ÍĞ ¤¹±•…È ¤ì(€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ½¹¹•ÑQ¥µ•½ÕÑ¡…¹•M½ÕÉ•IÕ¸¤ì(€€€€€€€µ!…¹‘±•È¹É•µ½Ù•…±±‰…­Ì¡µ1½…‘ÁIÕ¸¤ì(€€€€€€€¡¥‘•Mİ¥Ñ¡¡…¹¹•±M¹…ÁÍ¡½Ğ ¤ì(€€€€€€€¥˜€¡É•±•…Í•A±…å•È€˜˜µY¥‘•½Y¥•Ü€„ô¹Õ±°¤µY¥‘•½Y¥•Ü¹É•±•…Í” ¤ì(€€€€€€€Í¡½İMÕ•ÍÌ ¤ì(€€€€€€€¥˜€¡±¥Ù•¡…¹¹•±É½ÕÁ‘…ÁÑ•È€„ô¹Õ±°¤ì(€€€€€€€€€€€±¥Ù•¡…¹¹•±É½ÕÁ‘…ÁÑ•È¹±•…ÉÉ½ÕÁMÑ…Ñ” ¤ì(€€€€€€€€€€€±¥Ù•¡…¹¹•±É½ÕÁ‘…ÁÑ•È¹Í•Ñ9•İ…Ñ„¡¹•ÜÉÉ…å1¥ÍĞñ1¥Ù•¡…¹¹•±É½ÕÀø ¤¤ì(€€€€€€€ô(€€€€€€€¥˜€¡±¥Ù•¡…¹¹•±%Ñ•µ‘…ÁÑ•È€„ô¹Õ±°¤ì(€€€€€€€€€€€±¥Ù•¡…¹¹•±%Ñ•µ‘…ÁÑ•È¹Í•Ñ½ÕÍ•‘¡…¹¹•±%¹‘•à ´Ä¤ì(€€€€€€€€€€€±¥Ù•¡…¹¹•±%Ñ•µ‘…ÁÑ•È¹Í•ÑM•±•Ñ•‘¡…¹¹•±%¹‘•à ´Ä¤ì(€€€€€€€€€€€±¥Ù•¡…¹¹•±%Ñ•µ‘…ÁÑ•È¹Í•Ñ9•İ…Ñ„¡¹•ÜÉÉ…å1¥ÍĞñ1¥Ù•¡…¹¹•±%Ñ•´ø ¤¤ì(€€€€€€€ô(€€€€€€€¥˜€¡ÑÙ1•™Ñ¡…¹¹•±1¥ÍÑ1…å½ÕĞ€„ô¹Õ±°¤ÑÙ1•™Ñ¡…¹¹•±1¥ÍÑ1…å½ÕĞ¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹%9Y%M%	1¤ì(€€€€€€€¥˜€¡ÑÙI¥¡ÑM•ÑÑ¥¹1…å½ÕĞ€„ô¹Õ±°¤ÑÙI¥¡ÑM•ÑÑ¥¹1…å½ÕĞ¹Í•ÑY¥Í¥‰¥±¥Ñä¡Y¥•Ü¹%9Y%M%	1¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥Í•ÑµÁÑå1¥Ù•¡…¹¹•±1¥ÍĞ ¤ì(€€€€€€€Í•ÑµÁÑå1¥Ù•¡…¹¹•±1¥ÍĞ¡ÑÉÕ”¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥Í•ÑµÁÑå1¥Ù•¡…¹¹•±1¥ÍĞ¡‰½½±•…¸É•±•…Í•A±…å•È¤ì(€€€€€€€±•…É1¥Ù•¡…¹¹•±1¥ÍĞ¡É•±•…Í•A±…å•È¤ì(¼¼€€€€€€€Q½…ÍĞ¹µ…­•Q•áĞ¡ÁÀ¹•Ñ%¹ÍÑ…¹” ¤°€‹šêC–ò–âà³¢¾ß–"š6‹–"Ã–Û’î[šê@ˆ°Q½…ÍĞ¹19Q!}M!=IP¤¹Í¡½Ü ¤ì(€€€ô)ô(

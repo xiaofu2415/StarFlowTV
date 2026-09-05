@@ -36,3 +36,20 @@
 		}
 	]
     }
+
+## StarFlowTV private distribution endpoint
+
+The application starts with the live configuration at
+`https://tv.yuying.beauty/live/live.txt` and checks
+`https://tv.yuying.beauty/app/update.json` for a newer APK. A user's saved live URL always wins.
+Both defaults can be changed at build time without committing credentials:
+
+```bash
+./gradlew :app:assembleJavaDebug \
+  -PstarflowLiveUrl=https://tv.example/live/live.txt \
+  -PstarflowUpdateUrl=https://tv.example/app/update.json
+```
+
+Update manifests and APK downloads must use credential-free HTTPS on the same origin. The APK is
+installed only after its declared byte length and SHA-256 digest are verified. The public app
+repository never contains private playlists or a GitHub token.

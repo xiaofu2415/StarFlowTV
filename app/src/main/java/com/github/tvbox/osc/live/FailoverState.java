@@ -7,10 +7,11 @@ public final class FailoverState {
     static final long FAILURE_WINDOW_MILLIS = 30 * 60_000L;
     static final long CIRCUIT_BREAK_MILLIS = 2 * 60 * 60_000L;
     static final long ANTI_FLAP_MILLIS = 60_000L;
+    static final long STALL_RETRY_WINDOW_MILLIS = 5 * 60_000L;
 
     private final int lineCount;
     private final Deque<Long> failures = new ArrayDeque<>();
-    private boolean stallRetryUsed;
+    private long lastStallRetryMillis = Long.MIN_VALUE;
     private boolean userLocked;
     private boolean refreshRequested;
     private int attemptedLines;
@@ -30,14 +31,17 @@ public final class FailoverState {
         return userLocked;
     }
 
-    boolean useStallRetry() {
-        if (stallRetryUsed) return false;
-        stallRetryUsed = true;
+    boolean useStallRetry(long nowMillis) {
+        if (lastStallRetryMillis != Long.MIN_VALUE
+                && nowMillis >= lastStallRetryMillis
+                && nowMillis - lastStallRetryMillis < STALL_RETRY_WINDOW_MILLIS) {
+            return false;
+        }
+        lastStallRetryMillis = nowMillis;
         return true;
     }
 
     void recordPlaybackStarted() {
-        stallRetryUsed = false;
         attemptedLines = 0;
         refreshRequested = false;
     }
@@ -81,7 +85,6 @@ public final class FailoverState {
 
     public void recordSwitch(long nowMillis) {
         lastSwitchMillis = nowMillis;
-        stallRetryUsed = false;
     }
 
     public boolean isInsideAntiFlapWindow(long nowMillis) {

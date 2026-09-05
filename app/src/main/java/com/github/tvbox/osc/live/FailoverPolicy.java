@@ -17,7 +17,7 @@ public final class FailoverPolicy {
         state.recordFailure(nowMillis);
         if ((event == PlaybackEvent.NO_DATA_8_SECONDS
                 || event == PlaybackEvent.NO_FIRST_FRAME_10_SECONDS)
-                && state.useStallRetry()) {
+                && state.useStallRetry(nowMillis)) {
             return FailoverDecision.RETRY_CURRENT;
         }
 

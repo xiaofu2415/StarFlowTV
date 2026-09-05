@@ -47,6 +47,10 @@ import com.github.tvbox.osc.bean.LiveEpgDate;
 import com.github.tvbox.osc.bean.LivePlayerManager;
 import com.github.tvbox.osc.bean.LiveSettingGroup;
 import com.github.tvbox.osc.bean.LiveSettingItem;
+import com.github.tvbox.osc.live.FailoverDecision;
+import com.github.tvbox.osc.live.FailoverPolicy;
+import com.github.tvbox.osc.live.FailoverState;
+import com.github.tvbox.osc.live.PlaybackEvent;
 import com.github.tvbox.osc.navigation.LiveKeyAction;
 import com.github.tvbox.osc.navigation.LiveKeyMapper;
 import com.github.tvbox.osc.player.controller.LiveController;
@@ -178,6 +182,10 @@ public class LivePlayActivity extends BaseActivity {
     private int pendingLiveRefreshSourceIndex = -1;
     private boolean refreshingLiveChannelList = false;
     private int liveConfigRequestId = 0;
+    private final FailoverPolicy failoverPolicy = new FailoverPolicy();
+    private FailoverState failoverState = new FailoverState(0);
+    private PlaybackEvent pendingFailoverEvent = PlaybackEvent.PLAYBACK_ERROR;
+    private boolean currentPlaybackStarted = false;
     private LivePlayerManager livePlayerManager = new LivePlayerManager();
     private ArrayList<Integer> channelGroupPasswordConfirmed = new ArrayList<>();
 
@@ -1843,7 +1851,12 @@ public class LivePlayActivity extends BaseActivity {
             currentLiveChannelIndex = liveChannelIndex;
             currentLiveChannelItem = getLiveChannels(currentChannelGroupIndex).get(currentLiveChannelIndex);
             Hawk.put(HawkConfig.LIVE_CHANNEL, currentLiveChannelItem.getChannelName());
+            failoverState = new FailoverState(currentLiveChannelItem.getSourceNum());
+        } else {
+            failoverState.recordSwitch(System.currentTimeMillis());
         }
+
+        currentPlaybackStarted = false;
 
         channel_Name = currentLiveChannelItem;
         currentLiveLookBackIndex=-1;
@@ -1928,12 +1941,14 @@ public class LivePlayActivity extends BaseActivity {
 
     public void playPreSource() {
         if (!isCurrentLiveChannelValid()) return;
+        failoverState.setUserLocked(true);
         currentLiveChannelItem.preSource();
         playChannel(currentChannelGroupIndex, currentLiveChannelIndex, true);
     }
 
     public void playNextSource() {
         if (!isCurrentLiveChannelValid()) return;
+        failoverState.setUserLocked(true);
         currentLiveChannelItem.nextSource();
         playChannel(currentChannelGroupIndex, currentLiveChannelIndex, true);
     }
@@ -2304,6 +2319,12 @@ public class LivePlayActivity extends BaseActivity {
                     case VideoView.STATE_PREPARED:
                         // 准备就绪：播放器已经加载好媒体数据，但尚未开始播放。
                     case VideoView.STATE_BUFFERED:
+                        pendingFailoverEvent = currentPlaybackStarted
+                                ? PlaybackEvent.NO_DATA_8_SECONDS
+                                : PlaybackEvent.NO_FIRST_FRAME_10_SECONDS;
+                        mHandler.postDelayed(mConnectTimeoutChangeSourceRun,
+                                currentPlaybackStarted ? 8_000L : 10_000L);
+                        break;
                     case VideoView.STATE_PLAYING:
                         // 播放状态：当播放器缓冲完成或正在正常播放时，表明当前源是可用的，
                         hideSwitchChannelSnapshot();
@@ -2314,18 +2335,28 @@ public class LivePlayActivity extends BaseActivity {
                         }
                         currentLiveChangeSourceTimes = 0;
                         allowLiveSwitchPlayer = true;
+                        currentPlaybackStarted = true;
+                        failoverPolicy.onEvent(PlaybackEvent.PLAYBACK_STARTED,
+                                failoverState, System.currentTimeMillis());
                         break;
                     case VideoView.STATE_ERROR:
                     case VideoView.STATE_PLAYBACK_COMPLETED:
                         // 错误或播放结束状态：播放器遇到错误或播放完毕时，
-                        // 启动自动换源任务，等待3秒后尝试切换至备选源
+                        // 通用播放器回调无法可靠提取 HTTP 状态码，按通用失败处理。
                         hideSwitchChannelSnapshot();
-                        mHandler.postDelayed(mConnectTimeoutChangeSourceRun, 3500);
+                        pendingFailoverEvent = PlaybackEvent.PLAYBACK_ERROR;
+                        mHandler.post(mConnectTimeoutChangeSourceRun);
                         break;
                     case VideoView.STATE_PREPARING:
+                        pendingFailoverEvent = PlaybackEvent.NO_FIRST_FRAME_10_SECONDS;
+                        mHandler.postDelayed(mConnectTimeoutChangeSourceRun, 10_000L);
+                        break;
                     case VideoView.STATE_BUFFERING:
-                        // 正在准备或缓冲状态：表示当前源正在加载中
-                        mHandler.postDelayed(mConnectTimeoutChangeSourceRun, (Hawk.get(HawkConfig.LIVE_CONNECT_TIMEOUT, 1) + 1) * 5000L);
+                        pendingFailoverEvent = currentPlaybackStarted
+                                ? PlaybackEvent.NO_DATA_8_SECONDS
+                                : PlaybackEvent.NO_FIRST_FRAME_10_SECONDS;
+                        mHandler.postDelayed(mConnectTimeoutChangeSourceRun,
+                                currentPlaybackStarted ? 8_000L : 10_000L);
                         break;
                     default:
                         LOG.i("echo-Unexpected live_play state: " + playState);
@@ -2374,19 +2405,45 @@ public class LivePlayActivity extends BaseActivity {
     private Runnable mConnectTimeoutChangeSourceRun = new Runnable() {
         @Override
         public void run() {
-            if (switchLivePlayerAndReplay()) {
-                return;
-            }
-            currentLiveChangeSourceTimes++;
-            if (currentLiveChannelItem.getSourceNum() == currentLiveChangeSourceTimes) {
-                currentLiveChangeSourceTimes = 0;
-                Integer[] groupChannelIndex = getNextChannel(Hawk.get(HawkConfig.LIVE_CHANNEL_REVERSE, false) ? -1 : 1);
-                playChannel(groupChannelIndex[0], groupChannelIndex[1], false);
-            } else {
-                playNextSource();
+            if (!isCurrentLiveChannelValid()) return;
+            FailoverDecision decision = failoverPolicy.onEvent(
+                    pendingFailoverEvent, failoverState, System.currentTimeMillis());
+            switch (decision) {
+                case RETRY_CURRENT:
+                    if (!switchLivePlayerAndReplay()) replayCurrentLine();
+                    break;
+                case TRY_NEXT:
+                    currentLiveChannelItem.nextSource();
+                    playChannel(currentChannelGroupIndex, currentLiveChannelIndex, true);
+                    break;
+                case REFRESH_CONFIG:
+                    refreshLiveChannelListAndPlay(currentLiveChannelItem.getChannelName(),
+                            currentLiveChannelItem.getSourceIndex());
+                    break;
+                case SHOW_EXHAUSTED:
+                    hideSwitchChannelSnapshot();
+                    Toast.makeText(LivePlayActivity.this,
+                            R.string.live_source_exhausted, Toast.LENGTH_SHORT).show();
+                    break;
+                case STAY_LOCKED:
+                    Toast.makeText(LivePlayActivity.this,
+                            R.string.live_source_locked_failure, Toast.LENGTH_SHORT).show();
+                    break;
+                case NONE:
+                default:
+                    break;
             }
         }
     };
+
+    private void replayCurrentLine() {
+        if (mVideoView == null || currentLiveChannelItem == null) return;
+        mVideoView.release();
+        String retryUrl = isSHIYI && !TextUtils.isEmpty(playUrl)
+                ? playUrl : currentLiveChannelItem.getUrl();
+        mVideoView.setUrl(retryUrl, liveChannelHeader());
+        mVideoView.start();
+    }
 
     private void initChannelGroupView() {
         mChannelGroupView.setHasFixedSize(true);
@@ -2669,6 +2726,7 @@ public class LivePlayActivity extends BaseActivity {
         switch (settingGroupIndex) {
             case 0://线路切换
                 if (position < 0 || position >= currentLiveChannelItem.getSourceNum()) break;
+                failoverState.setUserLocked(true);
                 currentLiveChannelItem.setSourceIndex(position);
                 playChannel(currentChannelGroupIndex, currentLiveChannelIndex,true);
                 break;

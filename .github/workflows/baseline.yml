@@ -44,10 +44,10 @@ jobs:
       - name: Configure Android SDK path
         run: printf 'sdk.dir=%s\n' "$ANDROID_SDK_ROOT" > local.properties
 
-      - name: Build Java 32-bit and 64-bit debug APKs
+      - name: Test and build Java 32-bit and 64-bit debug APKs
         run: |
           chmod +x gradlew
-          ./gradlew :app:assembleJava32Debug :app:assembleJava64Debug --stacktrace
+          ./gradlew :app:testJava32DebugUnitTest :app:assembleJava32Debug :app:assembleJava64Debug --stacktrace
 
       - name: Upload APKs and build reports
         if: always()

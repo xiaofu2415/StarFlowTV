@@ -1,3 +1,5 @@
+.worktrees/
+
 # windows thumbnail cache
 Thumbs.db
 # Mac DS_Store Files
@@ -97,6 +99,5 @@ lint/tmp/
 .idea/
 
 *.hprof
-*.md
 .temp/
 output-metadata.json

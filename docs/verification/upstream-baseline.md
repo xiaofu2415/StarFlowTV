@@ -48,8 +48,14 @@ A problem occurred configuring project ':pyramid'.
 The workflow must generate `local.properties` from `ANDROID_SDK_ROOT` before
 Gradle configuration. This file remains untracked and contains no credential.
 
-## Required follow-up
+GitHub Actions run `33964764599` generated that file from the runner's
+`ANDROID_SDK_ROOT`, built both requested variants, and uploaded their APKs and
+reports successfully:
 
-Run the same command in an environment that can access Gradle and Android
-dependency repositories, or run it in GitHub Actions. Treat that successful
-baseline as a prerequisite for accepting product changes.
+```text
+:app:assembleJava32Debug   success
+:app:assembleJava64Debug   success
+```
+
+Baseline verification is complete. Future code changes are checked by
+`.github/workflows/baseline.yml`.

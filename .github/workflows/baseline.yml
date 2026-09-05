@@ -24,7 +24,7 @@ permissions:
 
 jobs:
   build:
-    name: Build Java APKs
+    name: Test and build Java APKs
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -44,10 +44,16 @@ jobs:
       - name: Configure Android SDK path
         run: printf 'sdk.dir=%s\n' "$ANDROID_SDK_ROOT" > local.properties
 
-      - name: Test and build Java 32-bit and 64-bit debug APKs
+      - name: Test and build universal, 32-bit, and 64-bit debug APKs
         run: |
           chmod +x gradlew
-          ./gradlew :app:testJava32DebugUnitTest :app:assembleJava32Debug :app:assembleJava64Debug --stacktrace
+          ./gradlew :app:testJava32DebugUnitTest :app:assembleJavaDebug :app:assembleJava32Debug :app:assembleJava64Debug --stacktrace
+
+      - name: Verify StarFlowTV APK names
+        run: |
+          test -f app/build/outputs/apk/java/debug/StarFlowTV-1.0.0-java-debug.apk
+          test -f app/build/outputs/apk/java32/debug/StarFlowTV-1.0.0-java32-debug.apk
+          test -f app/build/outputs/apk/java64/debug/StarFlowTV-1.0.0-java64-debug.apk
 
       - name: Upload APKs and build reports
         if: always()

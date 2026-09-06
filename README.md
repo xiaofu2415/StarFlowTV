@@ -39,6 +39,11 @@
 
 ## StarFlowTV signed distribution
 
+The current release candidate is `1.3.0` (`versionCode` 4). CI produces installable debug APKs
+for TV validation plus release APKs for signing/packaging review in the same run. A release APK is
+not OTA-ready until it is signed with the project production key and its certificate digest is
+published in `latest.json`; no private key is committed here.
+
 The app immediately uses the last activated local live configuration, then checks
 `https://config.yuying.beauty/starflow/config/manifest.json` in the background. A new bundle is
 activated only after HTTPS, Ed25519, SHA-256, and client schema verification. Three versions are

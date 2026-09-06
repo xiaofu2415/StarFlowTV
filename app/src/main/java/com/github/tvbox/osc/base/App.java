@@ -17,6 +17,7 @@ import com.github.tvbox.osc.util.LOG;
 import com.github.tvbox.osc.util.OkGoHelper;
 import com.github.tvbox.osc.util.PlayerHelper;
 import com.github.tvbox.osc.update.DistributionEndpoints;
+import com.github.tvbox.osc.config.RemoteConfigManager;
 import com.kingja.loadsir.core.LoadSir;
 import com.orhanobut.hawk.Hawk;
 import com.p2p.P2PClass;
@@ -71,6 +72,7 @@ public class App extends MultiDexApplication {
         String liveUrl = DistributionEndpoints.resolveLiveUrl(
                 Hawk.get(HawkConfig.LIVE_API_URL, ""), BuildConfig.STARFLOW_LIVE_URL);
         if (!liveUrl.isEmpty()) Hawk.put(HawkConfig.LIVE_API_URL, liveUrl);
+        RemoteConfigManager.initialize(this);
         if (!Hawk.contains(HawkConfig.PLAY_TYPE)) {
             Hawk.put(HawkConfig.PLAY_TYPE, 2);
         } else if (Hawk.get(HawkConfig.PLAY_TYPE, 2) == 0) {

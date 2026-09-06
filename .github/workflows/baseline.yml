@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - feat/starflowtv-foundation
+      - feat/distribution-protocol-v1
     paths-ignore:
       - .github/workflows/bootstrap.yml
       - docs/**

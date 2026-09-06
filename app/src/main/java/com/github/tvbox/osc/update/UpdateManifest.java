@@ -1,20 +1,29 @@
 package com.github.tvbox.osc.update;
 
 import com.google.gson.Gson;
-import com.google.gson.annotations.SerializedName;
+import java.util.ArrayList;
+import java.util.List;
 
 public final class UpdateManifest {
-    @SerializedName("schema_version") public int schemaVersion;
-    @SerializedName("version_code") public int versionCode;
-    @SerializedName("version_name") public String versionName;
-    @SerializedName("minimum_sdk") public int minimumSdk;
-    @SerializedName("release_notes") public String releaseNotes;
-    public Apk apk;
+    public int schemaVersion;
+    public String versionName;
+    public int versionCode;
+    public String channel;
+    public String releaseNotes;
+    public String publishedAt;
+    public int minimumSdk;
+    public boolean forceUpdate;
+    public String signatureAlgorithm;
+    public String keyId;
+    public List<Apk> packages = new ArrayList<>();
 
     public static final class Apk {
-        public String url;
-        public String sha256;
+        public String abi;
+        public String fileName;
+        public String downloadUrl;
         public long size;
+        public String sha256;
+        public String certificateSha256;
     }
 
     public static UpdateManifest parse(String json) {

@@ -37,19 +37,26 @@
 	]
     }
 
-## StarFlowTV private distribution endpoint
+## StarFlowTV signed distribution
 
-The application starts with the live configuration at
-`https://tv.yuying.beauty/live/live.txt` and checks
-`https://tv.yuying.beauty/app/update.json` for a newer APK. A user's saved live URL always wins.
-Both defaults can be changed at build time without committing credentials:
+The app immediately uses the last activated local live configuration, then checks
+`https://config.yuying.beauty/starflow/config/manifest.json` in the background. A new bundle is
+activated only after HTTPS, Ed25519, SHA-256, and client schema verification. Three versions are
+retained and a failed update cannot replace the active version.
+
+APK updates use `https://update.yuying.beauty/starflow/update/latest.json`, select the device ABI,
+and verify the signed manifest, APK digest, package name, and signing certificate before opening
+the Android system installer. Defaults can be changed at build time without committing secrets:
 
 ```bash
 ./gradlew :app:assembleJavaDebug \
-  -PstarflowLiveUrl=https://tv.example/live/live.txt \
-  -PstarflowUpdateUrl=https://tv.example/app/update.json
+  -PstarflowLiveUrl=https://config.example/starflow/config/live.txt \
+  -PstarflowConfigManifestUrl=https://config.example/starflow/config/manifest.json \
+  -PstarflowUpdateUrl=https://update.example/starflow/update/latest.json \
+  -PstarflowSigningPublicKey='<base64 Ed25519 public key>' \
+  -PstarflowSigningKeyId=starflow-production-1 \
+  -PstarflowUpdateChannel=stable
 ```
 
-Update manifests and APK downloads must use credential-free HTTPS on the same origin. The APK is
-installed only after its declared byte length and SHA-256 digest are verified. The public app
-repository never contains private playlists or a GitHub token.
+The signing private key belongs in a CI secret store and never in this repository, the APK, or the
+static VPS. The public app repository never contains private playlists or account credentials.

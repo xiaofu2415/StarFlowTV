@@ -10,7 +10,7 @@ StarFlowTV 是面向 Android TV 的个人使用播放器：启动后直接进入
 | --- | --- |
 | applicationId | `tv.starflow.player` |
 | versionName / versionCode | `1.3.0` / `4` |
-| Android CI | [Run #24：成功](https://github.com/xiaofu2415/StarFlowTV/actions/runs/34060456081) |
+| Android CI | [Run #27：成功](https://github.com/xiaofu2415/StarFlowTV/actions/runs/34066782655) |
 | 代码分支 | `feat/formal-release-1.3.0-20260906` |
 | PR | [#1](https://github.com/xiaofu2415/StarFlowTV/pull/1)，open，未合并 |
 | 生产签名 | `production-signing-pending` |
@@ -54,7 +54,7 @@ StarFlowTV 是面向 Android TV 的个人使用播放器：启动后直接进入
 
 - TCL 65T8G Max 65 英寸：优先使用 arm64-v8a。
 - 小米电视 4X 55 英寸：根据系统 ABI 选择 armeabi-v7a 或 universal。
-- [Android CI 构建产物](https://github.com/xiaofu2415/StarFlowTV/actions/runs/34060456081)包含三种 debug/release ABI 产物；在生产签名完成前，release APK 仅用于签名和打包检查。
+- [Android CI 构建产物](https://github.com/xiaofu2415/StarFlowTV/actions/runs/34066782655)包含三种 debug/release ABI 产物；在生产签名完成前，release APK 仅用于签名和打包检查。
 
 ## 构建与验证
 
@@ -64,7 +64,7 @@ StarFlowTV 是面向 Android TV 的个人使用播放器：启动后直接进入
 ./gradlew :app:assembleJavaRelease :app:assembleJava32Release :app:assembleJava64Release
 ```
 
-Source pipeline 会执行候选源审查、去重、网络检测、ffprobe 画质检测、排序、manifest 和 checksums 校验。最近一次 [Source Checks #24](https://github.com/xiaofu2415/StarFlowTV-Sources/actions/runs/34062916150) 成功。
+Source pipeline 会执行候选源审查、去重、网络检测、ffprobe 画质检测、排序、manifest 和 checksums 校验。最近一次 [Source Checks #25](https://github.com/xiaofu2415/StarFlowTV-Sources/actions/runs/34066946133) 成功。
 
 ## 分发架构
 

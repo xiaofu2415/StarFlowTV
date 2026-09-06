@@ -51,7 +51,10 @@ retained and a failed update cannot replace the active version.
 
 APK updates use `https://update.yuying.beauty/starflow/update/latest.json`, select the device ABI,
 and verify the signed manifest, APK digest, package name, and signing certificate before opening
-the Android system installer. Defaults can be changed at build time without committing secrets:
+the Android system installer. `latest.json` carries `minSupportedVersionCode`, `mandatory`,
+`packageName`, `apkVariants`, `signingKeyId`, and the explicit `signingStatus`; a
+`production-signing-pending` manifest is rejected and cannot trigger an OTA install. Defaults can
+be changed at build time without committing secrets:
 
 ```bash
 ./gradlew :app:assembleJavaDebug \

@@ -77,18 +77,19 @@ public final class StarFlowUpdateManager {
 
     private static void prompt(Activity activity, UpdateManifest manifest, UpdateManifest.Apk apk) {
         String notes = manifest.releaseNotes == null ? "" : "\n" + manifest.releaseNotes;
+        final boolean mandatory = manifest.mandatory || manifest.forceUpdate;
         final TipDialog[] holder = new TipDialog[1];
         holder[0] = new TipDialog(activity,
                 "发现新版本 " + manifest.versionName + notes,
                 "稍后", "下载更新", new TipDialog.OnListener() {
-            @Override public void left() { if (!manifest.forceUpdate) holder[0].dismiss(); }
+            @Override public void left() { if (!mandatory) holder[0].dismiss(); }
             @Override public void right() {
                 holder[0].dismiss();
                 download(activity, manifest, apk);
             }
-            @Override public void cancel() { if (!manifest.forceUpdate) holder[0].dismiss(); }
+            @Override public void cancel() { if (!mandatory) holder[0].dismiss(); }
         });
-        holder[0].setCancelable(!manifest.forceUpdate);
+        holder[0].setCancelable(!mandatory);
         holder[0].show();
     }
 

@@ -10,6 +10,8 @@ public final class AbiSelectorTest {
         return UpdateManifest.parse("{\"schemaVersion\":1,\"versionName\":\"1.2.0\"," +
                 "\"versionCode\":12,\"channel\":\"stable\",\"releaseNotes\":\"notes\"," +
                 "\"publishedAt\":\"2026-09-06T03:30:00Z\",\"minimumSdk\":23," +
+                "\"minSupportedVersionCode\":1,\"mandatory\":false," +
+                "\"packageName\":\"tv.starflow.player\",\"signingStatus\":\"ready\"," +
                 "\"forceUpdate\":false,\"signatureAlgorithm\":\"Ed25519\"," +
                 "\"keyId\":\"starflow-production-2026-01\",\"packages\":[" +
                 apk("armeabi-v7a") + "," + apk("arm64-v8a") + "," + apk("universal") + "]}");

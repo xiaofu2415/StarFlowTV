@@ -14,6 +14,10 @@ public final class UpdatePolicyTest {
         value.versionCode = versionCode;
         value.versionName = "1.1.0";
         value.minimumSdk = minimumSdk;
+        value.minSupportedVersionCode = 1;
+        value.packageName = "tv.starflow.player";
+        value.mandatory = false;
+        value.signingStatus = "ready";
         value.channel = "stable";
         value.publishedAt = "2026-09-06T03:30:00Z";
         value.signatureAlgorithm = "Ed25519";
@@ -66,5 +70,21 @@ public final class UpdatePolicyTest {
                 1, 23, "beta", "starflow-production-2026-01",
                 "https://update.example/starflow/update/latest.json",
                 manifest(2, 23, "https://update.example/starflow/update/app.apk", HASH)));
+    }
+
+    @Test public void rejectsPendingSigningAndWrongPackageMetadata() {
+        UpdateManifest pending = manifest(2, 23,
+                "https://update.example/starflow/update/app.apk", HASH);
+        pending.signingStatus = "production-signing-pending";
+        assertEquals(UpdateDecision.INVALID, UpdatePolicy.evaluate(
+                1, 23, "stable", "starflow-production-2026-01",
+                "https://update.example/starflow/update/latest.json", pending));
+
+        UpdateManifest wrongPackage = manifest(2, 23,
+                "https://update.example/starflow/update/app.apk", HASH);
+        wrongPackage.packageName = "com.example.other";
+        assertEquals(UpdateDecision.INVALID, UpdatePolicy.evaluate(
+                1, 23, "stable", "starflow-production-2026-01",
+                "https://update.example/starflow/update/latest.json", wrongPackage));
     }
 }

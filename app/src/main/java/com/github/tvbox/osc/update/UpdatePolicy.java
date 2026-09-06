@@ -1,5 +1,7 @@
 package com.github.tvbox.osc.update;
 
+import com.github.tvbox.osc.BuildConfig;
+
 import java.net.URI;
 import java.util.HashSet;
 import java.util.Locale;
@@ -25,6 +27,9 @@ public final class UpdatePolicy {
     ) {
         if (manifest == null || manifest.schemaVersion != 1 || manifest.versionCode <= 0
                 || manifest.minimumSdk < 23 || blank(manifest.versionName) || blank(manifest.publishedAt)
+                || manifest.minSupportedVersionCode <= 0
+                || !BuildConfig.APPLICATION_ID.equals(manifest.packageName)
+                || !"ready".equals(manifest.signingStatus)
                 || !"Ed25519".equals(manifest.signatureAlgorithm)
                 || trustedKeyId == null || !trustedKeyId.equals(manifest.keyId)
                 || !DistributionEndpoints.isSafeHttps(manifestUrl) || manifest.packages == null) {

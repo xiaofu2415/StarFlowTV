@@ -77,6 +77,9 @@ Source pipeline 会执行候选源审查、去重、网络检测、ffprobe 画�
 - [StarFlowTV-Sources（私有）](https://github.com/xiaofu2415/StarFlowTV-Sources)
 - [Release Candidate PR #1](https://github.com/xiaofu2415/StarFlowTV/pull/1)
 - [Android Actions](https://github.com/xiaofu2415/StarFlowTV/actions)
+- [v1.3.0 RC 发布说明](docs/release-notes-v1.3.0-rc.md)
+- [生产签名运行手册](docs/production-signing-v1.3.0.md)
+- [手动生产签名 workflow](.github/workflows/production-signing.yml)
 
 ## 安全与使用边界
 

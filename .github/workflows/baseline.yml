@@ -51,9 +51,11 @@ jobs:
 
       - name: Verify StarFlowTV APK names
         run: |
-          test -f app/build/outputs/apk/java/debug/StarFlowTV-1.0.0-java-debug.apk
-          test -f app/build/outputs/apk/java32/debug/StarFlowTV-1.0.0-java32-debug.apk
-          test -f app/build/outputs/apk/java64/debug/StarFlowTV-1.0.0-java64-debug.apk
+          version_name=$(sed -n "s/.*versionName '\([^']*\)'.*/\1/p" app/build.gradle)
+          test -n "$version_name"
+          test -f "app/build/outputs/apk/java/debug/StarFlowTV-${version_name}-java-debug.apk"
+          test -f "app/build/outputs/apk/java32/debug/StarFlowTV-${version_name}-java32-debug.apk"
+          test -f "app/build/outputs/apk/java64/debug/StarFlowTV-${version_name}-java64-debug.apk"
 
       - name: Upload APKs and build reports
         if: always()

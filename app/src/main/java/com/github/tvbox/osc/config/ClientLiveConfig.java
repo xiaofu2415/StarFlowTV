@@ -6,6 +6,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import java.net.URI;
+import java.net.URLDecoder;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
@@ -16,6 +17,9 @@ public final class ClientLiveConfig {
     private static final Set<String> ROOT = set("schemaVersion", "configVersion", "generatedAt", "channels");
     private static final Set<String> CHANNEL = set("id", "name", "group", "logo", "epgId", "sources");
     private static final Set<String> SOURCE = set("id", "url", "priority", "protocol");
+    private static final Set<String> CREDENTIAL_QUERY_KEYS = set(
+            "access_token", "apikey", "api_key", "auth", "authorization", "key",
+            "password", "session", "sessionid", "sig", "signature", "token");
 
     public final boolean valid;
     public final int configVersion;
@@ -60,10 +64,20 @@ public final class ClientLiveConfig {
             String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase();
             return set("http", "https", "rtsp", "rtp", "udp").contains(scheme)
                     && scheme.equals(protocol) && uri.getHost() != null && uri.getUserInfo() == null
-                    && uri.getRawQuery() == null && uri.getRawFragment() == null;
+                    && !hasCredentialQuery(uri.getRawQuery()) && uri.getRawFragment() == null;
         } catch (Exception ignored) {
             return false;
         }
+    }
+
+    private static boolean hasCredentialQuery(String rawQuery) throws Exception {
+        if (rawQuery == null || rawQuery.isEmpty()) return false;
+        for (String parameter : rawQuery.split("&")) {
+            String rawKey = parameter.split("=", 2)[0];
+            String key = URLDecoder.decode(rawKey, "UTF-8").toLowerCase();
+            if (CREDENTIAL_QUERY_KEYS.contains(key)) return true;
+        }
+        return false;
     }
 
     private static boolean only(JsonObject object, Set<String> allowed) {

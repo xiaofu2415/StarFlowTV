@@ -28,4 +28,13 @@ public final class ClientLiveConfigTest {
                         "{\"id\":\"b\",\"url\":\"https://live.example/a.m3u8\",\"priority\":2,\"protocol\":\"https\"}");
         assertFalse(ClientLiveConfig.parseAndValidate(duplicate).valid);
     }
+
+    @Test public void allowsNonCredentialStreamQueryButRejectsCredentialKeys() {
+        assertTrue(ClientLiveConfig.parseAndValidate(
+                VALID.replace("a.m3u8", "a.m3u8?encrypt=1&quality=hd")).valid);
+        assertFalse(ClientLiveConfig.parseAndValidate(
+                VALID.replace("a.m3u8", "a.m3u8?auth=secret")).valid);
+        assertFalse(ClientLiveConfig.parseAndValidate(
+                VALID.replace("a.m3u8", "a.m3u8?signature=secret")).valid);
+    }
 }

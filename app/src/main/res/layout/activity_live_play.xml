@@ -57,6 +57,23 @@
 		android:textStyle="bold"
 		android:visibility="invisible" />
 
+    <TextView
+        android:id="@+id/starflow_vod_entry"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_margin="20dp"
+        android:background="@drawable/shape_dialog_filter_bg"
+        android:clickable="true"
+        android:focusable="false"
+        android:paddingLeft="18dp"
+        android:paddingTop="10dp"
+        android:paddingRight="18dp"
+        android:paddingBottom="10dp"
+        android:text="@string/starflow_vod_entry"
+        android:textColor="@android:color/white"
+        android:textSize="20sp" />
+
 	<LinearLayout
 		android:id="@+id/tvLeftChannnelListLayout"
 		android:layout_width="wrap_content"

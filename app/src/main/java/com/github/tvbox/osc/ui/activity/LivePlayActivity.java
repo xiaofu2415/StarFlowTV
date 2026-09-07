@@ -1288,8 +1288,10 @@ public class LivePlayActivity extends BaseActivity {
                     return true;
                 }
             }
+            LiveKeyAction action = liveKeyMapper.map(keyCode, false);
             if (!menuVisible && event.getRepeatCount() == 0
-                    && handleLiveKeyAction(liveKeyMapper.map(keyCode, false))) {
+                    && liveKeyMapper.shouldHandleOnKeyUp(action)
+                    && handleLiveKeyAction(action)) {
                 return true;
             }
         }

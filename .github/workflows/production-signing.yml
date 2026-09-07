@@ -69,7 +69,7 @@ jobs:
           test -x "$aapt"
           out="$GITHUB_WORKSPACE/signed-apks"
           install -d -m 0700 "$out"
-          version_name="$(basename "$(find app/build/outputs/apk/java32/release -maxdepth 1 -type f -name 'StarFlowTV-*-java32-release.apk' | sort | tail -1)" | sed -E 's/^StarFlowTV-(.*)-java32-release\\.apk$/\\1/')"
+          version_name="$(basename "$(find app/build/outputs/apk/java32/release -maxdepth 1 -type f -name 'StarFlowTV-*-java32-release.apk' | sort | tail -1)" | sed -E 's/^StarFlowTV-(.*)-java32-release\.apk$/\1/')"
           test -n "$version_name"
           declare -A inputs=(
             [armeabi-v7a]="app/build/outputs/apk/java32/release/StarFlowTV-$version_name-java32-release.apk"

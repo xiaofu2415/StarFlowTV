@@ -69,25 +69,27 @@ jobs:
           test -x "$aapt"
           out="$GITHUB_WORKSPACE/signed-apks"
           install -d -m 0700 "$out"
+          version_name="$(basename "$(find app/build/outputs/apk/java32/release -maxdepth 1 -type f -name 'StarFlowTV-*-java32-release.apk' | sort | tail -1)" | sed -E 's/^StarFlowTV-(.*)-java32-release\\.apk$/\\1/')"
+          test -n "$version_name"
           declare -A inputs=(
-            [armeabi-v7a]="app/build/outputs/apk/java32/release/StarFlowTV-1.3.0-java32-release.apk"
-            [arm64-v8a]="app/build/outputs/apk/java64/release/StarFlowTV-1.3.0-java64-release.apk"
-            [universal]="app/build/outputs/apk/java/release/StarFlowTV-1.3.0-java-release.apk"
+            [armeabi-v7a]="app/build/outputs/apk/java32/release/StarFlowTV-$version_name-java32-release.apk"
+            [arm64-v8a]="app/build/outputs/apk/java64/release/StarFlowTV-$version_name-java64-release.apk"
+            [universal]="app/build/outputs/apk/java/release/StarFlowTV-$version_name-java-release.apk"
           )
           for abi in armeabi-v7a arm64-v8a universal; do
             input="${inputs[$abi]}"
             aligned="$work/$abi-aligned.apk"
-            target="$out/StarFlowTV-1.3.0-$abi.apk"
+            target="$out/StarFlowTV-$version_name-$abi.apk"
             test -s "$input"
             "$zipalign" -f 4 "$input" "$aligned"
             "$apksigner" sign --ks "$work/release.keystore" --ks-key-alias "$STARFLOW_ANDROID_KEY_ALIAS" \
               --ks-pass env:STARFLOW_ANDROID_KEYSTORE_PASSWORD --key-pass env:STARFLOW_ANDROID_KEY_PASSWORD \
               --out "$target" "$aligned"
             "$apksigner" verify --verbose "$target"
-            "$aapt" dump badging "$target" | grep -F "package: name='tv.starflow.player' versionCode='4' versionName='1.3.0'"
+            "$aapt" dump badging "$target" | grep -F "package: name='tv.starflow.player'"
             "$apksigner" verify --print-certs "$target" | tee "$out/$abi-certificates.txt"
           done
-          (cd "$out" && sha256sum StarFlowTV-1.3.0-*.apk > SHA256SUMS)
+          (cd "$out" && sha256sum StarFlowTV-*.apk > SHA256SUMS)
 
       - name: Upload signed APKs and public certificate metadata
         uses: actions/upload-artifact@v4

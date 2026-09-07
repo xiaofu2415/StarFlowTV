@@ -3,7 +3,7 @@ apply plugin: 'com.android.application'
 def starflowLiveUrl = project.findProperty('starflowLiveUrl') ?: 'https://config.yuying.beauty/starflow/config/live.txt'
 def starflowConfigManifestUrl = project.findProperty('starflowConfigManifestUrl') ?: 'https://config.yuying.beauty/starflow/config/manifest.json'
 def starflowUpdateUrl = project.findProperty('starflowUpdateUrl') ?: 'https://update.yuying.beauty/starflow/update/latest.json'
-def starflowSigningPublicKey = project.findProperty('starflowSigningPublicKey') ?: 'gHSEefUM9ejzOFXF8gDorzcoXvZnNczy38M3l55RL5Y='
+def starflowSigningPublicKey = project.findProperty('starflowSigningPublicKey') ?: 'UoMhgZDSBxilLMXr0qGSTGH2NhNEzxP05gIpuzTv9xs='
 def starflowSigningKeyId = project.findProperty('starflowSigningKeyId') ?: 'starflow-production-2026-01'
 def starflowUpdateChannel = project.findProperty('starflowUpdateChannel') ?: 'stable'
 
@@ -13,8 +13,8 @@ android {
     defaultConfig {
         applicationId 'tv.starflow.player'
         targetSdkVersion 28
-        versionCode 4
-        versionName '1.3.0'
+        versionCode 5
+        versionName '1.3.1'
         buildConfigField 'String', 'STARFLOW_LIVE_URL', '"' + starflowLiveUrl + '"'
         buildConfigField 'String', 'STARFLOW_CONFIG_MANIFEST_URL', '"' + starflowConfigManifestUrl + '"'
         buildConfigField 'String', 'STARFLOW_UPDATE_URL', '"' + starflowUpdateUrl + '"'

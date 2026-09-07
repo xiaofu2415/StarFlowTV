@@ -47,6 +47,7 @@ import com.github.tvbox.osc.bean.LiveEpgDate;
 import com.github.tvbox.osc.bean.LivePlayerManager;
 import com.github.tvbox.osc.bean.LiveSettingGroup;
 import com.github.tvbox.osc.bean.LiveSettingItem;
+import com.github.tvbox.osc.config.RemoteConfigManager;
 import com.github.tvbox.osc.live.FailoverDecision;
 import com.github.tvbox.osc.live.FailoverPolicy;
 import com.github.tvbox.osc.live.FailoverState;
@@ -62,6 +63,7 @@ import com.github.tvbox.osc.ui.adapter.LiveSettingGroupAdapter;
 import com.github.tvbox.osc.ui.adapter.LiveSettingItemAdapter;
 import com.github.tvbox.osc.ui.adapter.MyEpgAdapter;
 import com.github.tvbox.osc.ui.dialog.LivePasswordDialog;
+import com.github.tvbox.osc.ui.dialog.LiveConfigUpdateDialog;
 import com.github.tvbox.osc.update.StarFlowUpdateManager;
 import com.github.tvbox.osc.ui.tv.widget.ViewObj;
 import com.github.tvbox.osc.util.DefaultConfig;
@@ -1286,8 +1288,10 @@ public class LivePlayActivity extends BaseActivity {
                     return true;
                 }
             }
+            LiveKeyAction action = liveKeyMapper.map(keyCode, false);
             if (!menuVisible && event.getRepeatCount() == 0
-                    && handleLiveKeyAction(liveKeyMapper.map(keyCode, false))) {
+                    && liveKeyMapper.shouldHandleOnKeyUp(action)
+                    && handleLiveKeyAction(action)) {
                 return true;
             }
         }
@@ -2789,6 +2793,10 @@ public class LivePlayActivity extends BaseActivity {
                 break;
             case 6: {//配置切换
                 ArrayList<String> history = Hawk.get(HawkConfig.LIVE_API_HISTORY, new ArrayList<String>());
+                if (position == history.size()) {
+                    startManualLiveConfigRefresh();
+                    break;
+                }
                 if (history.isEmpty() || position < 0 || position >= history.size()) break;
                 String value = history.get(position);
                 String oldLiveApi = Hawk.get(HawkConfig.LIVE_API_URL, "");
@@ -2842,6 +2850,88 @@ public class LivePlayActivity extends BaseActivity {
         }
         mHandler.removeCallbacks(mHideSettingLayoutRun);
         mHandler.postDelayed(mHideSettingLayoutRun, postTimeout);
+    }
+
+    private void startManualLiveConfigRefresh() {
+        if (isFinishing()) return;
+        final String channelName = getPreferredLiveRefreshChannelName();
+        final int sourceIndex = getPreferredLiveRefreshSourceIndex();
+        final LiveConfigUpdateDialog progressDialog = new LiveConfigUpdateDialog(this);
+        progressDialog.show();
+        progressDialog.updateProgress(0, "正在准备更新");
+        RemoteConfigManager.check(getApplicationContext(), new RemoteConfigManager.UpdateListener() {
+            @Override
+            public void onProgress(final int percent, final String message) {
+                mHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!isFinishing() && progressDialog.isShowing()) {
+                            progressDialog.updateProgress(percent, message);
+                        }
+                    }
+                });
+            }
+
+            @Override
+            public void onComplete(final RemoteConfigManager.CheckResult result) {
+                mHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (progressDialog.isShowing()) progressDialog.dismiss();
+                        if (isFinishing()) return;
+                        if (!result.requiresLiveReload()) {
+                            String message = result == RemoteConfigManager.CheckResult.BUSY
+                                    ? "已有更新任务正在进行"
+                                    : "直播源更新失败，已保留当前源";
+                            Toast.makeText(LivePlayActivity.this, message, Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        reloadLiveConfigAfterManualUpdate(channelName, sourceIndex);
+                    }
+                });
+            }
+        });
+    }
+
+    private void reloadLiveConfigAfterManualUpdate(final String channelName, final int sourceIndex) {
+        final int requestId = ++liveConfigRequestId;
+        ApiConfig.get().loadLiveConfig(false, new ApiConfig.LoadConfigCallback() {
+            @Override
+            public void success() {
+                mHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (requestId != liveConfigRequestId || isFinishing()) return;
+                        ApiConfig.get().refreshLiveApiHistoryItems();
+                        refreshLiveChannelListAndPlay(channelName, sourceIndex);
+                        Toast.makeText(LivePlayActivity.this, "直播源已更新", Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
+
+            @Override
+            public void error(final String msg) {
+                mHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (requestId != liveConfigRequestId || isFinishing()) return;
+                        Toast.makeText(LivePlayActivity.this,
+                                "直播源已下载，但刷新失败：" + msg, Toast.LENGTH_LONG).show();
+                    }
+                });
+            }
+
+            @Override
+            public void notice(final String msg) {
+                mHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (requestId != liveConfigRequestId || isFinishing()) return;
+                        Toast.makeText(LivePlayActivity.this, msg, Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
+        });
     }
 
     private String getPreferredLiveRefreshChannelName() {
@@ -3690,3 +3780,4 @@ public class LivePlayActivity extends BaseActivity {
 //        Toast.makeText(App.getInstance(), "源异常,请切换到其他源", Toast.LENGTH_SHORT).show();
     }
 }
+

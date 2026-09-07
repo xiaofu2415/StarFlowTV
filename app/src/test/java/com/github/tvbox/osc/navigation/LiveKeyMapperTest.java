@@ -5,6 +5,8 @@ import android.view.KeyEvent;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public final class LiveKeyMapperTest {
     private final LiveKeyMapper mapper = new LiveKeyMapper();
@@ -63,5 +65,14 @@ public final class LiveKeyMapperTest {
                 mapper.map(KeyEvent.KEYCODE_DPAD_CENTER, true));
         assertEquals(LiveKeyAction.NONE,
                 mapper.map(KeyEvent.KEYCODE_MENU, true));
+    }
+
+    @Test
+    public void onlyConfirmActionRunsOnKeyUp() {
+        assertTrue(mapper.shouldHandleOnKeyUp(LiveKeyAction.OPEN_CHANNELS));
+        assertFalse(mapper.shouldHandleOnKeyUp(LiveKeyAction.CHANNEL_PREVIOUS));
+        assertFalse(mapper.shouldHandleOnKeyUp(LiveKeyAction.CHANNEL_NEXT));
+        assertFalse(mapper.shouldHandleOnKeyUp(LiveKeyAction.LINE_PREVIOUS));
+        assertFalse(mapper.shouldHandleOnKeyUp(LiveKeyAction.LINE_NEXT));
     }
 }

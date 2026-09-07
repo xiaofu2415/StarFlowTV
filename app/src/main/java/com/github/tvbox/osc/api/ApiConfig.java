@@ -1176,6 +1176,10 @@ public class ApiConfig {
             liveSettingItem.setItemName(history.get(i));
             liveSettingItemList.add(liveSettingItem);
         }
+        LiveSettingItem manualRefreshItem = new LiveSettingItem();
+        manualRefreshItem.setItemIndex(history.size());
+        manualRefreshItem.setItemName("手动拉取源");
+        liveSettingItemList.add(manualRefreshItem);
         liveSettingGroupList.get(6).setLiveSettingItems(liveSettingItemList);
     }
 
@@ -1846,3 +1850,4 @@ public class ApiConfig {
         clearLoader();
     }
 }
+

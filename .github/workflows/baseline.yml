@@ -1,4 +1,4 @@
-name: Android Baseline
+name: Android Build and Release Candidate
 
 on:
   workflow_dispatch:
@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - feat/starflowtv-foundation
+      - feat/distribution-protocol-v1
     paths-ignore:
       - .github/workflows/bootstrap.yml
       - docs/**
@@ -24,7 +25,7 @@ permissions:
 
 jobs:
   build:
-    name: Build Java APKs
+    name: Test and build Java APKs
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -44,10 +45,32 @@ jobs:
       - name: Configure Android SDK path
         run: printf 'sdk.dir=%s\n' "$ANDROID_SDK_ROOT" > local.properties
 
-      - name: Build Java 32-bit and 64-bit debug APKs
+      - name: Test and build debug and release APKs for all ABIs
         run: |
           chmod +x gradlew
-          ./gradlew :app:assembleJava32Debug :app:assembleJava64Debug --stacktrace
+          ./gradlew \
+            :app:testJava32DebugUnitTest \
+            :app:assembleJavaDebug :app:assembleJava32Debug :app:assembleJava64Debug \
+            :app:assembleJavaRelease :app:assembleJava32Release :app:assembleJava64Release \
+            --stacktrace
+
+      - name: Verify StarFlowTV APK names
+        run: |
+          version_name=$(sed -n "s/.*versionName '\([^']*\)'.*/\1/p" app/build.gradle)
+          test -n "$version_name"
+          test -f "app/build/outputs/apk/java/debug/StarFlowTV-${version_name}-java-debug.apk"
+          test -f "app/build/outputs/apk/java32/debug/StarFlowTV-${version_name}-java32-debug.apk"
+          test -f "app/build/outputs/apk/java64/debug/StarFlowTV-${version_name}-java64-debug.apk"
+          test -f "app/build/outputs/apk/java/release/StarFlowTV-${version_name}-java-release.apk"
+          test -f "app/build/outputs/apk/java32/release/StarFlowTV-${version_name}-java32-release.apk"
+          test -f "app/build/outputs/apk/java64/release/StarFlowTV-${version_name}-java64-release.apk"
+
+      - name: Record APK checksums and signing state
+        run: |
+          find app/build/outputs/apk -type f -name '*.apk' -print0 \
+            | sort -z \
+            | xargs -0 sha256sum | tee app/build/outputs/apk/SHA256SUMS
+          echo "Release signing is repository-configured only; no private signing key is stored in source."
 
       - name: Upload APKs and build reports
         if: always()

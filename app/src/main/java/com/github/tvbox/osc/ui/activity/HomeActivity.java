@@ -39,6 +39,8 @@ import com.github.tvbox.osc.bean.Movie;
 import com.github.tvbox.osc.bean.MovieSort;
 import com.github.tvbox.osc.bean.SourceBean;
 import com.github.tvbox.osc.event.RefreshEvent;
+import com.github.tvbox.osc.navigation.StartDestination;
+import com.github.tvbox.osc.navigation.StartRoutePolicy;
 import com.github.tvbox.osc.server.ControlManager;
 import com.github.tvbox.osc.ui.adapter.HomePageAdapter;
 import com.github.tvbox.osc.ui.adapter.SelectDialogAdapter;
@@ -81,6 +83,8 @@ import java.util.Objects;
 import me.jessyan.autosize.utils.AutoSizeUtils;
 
 public class HomeActivity extends BaseActivity {
+    public static final String EXTRA_RECOVERY_MODE = "tv.starflow.player.extra.RECOVERY_MODE";
+
     private LinearLayout topLayout;
     private LinearLayout contentLayout;
     private TextView tvDate;
@@ -105,6 +109,9 @@ public class HomeActivity extends BaseActivity {
     private final Handler mHandler = new Handler();
     private long mExitTime = 0;
     private boolean eventBusRegistered = false;
+    private final StartRoutePolicy startRoutePolicy = new StartRoutePolicy();
+    private boolean recoveryMode = false;
+    private boolean startupRouteResolved = false;
     private final Runnable mRunnable = new Runnable() {
         @SuppressLint("SetTextI18n")
         @Override
@@ -161,6 +168,7 @@ public class HomeActivity extends BaseActivity {
         initViewModel();
         useCacheConfig = false;
         Intent intent = getIntent();
+        recoveryMode = intent != null && intent.getBooleanExtra(EXTRA_RECOVERY_MODE, false);
         if (intent != null && intent.getExtras() != null) {
             Bundle bundle = intent.getExtras();
             useCacheConfig = bundle.getBoolean("useCache", false);
@@ -361,14 +369,14 @@ public class HomeActivity extends BaseActivity {
 
     private void initData() {
         if (dataInitOk && jarInitOk) {
+            if (routeStartup()) {
+                return;
+            }
             loadHomeSort(false);
             if (hasPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
                 LOG.e("有");
             } else {
                 LOG.e("无");
-            }
-            if (!useCacheConfig && Hawk.get(HawkConfig.DEFAULT_LOAD_LIVE, false)) {
-                jumpActivity(LivePlayActivity.class);
             }
             //爬虫预热 仅首次加载
             if(!useCacheConfig)warmSearchSpidersOnce();
@@ -506,6 +514,24 @@ public class HomeActivity extends BaseActivity {
                 });
             }
         }, this);
+    }
+
+    private boolean routeStartup() {
+        if (startupRouteResolved) {
+            return false;
+        }
+        startupRouteResolved = true;
+        StartDestination destination = startRoutePolicy.resolve(
+                !ApiConfig.get().getChannelGroupList().isEmpty(), recoveryMode);
+        if (destination == StartDestination.LIVE) {
+            jumpActivity(LivePlayActivity.class);
+            return true;
+        }
+        if (destination == StartDestination.SETTINGS) {
+            jumpActivity(SettingActivity.class);
+            return true;
+        }
+        return false;
     }
 
     private void warmSearchSpidersOnce() {

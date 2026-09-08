@@ -13,6 +13,39 @@
         android:layout_height="match_parent" />
 
 	<FrameLayout
+		android:id="@+id/officialLiveWebContainer"
+		android:layout_width="match_parent"
+		android:layout_height="match_parent"
+		android:background="@android:color/black"
+		android:visibility="gone">
+
+		<LinearLayout
+			android:id="@+id/officialLiveWebLoading"
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:layout_gravity="center"
+			android:gravity="center"
+			android:orientation="vertical">
+
+			<ProgressBar
+				style="?android:attr/progressBarStyleSmall"
+				android:layout_width="45dp"
+				android:layout_height="45dp"
+				android:indeterminate="true"
+				android:indeterminateDrawable="@drawable/anim_loading" />
+
+			<TextView
+				android:layout_width="wrap_content"
+				android:layout_height="wrap_content"
+				android:layout_marginTop="12dp"
+				android:text="正在加载央视直播…"
+				android:textColor="@android:color/white"
+				android:textSize="18sp"
+				tools:ignore="HardcodedText" />
+		</LinearLayout>
+	</FrameLayout>
+
+	<FrameLayout
 		android:id="@+id/switchChannelSnapshotOverlay"
 		android:layout_width="match_parent"
 		android:layout_height="match_parent"

@@ -24,6 +24,7 @@ import com.github.tvbox.osc.bean.LiveSettingItem;
 import com.github.tvbox.osc.bean.ParseBean;
 import com.github.tvbox.osc.bean.ProxyRule;
 import com.github.tvbox.osc.bean.SourceBean;
+import com.github.tvbox.osc.official.OfficialLiveCatalog;
 import com.github.tvbox.osc.server.ControlManager;
 import com.github.tvbox.osc.util.AES;
 import com.github.tvbox.osc.util.AdBlocker;
@@ -322,13 +323,24 @@ public class ApiConfig {
     }
 
     private boolean hasLiveConfigResult() {
-        return liveChannelGroupList != null && !liveChannelGroupList.isEmpty();
+        return hasRemoteLiveConfigResult(liveChannelGroupList);
+    }
+
+    static boolean hasRemoteLiveConfigResult(List<LiveChannelGroup> groups) {
+        if (groups == null) return false;
+        for (LiveChannelGroup group : groups) {
+            if (group == null || isBuiltInOfficialLiveGroup(group)) continue;
+            ArrayList<LiveChannelItem> channels = group.getLiveChannels();
+            if (hasPlayableRemoteChannel(channels)) return true;
+            if (isLiveProxyGroup(group)) return true;
+        }
+        return false;
     }
 
     public boolean shouldReloadLiveConfig() {
         String apiUrl = Hawk.get(HawkConfig.LIVE_API_URL, "");
         if (apiUrl.isEmpty()) apiUrl = Hawk.get(HawkConfig.API_URL, "");
-        return liveChannelGroupList == null || liveChannelGroupList.isEmpty() || !apiUrl.equals(loadedLiveConfigUrl);
+        return !hasRemoteLiveConfigResult(liveChannelGroupList) || !apiUrl.equals(loadedLiveConfigUrl);
     }
 
     public static String getLiveGroupIndexKey() {
@@ -1176,6 +1188,10 @@ public class ApiConfig {
             liveSettingItem.setItemName(history.get(i));
             liveSettingItemList.add(liveSettingItem);
         }
+        LiveSettingItem manualRefreshItem = new LiveSettingItem();
+        manualRefreshItem.setItemIndex(history.size());
+        manualRefreshItem.setItemName("手动拉取源");
+        liveSettingItemList.add(manualRefreshItem);
         liveSettingGroupList.get(6).setLiveSettingItems(liveSettingItemList);
     }
 
@@ -1256,6 +1272,43 @@ public class ApiConfig {
             }
             liveChannelGroupList.add(liveChannelGroup);
         }
+        ensureOfficialLiveGroup();
+    }
+
+    public void ensureOfficialLiveGroup() {
+        ensureOfficialLiveGroup(liveChannelGroupList);
+    }
+
+    static void ensureOfficialLiveGroup(List<LiveChannelGroup> groups) {
+        if (groups == null) return;
+        if (isPendingLiveProxyGroup(groups)) return;
+        OfficialLiveCatalog.ensureTrustedGroup(groups);
+    }
+
+    private static boolean isBuiltInOfficialLiveGroup(LiveChannelGroup group) {
+        return OfficialLiveCatalog.isTrustedGroup(group);
+    }
+
+    private static boolean isLiveProxyGroup(LiveChannelGroup group) {
+        String groupName = group.getGroupName();
+        return groupName != null && groupName.startsWith("http://127.0.0.1");
+    }
+
+    private static boolean isPendingLiveProxyGroup(List<LiveChannelGroup> groups) {
+        if (groups.size() != 1) return false;
+        LiveChannelGroup group = groups.get(0);
+        return group != null && isLiveProxyGroup(group) && !hasPlayableRemoteChannel(group.getLiveChannels());
+    }
+
+    private static boolean hasPlayableRemoteChannel(ArrayList<LiveChannelItem> channels) {
+        if (channels == null) return false;
+        for (LiveChannelItem channel : channels) {
+            if (channel == null || channel.getChannelUrls() == null) continue;
+            for (String sourceUrl : channel.getChannelUrls()) {
+                if (sourceUrl != null && !sourceUrl.trim().isEmpty()) return true;
+            }
+        }
+        return false;
     }
 
     private boolean mergeLiveChannel(ArrayList<LiveChannelItem> channelItems, LiveChannelItem newItem) {
@@ -1750,6 +1803,7 @@ public class ApiConfig {
     }
 
     public List<LiveChannelGroup> getChannelGroupList() {
+        ensureOfficialLiveGroup();
         return liveChannelGroupList;
     }
 

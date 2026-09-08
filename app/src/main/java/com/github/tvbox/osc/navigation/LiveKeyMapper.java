@@ -3,6 +3,16 @@ package com.github.tvbox.osc.navigation;
 import android.view.KeyEvent;
 
 public final class LiveKeyMapper {
+    /**
+     * Confirm actions are intentionally dispatched on key-up so a long press
+     * can be intercepted before the channel list opens. Navigation actions
+     * are already dispatched on key-down and must not run a second time on
+     * key-up.
+     */
+    public boolean shouldHandleOnKeyUp(LiveKeyAction action) {
+        return action == LiveKeyAction.OPEN_CHANNELS;
+    }
+
     public LiveKeyAction map(int keyCode, boolean menuVisible) {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             return LiveKeyAction.BACK;

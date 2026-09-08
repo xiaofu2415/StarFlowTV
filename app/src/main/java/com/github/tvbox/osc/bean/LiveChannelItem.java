@@ -1,5 +1,6 @@
 package com.github.tvbox.osc.bean;
 
+import com.github.tvbox.osc.official.OfficialLivePlaybackMode;
 import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
@@ -38,6 +39,10 @@ public class LiveChannelItem {
     private Integer channelParse;
     private ArrayList<String> channelSourceNames;
     private ArrayList<String> channelUrls;
+    private String officialChannelId;
+    private String officialPageUrl;
+    private String officialDirectUrl;
+    private ArrayList<OfficialLivePlaybackMode> channelSourceModes;
     public int sourceIndex = 0;
     public int sourceNum = 0;
     public boolean include_back = false;
@@ -189,6 +194,46 @@ public class LiveChannelItem {
     public void setChannelUrls(ArrayList<String> channelUrls) {
         this.channelUrls = channelUrls;
         sourceNum = channelUrls.size();
+    }
+
+    public void setOfficialChannelId(String officialChannelId) {
+        this.officialChannelId = officialChannelId;
+    }
+
+    public String getOfficialChannelId() {
+        return officialChannelId == null ? "" : officialChannelId;
+    }
+
+    public void setOfficialPageUrl(String officialPageUrl) {
+        this.officialPageUrl = officialPageUrl;
+    }
+
+    public String getOfficialPageUrl() {
+        return officialPageUrl == null ? "" : officialPageUrl;
+    }
+
+    public void setOfficialDirectUrl(String officialDirectUrl) {
+        this.officialDirectUrl = officialDirectUrl;
+    }
+
+    public String getOfficialDirectUrl() {
+        return officialDirectUrl == null ? "" : officialDirectUrl;
+    }
+
+    public boolean isOfficialLive() {
+        return !getOfficialChannelId().isEmpty() && !getOfficialPageUrl().isEmpty();
+    }
+
+    public void setChannelSourceModes(ArrayList<OfficialLivePlaybackMode> channelSourceModes) {
+        this.channelSourceModes = channelSourceModes;
+    }
+
+    public OfficialLivePlaybackMode getSourcePlaybackMode() {
+        if (channelSourceModes == null || sourceIndex < 0 || sourceIndex >= channelSourceModes.size()) {
+            return OfficialLivePlaybackMode.NONE;
+        }
+        OfficialLivePlaybackMode mode = channelSourceModes.get(sourceIndex);
+        return mode == null ? OfficialLivePlaybackMode.NONE : mode;
     }
     public void preSource() {
         sourceIndex--;

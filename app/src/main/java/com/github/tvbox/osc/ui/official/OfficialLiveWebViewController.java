@@ -5,6 +5,7 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.net.http.SslError;
+import android.os.Build;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.RenderProcessGoneDetail;
@@ -79,7 +80,12 @@ public final class OfficialLiveWebViewController {
         WebView oldView = webView;
         webView = null;
         destroyWebView(oldView);
-        ensureWebView();
+        if (!ensureWebView()) {
+            requestTracker.stop();
+            hideSurface();
+            listener.onError("央视直播组件不可用");
+            return;
+        }
         WebView view = webView;
         String requestedUrl = pageUrl.trim();
         requestTracker.begin(requestedUrl);
@@ -89,7 +95,13 @@ public final class OfficialLiveWebViewController {
         setLoadingVisible(true);
         listener.onLoading(requestedUrl);
         // Listener code may synchronously stop, release, or start another load.
-        if (view == webView && requestTracker.isActive()) view.loadUrl(requestedUrl);
+        if (view == webView && requestTracker.isActive()) {
+            try {
+                view.loadUrl(requestedUrl);
+            } catch (Throwable error) {
+                fail("央视直播页面无法启动");
+            }
+        }
     }
 
     public void onPause() {
@@ -106,10 +118,14 @@ public final class OfficialLiveWebViewController {
         foregroundGate.clearPending();
         boolean hadActiveRequest = requestTracker.stop();
         if (webView != null) {
-            webView.stopLoading();
-            if (hadActiveRequest) webView.loadUrl(INTERNAL_BLANK_URL);
-            webView.onPause();
-            webView.setVisibility(View.GONE);
+            try {
+                webView.stopLoading();
+                if (hadActiveRequest) webView.loadUrl(INTERNAL_BLANK_URL);
+                webView.onPause();
+                webView.setVisibility(View.GONE);
+            } catch (Throwable ignored) {
+                // A broken vendor WebView must not take down the live Activity.
+            }
         }
         hideSurface();
     }
@@ -131,12 +147,20 @@ public final class OfficialLiveWebViewController {
                 && container.getVisibility() == View.VISIBLE;
     }
 
-    private void ensureWebView() {
-        if (webView != null || released) return;
-        webView = createWebView(context);
-        container.addView(webView, 0, new ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT));
+    private boolean ensureWebView() {
+        if (webView != null) return true;
+        if (released) return false;
+        try {
+            WebView created = createWebView(context);
+            container.addView(created, 0, new ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT));
+            webView = created;
+            return true;
+        } catch (Throwable error) {
+            webView = null;
+            return false;
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -157,7 +181,8 @@ public final class OfficialLiveWebViewController {
         // Keep D-pad/confirm events on the Activity's existing live-control path.
         view.setFocusable(false);
         view.setFocusableInTouchMode(false);
-        view.setWebViewClient(new OfficialWebViewClient());
+        view.setWebViewClient(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                ? new Api26WebViewClient() : new OfficialWebViewClient());
         return view;
     }
 
@@ -202,20 +227,20 @@ public final class OfficialLiveWebViewController {
 
     private void destroyWebView(@Nullable WebView view) {
         if (view == null) return;
-        view.stopLoading();
-        view.onPause();
-        view.clearHistory();
-        view.removeAllViews();
-        container.removeView(view);
-        view.destroy();
+        try { view.stopLoading(); } catch (Throwable ignored) { }
+        try { view.onPause(); } catch (Throwable ignored) { }
+        try { view.clearHistory(); } catch (Throwable ignored) { }
+        try { view.removeAllViews(); } catch (Throwable ignored) { }
+        try { container.removeView(view); } catch (Throwable ignored) { }
+        try { view.destroy(); } catch (Throwable ignored) { }
     }
 
     private void destroyCrashedWebView(WebView view) {
-        container.removeView(view);
-        view.destroy();
+        try { container.removeView(view); } catch (Throwable ignored) { }
+        try { view.destroy(); } catch (Throwable ignored) { }
     }
 
-    private final class OfficialWebViewClient extends WebViewClient {
+    private class OfficialWebViewClient extends WebViewClient {
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
             if (view != webView) return true;
@@ -290,18 +315,28 @@ public final class OfficialLiveWebViewController {
             }
         }
 
+    }
+
+    /** API 26+ callback kept in a separate class so API 23-25 never resolve
+     * RenderProcessGoneDetail while loading the controller. */
+    @android.annotation.TargetApi(Build.VERSION_CODES.O)
+    private final class Api26WebViewClient extends OfficialWebViewClient {
         @Override
         public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
-            if (view != webView) return true;
-            boolean notifyListener = !released && requestTracker.isActive();
-            requestTracker.stop();
-            webView = null;
-            hideSurface();
-            destroyCrashedWebView(view);
-            if (notifyListener) {
-                listener.onError("央视直播页面渲染进程已退出");
-            }
-            return true;
+            return handleRenderProcessGone(view);
         }
+    }
+
+    private boolean handleRenderProcessGone(WebView view) {
+        if (view != webView) return true;
+        boolean notifyListener = !released && requestTracker.isActive();
+        requestTracker.stop();
+        webView = null;
+        hideSurface();
+        destroyCrashedWebView(view);
+        if (notifyListener) {
+            listener.onError("央视直播页面渲染进程已退出");
+        }
+        return true;
     }
 }

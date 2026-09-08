@@ -32,6 +32,7 @@ public class OfficialLiveCatalogTest {
         LiveChannelGroup group = OfficialLiveCatalog.toGroup(4, 12);
         assertEquals("官方直播", group.getGroupName());
         assertEquals(4, group.getGroupIndex());
+        assertEquals("", group.getGroupPassword());
         assertEquals(21, group.getLiveChannels().size());
         for (int i = 0; i < expected.length; i++) {
             OfficialLiveChannel channel = OfficialLiveCatalog.builtIn().get(i);

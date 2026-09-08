@@ -11,4 +11,10 @@ public final class BuildIdentityTest {
     public void packageNameIsStarFlow() {
         assertEquals("tv.starflow.player", BuildConfig.APPLICATION_ID);
     }
+
+    @Test
+    public void releaseIdentityIsVersion140() {
+        assertEquals("1.4.0", BuildConfig.VERSION_NAME);
+        assertEquals(6, BuildConfig.VERSION_CODE);
+    }
 }

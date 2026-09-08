@@ -12,6 +12,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.net.Uri;
+import android.os.Build;
 import android.os.CountDownTimer;
 import android.os.Handler;
 import android.text.TextUtils;
@@ -47,12 +48,19 @@ import com.github.tvbox.osc.bean.LiveEpgDate;
 import com.github.tvbox.osc.bean.LivePlayerManager;
 import com.github.tvbox.osc.bean.LiveSettingGroup;
 import com.github.tvbox.osc.bean.LiveSettingItem;
+import com.github.tvbox.osc.config.RemoteConfigManager;
 import com.github.tvbox.osc.live.FailoverDecision;
 import com.github.tvbox.osc.live.FailoverPolicy;
 import com.github.tvbox.osc.live.FailoverState;
 import com.github.tvbox.osc.live.PlaybackEvent;
 import com.github.tvbox.osc.navigation.LiveKeyAction;
 import com.github.tvbox.osc.navigation.LiveKeyMapper;
+import com.github.tvbox.osc.official.OfficialLiveErrorGate;
+import com.github.tvbox.osc.official.OfficialLiveCatalog;
+import com.github.tvbox.osc.official.LiveForegroundGate;
+import com.github.tvbox.osc.official.LiveChannelSelection;
+import com.github.tvbox.osc.official.OfficialLivePlaybackMode;
+import com.github.tvbox.osc.official.OfficialLiveRetryState;
 import com.github.tvbox.osc.player.controller.LiveController;
 import com.github.tvbox.osc.ui.adapter.LiveChannelGroupAdapter;
 import com.github.tvbox.osc.ui.adapter.LiveChannelItemAdapter;
@@ -62,6 +70,8 @@ import com.github.tvbox.osc.ui.adapter.LiveSettingGroupAdapter;
 import com.github.tvbox.osc.ui.adapter.LiveSettingItemAdapter;
 import com.github.tvbox.osc.ui.adapter.MyEpgAdapter;
 import com.github.tvbox.osc.ui.dialog.LivePasswordDialog;
+import com.github.tvbox.osc.ui.dialog.LiveConfigUpdateDialog;
+import com.github.tvbox.osc.ui.official.OfficialLiveWebViewController;
 import com.github.tvbox.osc.update.StarFlowUpdateManager;
 import com.github.tvbox.osc.ui.tv.widget.ViewObj;
 import com.github.tvbox.osc.util.DefaultConfig;
@@ -132,6 +142,12 @@ import xyz.doikki.videoplayer.player.VideoView;
 public class LivePlayActivity extends BaseActivity {
     public static Context context;
     private VideoView<xyz.doikki.videoplayer.player.AbstractPlayer> mVideoView;
+    private OfficialLiveWebViewController officialLiveController;
+    private final OfficialLiveErrorGate officialErrorGate = new OfficialLiveErrorGate();
+    private final LiveForegroundGate liveForegroundGate = new LiveForegroundGate();
+    private String pendingLiveRefreshOfficialId;
+    private final OfficialLiveRetryState officialRetryState = new OfficialLiveRetryState();
+    private String officialPageUrl;
     private View switchChannelSnapshotOverlay;
     private ImageView switchChannelSnapshotImage;
     private TextView tvChannelInfo;
@@ -279,6 +295,21 @@ public class LivePlayActivity extends BaseActivity {
         mVideoView = findViewById(R.id.mVideoView);
         switchChannelSnapshotOverlay = findViewById(R.id.switchChannelSnapshotOverlay);
         switchChannelSnapshotImage = findViewById(R.id.switchChannelSnapshotImage);
+        officialLiveController = new OfficialLiveWebViewController(this,
+                (ViewGroup) findViewById(R.id.officialLiveWebContainer),
+                new OfficialLiveWebViewController.Listener() {
+                    @Override public void onLoading(String url) {
+                        officialPageUrl = url;
+                    }
+
+                    @Override public void onReady() {
+                        if (isOfficialWebPlayback()) officialRetryState.onReady();
+                    }
+
+                    @Override public void onError(String message) {
+                        handleOfficialPageError();
+                    }
+                });
 
         tvLeftChannelListLayout = findViewById(R.id.tvLeftChannnelListLayout);
         mChannelGroupView = findViewById(R.id.mGroupGridView);
@@ -360,6 +391,7 @@ public class LivePlayActivity extends BaseActivity {
 
             @Override
             public void onClick(View arg0) {
+                if (isOfficialWebPlayback() || mVideoView == null) return;
                 mVideoView.start();
                 iv_play.setVisibility(View.INVISIBLE);
                 countDownTimer.start();
@@ -370,6 +402,7 @@ public class LivePlayActivity extends BaseActivity {
         iv_playpause.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View arg0) {
+                if (isOfficialWebPlayback() || mVideoView == null) return;
                 if(mVideoView.isPlaying()){
                     mVideoView.pause();
                     countDownTimer.cancel();
@@ -398,6 +431,7 @@ public class LivePlayActivity extends BaseActivity {
 
             @Override
             public void onProgressChanged(SeekBar sb, int progress, boolean fromuser) {
+                if (isOfficialWebPlayback() || mVideoView == null) return;
                 if (!fromuser) {
                     return;
                 }
@@ -413,6 +447,7 @@ public class LivePlayActivity extends BaseActivity {
         sBar.setOnKeyListener(new View.OnKeyListener() {
             @Override
             public boolean onKey(View arg0, int keycode, KeyEvent event) {
+                if (isOfficialWebPlayback() || mVideoView == null) return false;
                 if(event.getAction()==KeyEvent.ACTION_DOWN){
                     if(keycode==KeyEvent.KEYCODE_DPAD_CENTER||keycode==KeyEvent.KEYCODE_ENTER){
                         if(mVideoView.isPlaying()){
@@ -1286,8 +1321,10 @@ public class LivePlayActivity extends BaseActivity {
                     return true;
                 }
             }
+            LiveKeyAction action = liveKeyMapper.map(keyCode, false);
             if (!menuVisible && event.getRepeatCount() == 0
-                    && handleLiveKeyAction(liveKeyMapper.map(keyCode, false))) {
+                    && liveKeyMapper.shouldHandleOnKeyUp(action)
+                    && handleLiveKeyAction(action)) {
                 return true;
             }
         }
@@ -1372,7 +1409,14 @@ public class LivePlayActivity extends BaseActivity {
     protected void onResume() {
         super.onResume();
         exitingLivePlay = false;
-        if (mVideoView != null) {
+        if (officialLiveController != null) officialLiveController.onResume();
+        liveForegroundGate.onResume();
+        int sourceIndex = currentLiveChannelItem == null ? -1 : currentLiveChannelItem.getSourceIndex();
+        boolean handlePendingError = officialErrorGate.onResume(currentLiveChannelItem, sourceIndex);
+        if (handlePendingError) {
+            handleOfficialPageErrorAction();
+        }
+        if (mVideoView != null && !isOfficialWebPlayback()) {
             mVideoView.resume();
         }
     }
@@ -1380,7 +1424,10 @@ public class LivePlayActivity extends BaseActivity {
 
     @Override
     protected void onPause() {
+        liveForegroundGate.onPause();
+        officialErrorGate.onPause();
         super.onPause();
+        if (officialLiveController != null) officialLiveController.onPause();
         if (mVideoView != null && !exitingLivePlay) {
             mVideoView.pause();
         }
@@ -1388,9 +1435,17 @@ public class LivePlayActivity extends BaseActivity {
 
     @Override
     protected void onDestroy() {
+        liveForegroundGate.onDestroy();
+        liveConfigRequestId++;
+        officialErrorGate.onDestroy();
         super.onDestroy();
         Hawk.put(HawkConfig.PLAYER_IS_LIVE, false);
         hideSwitchChannelSnapshot();
+        releaseOfficialWebSurface();
+        if (officialLiveController != null) {
+            officialLiveController.release();
+            officialLiveController = null;
+        }
         if (mVideoView != null) {
             mVideoView.release();
             mVideoView = null;
@@ -1721,7 +1776,7 @@ public class LivePlayActivity extends BaseActivity {
     }
 
     private boolean canCurrentChannelCatchup() {
-        if (currentLiveChannelItem == null) return false;
+        if (currentLiveChannelItem == null || isOfficialWebPlayback()) return false;
         String url = currentLiveChannelItem.getUrl();
         JsonObject catchupObj = currentCatchup();
         if (hasCatchupSource(catchupObj)) {
@@ -1836,8 +1891,12 @@ public class LivePlayActivity extends BaseActivity {
     }
 
     private boolean playChannel(int channelGroupIndex, int liveChannelIndex, boolean changeSource) {
+        if (changeSource && isOfficialItem(currentLiveChannelItem) && currentLiveChannelItem.getSourceNum() == 1) {
+            Toast.makeText(this, "当前官方频道没有备用线路", Toast.LENGTH_SHORT).show();
+            return true;
+        }
         if ((channelGroupIndex == currentChannelGroupIndex && liveChannelIndex == currentLiveChannelIndex && !changeSource)
-                || (changeSource && currentLiveChannelItem.getSourceNum() == 1)) {
+                || (changeSource && currentLiveChannelItem != null && currentLiveChannelItem.getSourceNum() == 1)) {
            // showChannelInfo();
             return true;
         }
@@ -1845,6 +1904,7 @@ public class LivePlayActivity extends BaseActivity {
         if (groupChannels == null || groupChannels.isEmpty() || liveChannelIndex < 0 || liveChannelIndex >= groupChannels.size()) {
             return false;
         }
+        officialErrorGate.clearPending();
         boolean showPreviousFrame = currentLiveChannelItem != null && mVideoView != null && mVideoView.isPlaying();
         int previousLivePlayerType = livePlayerManager.getLivePlayerType();
         allowLiveSwitchPlayer = true;
@@ -1853,12 +1913,14 @@ public class LivePlayActivity extends BaseActivity {
             currentLiveChannelIndex = liveChannelIndex;
             currentLiveChannelItem = getLiveChannels(currentChannelGroupIndex).get(currentLiveChannelIndex);
             Hawk.put(HawkConfig.LIVE_CHANNEL, currentLiveChannelItem.getChannelName());
+            Hawk.put(HawkConfig.LIVE_OFFICIAL_CHANNEL_ID, currentLiveChannelItem.getOfficialChannelId());
             failoverState = new FailoverState(currentLiveChannelItem.getSourceNum());
         } else {
             failoverState.recordSwitch(System.currentTimeMillis());
         }
 
         currentPlaybackStarted = false;
+        officialRetryState.reset();
 
         channel_Name = currentLiveChannelItem;
         currentLiveLookBackIndex=-1;
@@ -1874,7 +1936,14 @@ public class LivePlayActivity extends BaseActivity {
         showBottomEpg();
         backcontroller.setVisibility(View.GONE);
         ll_right_top_huikan.setVisibility(View.GONE);
+        if (isOfficialItem(currentLiveChannelItem)
+                && playOfficialChannel(currentLiveChannelItem, changeSource)) {
+            loadEpgAfterChannelStarted();
+            return true;
+        }
+        releaseOfficialWebSurface();
         if(mVideoView!=null){
+            mVideoView.setVisibility(View.VISIBLE);
             if(liveChannelHeader()!=null)LOG.i("echo-"+liveChannelHeader().toString());
             boolean reusePlayer = canReusePlayer(previousLivePlayerType);
             boolean keepExoFrame = reusePlayer && previousLivePlayerType == 2;
@@ -1896,6 +1965,72 @@ public class LivePlayActivity extends BaseActivity {
         }
         loadEpgAfterChannelStarted();
         return true;
+    }
+
+    private boolean isOfficialItem(LiveChannelItem item) {
+        return item != null && item.isOfficialLive();
+    }
+
+    private boolean isOfficialWebPlayback() {
+        return isOfficialItem(currentLiveChannelItem)
+                && currentLiveChannelItem.getSourcePlaybackMode() == OfficialLivePlaybackMode.WEB;
+    }
+
+    /** Returns false for DIRECT so it continues through the existing video path. */
+    private boolean playOfficialChannel(LiveChannelItem item, boolean changeSource) {
+        if (item.getSourcePlaybackMode() != OfficialLivePlaybackMode.WEB) return false;
+        mHandler.removeCallbacks(mConnectTimeoutChangeSourceRun);
+        mHandler.removeCallbacks(mUpdateResolutionInfoRun);
+        mHandler.removeCallbacks(mHideResolutionInfoRun);
+        resolutionInfoPending = false;
+        if (tvResolution != null) tvResolution.setVisibility(View.GONE);
+        if (countDownTimer3 != null) countDownTimer3.cancel();
+        if (mVideoView != null) {
+            mVideoView.release();
+            mVideoView.setVisibility(View.GONE);
+        }
+        hideSwitchChannelSnapshot();
+        officialPageUrl = item.getUrl();
+        officialRetryState.onLoad();
+        officialLiveController.load(officialPageUrl);
+        return true;
+    }
+
+    private void handleOfficialPageError() {
+        if (isFinishing() || isDestroyed() || !isOfficialWebPlayback()
+                || officialLiveController == null) return;
+        if (!officialErrorGate.shouldHandleError(currentLiveChannelItem,
+                currentLiveChannelItem.getSourceIndex())) return;
+        handleOfficialPageErrorAction();
+    }
+
+    private void handleOfficialPageErrorAction() {
+        if (isFinishing() || isDestroyed() || !isOfficialWebPlayback()
+                || officialLiveController == null) return;
+        OfficialLiveRetryState.Action action = officialRetryState.onError(
+                currentLiveChannelItem.getSourceIndex(), currentLiveChannelItem.getSourceNum());
+        switch (action) {
+            case RETRY:
+                officialRetryState.onLoad();
+                officialLiveController.load(officialPageUrl);
+                break;
+            case NEXT:
+                currentLiveChannelItem.nextSource();
+                playChannel(currentChannelGroupIndex, currentLiveChannelIndex, true);
+                break;
+            case EXHAUSTED:
+                Toast.makeText(this, R.string.live_source_exhausted, Toast.LENGTH_SHORT).show();
+                break;
+            default:
+                break;
+        }
+    }
+
+    private void releaseOfficialWebSurface() {
+        officialErrorGate.clearPending();
+        officialRetryState.reset();
+        officialPageUrl = null;
+        if (officialLiveController != null) officialLiveController.stop();
     }
 
     private boolean canReusePlayer(int previousLivePlayerType) {
@@ -2071,6 +2206,7 @@ public class LivePlayActivity extends BaseActivity {
             @Override
             public void onItemClick(TvRecyclerView parent, View itemView, int position) {
                 if(position==currentLiveLookBackIndex)return;
+                if (isOfficialWebPlayback() || mVideoView == null) return;
                 Date date = liveEpgDateAdapter.getSelectedIndex() < 0 ? new Date() :
                         liveEpgDateAdapter.getData().get(liveEpgDateAdapter.getSelectedIndex()).getDateParamVal();
                 Epginfo selectedData = epgListAdapter.getItem(position);
@@ -2138,6 +2274,7 @@ public class LivePlayActivity extends BaseActivity {
             @Override
             public void onItemClick(BaseQuickAdapter adapter, View view, int position) {
                 if(position==currentLiveLookBackIndex)return;
+                if (isOfficialWebPlayback() || mVideoView == null) return;
                 Date date = liveEpgDateAdapter.getSelectedIndex() < 0 ? new Date() :
                         liveEpgDateAdapter.getData().get(liveEpgDateAdapter.getSelectedIndex()).getDateParamVal();
                 Epginfo selectedData = epgListAdapter.getItem(position);
@@ -2312,6 +2449,7 @@ public class LivePlayActivity extends BaseActivity {
             @Override
             public void playStateChanged(int playState) {
                 mHandler.removeCallbacks(mConnectTimeoutChangeSourceRun);
+                if (isOfficialWebPlayback()) return;
                 switch (playState) {
                     case VideoView.STATE_IDLE:
                         // 空闲状态：播放器处于空闲，尚未开始播放。一般不需要自动换源。
@@ -2387,7 +2525,7 @@ public class LivePlayActivity extends BaseActivity {
     }
 
     private boolean switchLivePlayerAndReplay() {
-        if (!allowLiveSwitchPlayer || currentLiveChannelItem == null || mVideoView == null) {
+        if (isOfficialWebPlayback() || !allowLiveSwitchPlayer || currentLiveChannelItem == null || mVideoView == null) {
             return false;
         }
         mHandler.removeCallbacks(mConnectTimeoutChangeSourceRun);
@@ -2407,7 +2545,7 @@ public class LivePlayActivity extends BaseActivity {
     private Runnable mConnectTimeoutChangeSourceRun = new Runnable() {
         @Override
         public void run() {
-            if (!isCurrentLiveChannelValid()) return;
+            if (!isCurrentLiveChannelValid() || isOfficialWebPlayback()) return;
             FailoverDecision decision = failoverPolicy.onEvent(
                     pendingFailoverEvent, failoverState, System.currentTimeMillis());
             switch (decision) {
@@ -2439,7 +2577,7 @@ public class LivePlayActivity extends BaseActivity {
     };
 
     private void replayCurrentLine() {
-        if (mVideoView == null || currentLiveChannelItem == null) return;
+        if (mVideoView == null || currentLiveChannelItem == null || isOfficialWebPlayback()) return;
         mVideoView.release();
         String retryUrl = isSHIYI && !TextUtils.isEmpty(playUrl)
                 ? playUrl : currentLiveChannelItem.getUrl();
@@ -2717,6 +2855,7 @@ public class LivePlayActivity extends BaseActivity {
 
     private void clickSettingItem(int position) {
         int settingGroupIndex = liveSettingGroupAdapter.getSelectedGroupIndex();
+        if (isOfficialWebPlayback() && (settingGroupIndex == 1 || settingGroupIndex == 2)) return;
         if (settingGroupIndex >= 0 && settingGroupIndex < 3 && !isCurrentLiveChannelValid()) {
             return;
         }
@@ -2789,6 +2928,10 @@ public class LivePlayActivity extends BaseActivity {
                 break;
             case 6: {//配置切换
                 ArrayList<String> history = Hawk.get(HawkConfig.LIVE_API_HISTORY, new ArrayList<String>());
+                if (position == history.size()) {
+                    startManualLiveConfigRefresh();
+                    break;
+                }
                 if (history.isEmpty() || position < 0 || position >= history.size()) break;
                 String value = history.get(position);
                 String oldLiveApi = Hawk.get(HawkConfig.LIVE_API_URL, "");
@@ -2844,6 +2987,103 @@ public class LivePlayActivity extends BaseActivity {
         mHandler.postDelayed(mHideSettingLayoutRun, postTimeout);
     }
 
+    private void startManualLiveConfigRefresh() {
+        if (!isLiveConfigUpdateActivityValid()) return;
+        final String channelName = getPreferredLiveRefreshChannelName();
+        final String officialId = getPreferredLiveRefreshOfficialId();
+        final int sourceIndex = getPreferredLiveRefreshSourceIndex();
+        final LiveConfigUpdateDialog progressDialog = new LiveConfigUpdateDialog(this);
+        progressDialog.show();
+        progressDialog.updateProgress(0, "正在准备更新");
+        RemoteConfigManager.check(getApplicationContext(), new RemoteConfigManager.UpdateListener() {
+            @Override
+            public void onProgress(final int percent, final String message) {
+                mHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (isLiveConfigUpdateUiValid(progressDialog)) {
+                            progressDialog.updateProgress(percent, message);
+                        }
+                    }
+                });
+            }
+
+            @Override
+            public void onComplete(final RemoteConfigManager.CheckResult result) {
+                mHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!isLiveConfigUpdateActivityValid()) return;
+                        if (progressDialog.isShowing()) progressDialog.dismiss();
+                        if (!result.requiresLiveReload()) {
+                            String message = result == RemoteConfigManager.CheckResult.BUSY
+                                    ? "已有更新任务正在进行"
+                                    : "直播源更新失败，已保留当前源";
+                            Toast.makeText(LivePlayActivity.this, message, Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        reloadLiveConfigAfterManualUpdate(channelName, sourceIndex, officialId, result);
+                    }
+                });
+            }
+        });
+    }
+
+    private void reloadLiveConfigAfterManualUpdate(final String channelName, final int sourceIndex, final String officialId,
+                                                   final RemoteConfigManager.CheckResult result) {
+        final int requestId = ++liveConfigRequestId;
+        ApiConfig.get().loadLiveConfig(false, new ApiConfig.LoadConfigCallback() {
+            @Override
+            public void success() {
+                mHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (requestId != liveConfigRequestId || !isLiveConfigUpdateActivityValid()) return;
+                        ApiConfig.get().refreshLiveApiHistoryItems();
+                        refreshLiveChannelListAndPlay(channelName, sourceIndex, officialId);
+                        String message = result == RemoteConfigManager.CheckResult.NO_UPDATE
+                                ? "已是最新，已重新加载" : "直播源已更新";
+                        Toast.makeText(LivePlayActivity.this, message, Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
+
+            @Override
+            public void error(final String msg) {
+                mHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (requestId != liveConfigRequestId || !isLiveConfigUpdateActivityValid()) return;
+                        Toast.makeText(LivePlayActivity.this,
+                                "直播源已下载，但刷新失败：" + msg, Toast.LENGTH_LONG).show();
+                    }
+                });
+            }
+
+            @Override
+            public void notice(final String msg) {
+                mHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (requestId != liveConfigRequestId || !isLiveConfigUpdateActivityValid()) return;
+                        Toast.makeText(LivePlayActivity.this, msg, Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
+        });
+    }
+
+    private boolean isLiveConfigUpdateActivityValid() {
+        return !isFinishing()
+                && (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN_MR1 || !isDestroyed());
+    }
+
+    private boolean isLiveConfigUpdateUiValid(LiveConfigUpdateDialog progressDialog) {
+        return isLiveConfigUpdateActivityValid()
+                && progressDialog != null
+                && progressDialog.isShowing();
+    }
+
     private String getPreferredLiveRefreshChannelName() {
         if (currentLiveChannelItem != null) return currentLiveChannelItem.getChannelName();
         return Hawk.get(HawkConfig.LIVE_CHANNEL, "");
@@ -2854,9 +3094,25 @@ public class LivePlayActivity extends BaseActivity {
         return -1;
     }
 
+    private String getPreferredLiveRefreshOfficialId() {
+        if (currentLiveChannelItem != null) return currentLiveChannelItem.getOfficialChannelId();
+        return Hawk.get(HawkConfig.LIVE_OFFICIAL_CHANNEL_ID, "");
+    }
+
     private void refreshLiveChannelListAndPlay(String channelName, int sourceIndex) {
+        refreshLiveChannelListAndPlay(channelName, sourceIndex, getPreferredLiveRefreshOfficialId());
+    }
+
+    private void refreshLiveChannelListAndPlay(String channelName, int sourceIndex, String officialId) {
+        liveForegroundGate.runWhenForeground(() -> refreshLiveChannelListNow(channelName, sourceIndex, officialId));
+    }
+
+    private void refreshLiveChannelListNow(String channelName, int sourceIndex, String officialId) {
+        if (!isLiveConfigUpdateActivityValid()) return;
+        releaseOfficialWebSurface();
         refreshingLiveChannelList = true;
         pendingLiveRefreshChannelName = channelName;
+        pendingLiveRefreshOfficialId = officialId;
         pendingLiveRefreshSourceIndex = sourceIndex;
         currentLiveLookBackIndex = -1;
         currentLiveChangeSourceTimes = 0;
@@ -2918,6 +3174,7 @@ public class LivePlayActivity extends BaseActivity {
                     @Override
                     public void run() {
                         loadingLiveConfigOnEnter = false;
+                        if (!isLiveConfigUpdateActivityValid()) return;
                         initLiveChannelList();
                         initLiveSettingGroupList();
                     }
@@ -2930,6 +3187,7 @@ public class LivePlayActivity extends BaseActivity {
                     @Override
                     public void run() {
                         loadingLiveConfigOnEnter = false;
+                        if (!isLiveConfigUpdateActivityValid()) return;
                         setEmptyLiveChannelList();
                     }
                 });
@@ -3089,6 +3347,12 @@ public class LivePlayActivity extends BaseActivity {
     }
 
     private void applyLiveChannelGroups(List<LiveChannelGroup> groups) {
+        final ArrayList<LiveChannelGroup> snapshot = new ArrayList<>(groups);
+        liveForegroundGate.runWhenForeground(() -> applyLiveChannelGroupsNow(snapshot));
+    }
+
+    private void applyLiveChannelGroupsNow(List<LiveChannelGroup> groups) {
+        if (!isLiveConfigUpdateActivityValid()) return;
         liveChannelGroupList.clear();
         liveChannelGroupList.addAll(groups);
         showSuccess();
@@ -3098,8 +3362,12 @@ public class LivePlayActivity extends BaseActivity {
     private void initLiveState() {
         refreshingLiveChannelList = false;
         String lastChannelName = pendingLiveRefreshChannelName == null ? Hawk.get(HawkConfig.LIVE_CHANNEL, "") : pendingLiveRefreshChannelName;
+        String lastOfficialId = pendingLiveRefreshOfficialId == null
+                ? Hawk.get(HawkConfig.LIVE_OFFICIAL_CHANNEL_ID, "") : pendingLiveRefreshOfficialId;
+        LiveChannelItem preferredItem = LiveChannelSelection.find(liveChannelGroupList, lastOfficialId, lastChannelName);
         int sourceIndex = pendingLiveRefreshSourceIndex;
         pendingLiveRefreshChannelName = null;
+        pendingLiveRefreshOfficialId = null;
         pendingLiveRefreshSourceIndex = -1;
 
         int lastChannelGroupIndex = -1;
@@ -3111,7 +3379,7 @@ public class LivePlayActivity extends BaseActivity {
                 continue;
             }
             for (LiveChannelItem liveChannelItem : groupChannels) {
-                if (liveChannelItem.getChannelName().equals(lastChannelName)) {
+                if (liveChannelItem == preferredItem) {
                     lastChannelGroupIndex = liveChannelGroup.getGroupIndex();
                     lastLiveChannelIndex = liveChannelItem.getChannelIndex();
                     lastLiveChannelItem = liveChannelItem;
@@ -3525,6 +3793,7 @@ public class LivePlayActivity extends BaseActivity {
         return result;
     }
     public void showProgressBars( boolean show){
+        if (isOfficialWebPlayback() || mVideoView == null) return;
 
         sBar.requestFocus();
         if(show){
@@ -3545,6 +3814,7 @@ public class LivePlayActivity extends BaseActivity {
 
             @Override
             public void onClick(View arg0) {
+                if (isOfficialWebPlayback() || mVideoView == null) return;
                 mVideoView.start();
                 iv_play.setVisibility(View.INVISIBLE);
                 countDownTimer.start();
@@ -3555,6 +3825,7 @@ public class LivePlayActivity extends BaseActivity {
         iv_playpause.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View arg0) {
+                if (isOfficialWebPlayback() || mVideoView == null) return;
                 if(mVideoView.isPlaying()){
                     mVideoView.pause();
                     countDownTimer.cancel();
@@ -3583,6 +3854,7 @@ public class LivePlayActivity extends BaseActivity {
 
             @Override
             public void onProgressChanged(SeekBar sb, int progress, boolean fromuser) {
+                if (isOfficialWebPlayback() || mVideoView == null) return;
                 if(fromuser){
                     if(countDownTimer!=null){
                         mVideoView.seekTo(progress);
@@ -3595,6 +3867,7 @@ public class LivePlayActivity extends BaseActivity {
         sBar.setOnKeyListener(new View.OnKeyListener() {
             @Override
             public boolean onKey(View arg0, int keycode, KeyEvent event) {
+                if (isOfficialWebPlayback() || mVideoView == null) return false;
                 if(event.getAction()==KeyEvent.ACTION_DOWN){
                     if(keycode==KeyEvent.KEYCODE_DPAD_CENTER||keycode==KeyEvent.KEYCODE_ENTER){
                         if(mVideoView.isPlaying()){
@@ -3654,8 +3927,10 @@ public class LivePlayActivity extends BaseActivity {
     }
 
     private void clearLiveChannelList(boolean releasePlayer) {
+        releaseOfficialWebSurface();
         refreshingLiveChannelList = false;
         pendingLiveRefreshChannelName = null;
+        pendingLiveRefreshOfficialId = null;
         pendingLiveRefreshSourceIndex = -1;
         currentLiveChannelItem = null;
         currentLiveChannelIndex = -1;
@@ -3686,7 +3961,20 @@ public class LivePlayActivity extends BaseActivity {
     }
 
     private void setEmptyLiveChannelList(boolean releasePlayer) {
-        clearLiveChannelList(releasePlayer);
-//        Toast.makeText(App.getInstance(), "源异常,请切换到其他源", Toast.LENGTH_SHORT).show();
+        liveForegroundGate.runWhenForeground(() -> {
+            if (!isLiveConfigUpdateActivityValid()) return;
+            String channelName = getPreferredLiveRefreshChannelName();
+            String officialId = getPreferredLiveRefreshOfficialId();
+            List<LiveChannelGroup> fallback = OfficialLiveCatalog.fallbackGroups(
+                    ApiConfig.get().getChannelGroupList());
+            clearLiveChannelList(releasePlayer);
+            ApiConfig.get().getChannelGroupList().addAll(fallback);
+            pendingLiveRefreshChannelName = channelName;
+            pendingLiveRefreshOfficialId = officialId;
+            initLiveObj();
+            // Apply directly: remote-load failure must not re-enter shouldReloadLiveConfig().
+            applyLiveChannelGroups(fallback);
+            initLiveSettingGroupList();
+        });
     }
 }

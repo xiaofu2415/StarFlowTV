@@ -87,11 +87,13 @@ jobs:
           STARFLOW_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.STARFLOW_ANDROID_KEYSTORE_PASSWORD }}
           STARFLOW_ANDROID_KEY_ALIAS: ${{ secrets.STARFLOW_ANDROID_KEY_ALIAS }}
           STARFLOW_ANDROID_KEY_PASSWORD: ${{ secrets.STARFLOW_ANDROID_KEY_PASSWORD }}
+          STARFLOW_ED25519_PRIVATE_KEY_B64: ${{ secrets.STARFLOW_ED25519_PRIVATE_KEY_B64 }}
         run: |
           test -n "$KEYSTORE_B64" || { echo 'STARFLOW_ANDROID_KEYSTORE_B64 is not configured'; exit 1; }
           test -n "$STARFLOW_ANDROID_KEYSTORE_PASSWORD" || { echo 'keystore password is not configured'; exit 1; }
           test -n "$STARFLOW_ANDROID_KEY_ALIAS" || { echo 'key alias is not configured'; exit 1; }
           test -n "$STARFLOW_ANDROID_KEY_PASSWORD" || { echo 'key password is not configured'; exit 1; }
+          test -n "$STARFLOW_ED25519_PRIVATE_KEY_B64" || { echo 'STARFLOW_ED25519_PRIVATE_KEY_B64 is not configured'; exit 1; }
 
       - name: Build unsigned release candidates
         run: |
@@ -141,14 +143,127 @@ jobs:
           done
           (cd "$out" && sha256sum StarFlowTV-*.apk > SHA256SUMS)
 
+      - name: Generate OTA manifest and Ed25519 signature
+        env:
+          STARFLOW_ED25519_PRIVATE_KEY_B64: ${{ secrets.STARFLOW_ED25519_PRIVATE_KEY_B64 }}
+        run: |
+          set -euo pipefail
+          bundle="$GITHUB_WORKSPACE/release-bundle"
+          install -d -m 0700 "$bundle"
+          cp signed-apks/StarFlowTV-*.apk signed-apks/*-certificates.txt signed-apks/SHA256SUMS "$bundle"/
+          version_name="$(sed -E 's/^StarFlowTV-([0-9.]+)-armeabi-v7a\.apk$/\1/' < <(find signed-apks -maxdepth 1 -type f -name 'StarFlowTV-*-armeabi-v7a.apk' -printf '%f\n' | sort | tail -1))"
+          version_code="$(sed -n "s/.*versionCode \([0-9][0-9]*\).*/\1/p" app/build.gradle | head -1)"
+          certificate_digest="$(sed -n 's/.*certificate SHA-256 digest: //p' signed-apks/armeabi-v7a-certificates.txt | head -1)"
+          expected_public_key="$(sed -n "s/.*starflowSigningPublicKey = project.findProperty('starflowSigningPublicKey') ?: '\([^']*\)'.*/\1/p" app/build.gradle | head -1)"
+          test -n "$version_name"
+          test -n "$version_code"
+          test -n "$certificate_digest"
+          test -n "$expected_public_key"
+          python3 - "$bundle" "$version_name" "$version_code" "$certificate_digest" "$expected_public_key" <<'PY'
+          import base64
+          import hashlib
+          import json
+          import os
+          import sys
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          from cryptography.hazmat.primitives import serialization
+          from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+          bundle = Path(sys.argv[1])
+          version_name = sys.argv[2]
+          version_code = int(sys.argv[3])
+          certificate_digest = sys.argv[4]
+          expected_public_key = sys.argv[5]
+          key_bytes = base64.b64decode(os.environ["STARFLOW_ED25519_PRIVATE_KEY_B64"])
+          private_key = None
+          for loader in (serialization.load_der_private_key, serialization.load_pem_private_key):
+              try:
+                  candidate = loader(key_bytes, password=None)
+                  if isinstance(candidate, Ed25519PrivateKey):
+                      private_key = candidate
+                      break
+              except (ValueError, TypeError):
+                  pass
+          if private_key is None and len(key_bytes) == 32:
+              private_key = Ed25519PrivateKey.from_private_bytes(key_bytes)
+          if private_key is None:
+              raise SystemExit("STARFLOW_ED25519_PRIVATE_KEY_B64 is not a supported Ed25519 private key")
+          actual_public_key = base64.b64encode(private_key.public_key().public_bytes(
+              serialization.Encoding.Raw, serialization.PublicFormat.Raw)).decode("ascii")
+          if actual_public_key != expected_public_key:
+              raise SystemExit("Ed25519 private key does not match the client public key")
+
+          published_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+          variants = [
+              ("armeabi-v7a", f"StarFlowTV-{version_name}-armeabi-v7a.apk"),
+              ("arm64-v8a", f"StarFlowTV-{version_name}-arm64-v8a.apk"),
+              ("universal", f"StarFlowTV-{version_name}-universal.apk"),
+          ]
+          packages = []
+          apk_variants = []
+          for abi, filename in variants:
+              path = bundle / filename
+              sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
+              url = f"https://update.yuying.beauty/starflow/update/{filename}"
+              common = {
+                  "abi": abi,
+                  "fileName": filename,
+                  "url": url,
+                  "downloadUrl": url,
+                  "size": path.stat().st_size,
+                  "sha256": sha256,
+                  "signingCertificateDigest": certificate_digest,
+                  "certificateSha256": certificate_digest,
+                  "status": "ready",
+                  "installable": True,
+              }
+              packages.append({k: common[k] for k in ("abi", "fileName", "downloadUrl", "certificateSha256", "sha256", "size")})
+              apk_variants.append(common)
+          manifest = {
+              "schemaVersion": 1,
+              "versionName": version_name,
+              "versionCode": version_code,
+              "channel": "stable",
+              "releaseNotes": "StarFlowTV 1.4.0：新增官方直播类目和混合播放。",
+              "publishedAt": published_at,
+              "minimumSdk": 23,
+              "minSupportedVersionCode": 1,
+              "forceUpdate": False,
+              "mandatory": False,
+              "packageName": "tv.starflow.player",
+              "signingStatus": "ready",
+              "signingKeyId": "starflow-production-2026-01",
+              "signatureAlgorithm": "Ed25519",
+              "keyId": "starflow-production-2026-01",
+              "packages": packages,
+              "apkVariants": apk_variants,
+          }
+          payload = (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+          (bundle / "latest.json").write_bytes(payload)
+          (bundle / "latest.sig").write_text(base64.b64encode(private_key.sign(payload)).decode("ascii") + "\n", encoding="ascii")
+          (bundle / "latest.sha256").write_text(hashlib.sha256(payload).hexdigest() + "  latest.json\n", encoding="ascii")
+          (bundle / "latest.json").chmod(0o600)
+          (bundle / "latest.sig").chmod(0o600)
+          (bundle / "latest.sha256").chmod(0o600)
+          for path in bundle.glob("*.apk"):
+              path.chmod(0o600)
+          for path in bundle.glob("*-certificates.txt"):
+              path.chmod(0o600)
+          (bundle / "SHA256SUMS").chmod(0o600)
+          print(f"Generated OTA metadata for {version_name} ({version_code})")
+          PY
+          (cd "$bundle" && sha256sum -c SHA256SUMS)
+
       - name: Upload signed APKs and public certificate metadata
         uses: actions/upload-artifact@v4
         with:
-          name: starflowtv-production-signed-${{ github.run_number }}
+          name: starflowtv-production-release-${{ github.run_number }}
           retention-days: 14
-          path: signed-apks/
+          path: release-bundle/
 
-      - name: State the remaining manifest-signing gate
+      - name: State the remaining deployment gate
         run: |
-          echo 'APK signing completed only when all preceding steps pass.'
-          echo 'Generate manifest.sig/latest.sig in the protected source-release job before publishing latest.json.'
+          echo 'APK and OTA metadata signing completed only when all preceding steps pass.'
+          echo 'Deploy release-bundle contents to the verified HTTPS update endpoint only after human review.'

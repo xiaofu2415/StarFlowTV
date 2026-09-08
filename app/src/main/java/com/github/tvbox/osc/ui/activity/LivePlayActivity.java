@@ -59,6 +59,7 @@ import com.github.tvbox.osc.official.OfficialLiveErrorGate;
 import com.github.tvbox.osc.official.OfficialLiveCatalog;
 import com.github.tvbox.osc.official.LiveForegroundGate;
 import com.github.tvbox.osc.official.LiveChannelSelection;
+import com.github.tvbox.osc.official.LiveStartupPolicy;
 import com.github.tvbox.osc.official.OfficialLivePlaybackMode;
 import com.github.tvbox.osc.official.OfficialLiveRetryState;
 import com.github.tvbox.osc.player.controller.LiveController;
@@ -3365,6 +3366,9 @@ public class LivePlayActivity extends BaseActivity {
         String lastOfficialId = pendingLiveRefreshOfficialId == null
                 ? Hawk.get(HawkConfig.LIVE_OFFICIAL_CHANNEL_ID, "") : pendingLiveRefreshOfficialId;
         LiveChannelItem preferredItem = LiveChannelSelection.find(liveChannelGroupList, lastOfficialId, lastChannelName);
+        // Never auto-start a WebView-backed official page. A previous official
+        // selection must not make a failed IPTV refresh crash the app at launch.
+        if (preferredItem != null && preferredItem.isOfficialLive()) preferredItem = null;
         int sourceIndex = pendingLiveRefreshSourceIndex;
         pendingLiveRefreshChannelName = null;
         pendingLiveRefreshOfficialId = null;
@@ -3390,14 +3394,21 @@ public class LivePlayActivity extends BaseActivity {
         }
         if (lastChannelGroupIndex == -1) {
             Integer[] cctv1Channel = getFirstChannelByName("CCTV1");
-            if (cctv1Channel != null) {
+            if (cctv1Channel != null
+                    && cctv1Channel[0] >= 0
+                    && cctv1Channel[0] < liveChannelGroupList.size()
+                    && cctv1Channel[1] >= 0
+                    && cctv1Channel[1] < getLiveChannels(cctv1Channel[0]).size()
+                    && !getLiveChannels(cctv1Channel[0]).get(cctv1Channel[1]).isOfficialLive()) {
                 lastChannelGroupIndex = cctv1Channel[0];
                 lastLiveChannelIndex = cctv1Channel[1];
             } else {
-                lastChannelGroupIndex = getFirstNoPasswordChannelGroup();
-                if (lastChannelGroupIndex == -1)
-                    lastChannelGroupIndex = 0;
-                lastLiveChannelIndex = 0;
+                LiveStartupPolicy.ChannelPosition remote =
+                        LiveStartupPolicy.findFirstRemoteChannel(liveChannelGroupList);
+                if (remote != null) {
+                    lastChannelGroupIndex = remote.groupIndex;
+                    lastLiveChannelIndex = remote.channelIndex;
+                }
             }
         }
         if (lastLiveChannelItem != null && sourceIndex >= 0 && lastLiveChannelItem.getSourceNum() > 0) {
@@ -3412,8 +3423,13 @@ public class LivePlayActivity extends BaseActivity {
 
         liveChannelGroupAdapter.clearGroupState();
         liveChannelGroupAdapter.setNewData(new ArrayList<>(liveChannelGroupList));
+        currentChannelGroupIndex = -1;
         currentLiveChannelIndex = -1;
-        selectChannelGroup(lastChannelGroupIndex, false, lastLiveChannelIndex);
+        currentLiveChannelItem = null;
+        if (lastChannelGroupIndex >= 0 && lastLiveChannelIndex >= 0
+                && lastChannelGroupIndex < liveChannelGroupList.size()) {
+            selectChannelGroup(lastChannelGroupIndex, false, lastLiveChannelIndex);
+        }
     }
 
     private boolean isListOrSettingLayoutVisible() {

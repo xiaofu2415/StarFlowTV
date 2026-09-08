@@ -326,6 +326,16 @@ public class ApiConfig {
         return hasRemoteLiveConfigResult(liveChannelGroupList);
     }
 
+    /**
+     * Returns true only when a remote/IPTV live source has actually been
+     * parsed. The built-in official WebView catalog is intentionally excluded
+     * so it cannot make the home screen auto-enter live playback on a failed
+     * refresh.
+     */
+    public boolean hasPlayableRemoteLiveConfig() {
+        return hasRemoteLiveConfigResult(liveChannelGroupList);
+    }
+
     static boolean hasRemoteLiveConfigResult(List<LiveChannelGroup> groups) {
         if (groups == null) return false;
         for (LiveChannelGroup group : groups) {
@@ -1029,6 +1039,11 @@ public class ApiConfig {
                     parseLiveJson(apiUrl, jsonContent);
                     return;
                 }
+                if (infoJson != null && infoJson.has("channels")
+                        && infoJson.get("channels").isJsonArray()) {
+                    parseClientLiveJson(apiUrl, infoJson);
+                    return;
+                }
             } catch (Throwable ignored) {
             }
         }
@@ -1037,6 +1052,60 @@ public class ApiConfig {
         } else {
             parseLiveText(apiUrl, content);
         }
+    }
+
+    /** Converts the signed client live schema into the legacy in-memory model. */
+    private void parseClientLiveJson(String apiUrl, JsonObject root) {
+        LinkedHashMap<String, JsonObject> grouped = new LinkedHashMap<>();
+        JsonArray channels = root.getAsJsonArray("channels");
+        for (JsonElement rawChannel : channels) {
+            if (rawChannel == null || !rawChannel.isJsonObject()) continue;
+            JsonObject channel = rawChannel.getAsJsonObject();
+            String name = DefaultConfig.safeJsonString(channel, "name", "");
+            if (name.isEmpty()) continue;
+            String groupName = DefaultConfig.safeJsonString(channel, "group", TxtSubscribe.DEFAULT_GROUP_NAME);
+            JsonObject group = grouped.get(groupName);
+            if (group == null) {
+                group = new JsonObject();
+                group.addProperty("group", groupName);
+                group.add("channels", new JsonArray());
+                grouped.put(groupName, group);
+            }
+            JsonObject legacyChannel = new JsonObject();
+            legacyChannel.addProperty("name", name);
+            copyJsonProperty(channel, legacyChannel, "logo");
+            if (channel.has("epgId")) legacyChannel.add("epg", channel.get("epgId"));
+            if (channel.has("id")) legacyChannel.add("tvg-id", channel.get("id"));
+            JsonArray urls = new JsonArray();
+            JsonArray sources = channel.getAsJsonArray("sources");
+            if (sources != null) {
+                for (JsonElement rawSource : sources) {
+                    if (rawSource == null || !rawSource.isJsonObject()) continue;
+                    String url = DefaultConfig.safeJsonString(rawSource.getAsJsonObject(), "url", "");
+                    if (!url.isEmpty()) urls.add(url);
+                }
+            }
+            if (urls.size() == 0) continue;
+            legacyChannel.add("urls", urls);
+            group.getAsJsonArray("channels").add(legacyChannel);
+        }
+
+        JsonArray legacyGroups = new JsonArray();
+        for (JsonObject group : grouped.values()) legacyGroups.add(group);
+        initLiveSettings();
+        liveSpider = "";
+        currentLiveSpider = "";
+        currentLivePyKey = "";
+        Hawk.put(HawkConfig.LIVE_GROUP_LIST, legacyGroups);
+        Hawk.put(HawkConfig.EPG_URL, "");
+        Hawk.put(HawkConfig.LIVE_PLAY_TYPE, Hawk.get(HawkConfig.PLAY_TYPE, 2));
+        Hawk.put(HawkConfig.LIVE_WEB_HEADER, null);
+        loadLives(legacyGroups);
+        LOG.i("echo-live-client-json-config-----------load:" + apiUrl);
+    }
+
+    private void copyJsonProperty(JsonObject source, JsonObject target, String key) {
+        if (source.has(key)) target.add(key, source.get(key));
     }
 
     private boolean isLiveJsonContent(String content) {

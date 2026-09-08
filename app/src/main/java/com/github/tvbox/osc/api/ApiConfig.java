@@ -16,6 +16,7 @@ import com.github.catvod.crawler.pyLoader;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.crawler.python.IPyLoader;
 import com.github.tvbox.osc.base.App;
+import com.github.tvbox.osc.config.LocalLiveConfigFile;
 import com.github.tvbox.osc.bean.LiveChannelGroup;
 import com.github.tvbox.osc.bean.IJKCode;
 import com.github.tvbox.osc.bean.LiveChannelItem;
@@ -269,6 +270,10 @@ public class ApiConfig {
             return;
         }
         final String liveApiUrl = apiUrl;
+        if (LocalLiveConfigFile.isFileUrl(liveApiUrl)) {
+            loadLocalLiveConfig(liveApiUrl, callback);
+            return;
+        }
         String liveApiConfigUrl = configUrl(liveApiUrl);
         final String liveConfigKey = TempKey;
         File live_cache = new File(App.getInstance().getFilesDir().getAbsolutePath() + "/" + MD5.encode(liveApiUrl));
@@ -320,6 +325,25 @@ public class ApiConfig {
                 callback.error("直播配置拉取失败");
             }
         });
+    }
+
+    private void loadLocalLiveConfig(String apiUrl, LoadConfigCallback callback) {
+        File localConfig = LocalLiveConfigFile.resolve(apiUrl);
+        if (localConfig == null) {
+            callback.error("本地直播配置不存在");
+            return;
+        }
+        try {
+            parseLiveConfigContent(apiUrl, localConfig);
+            if (!hasLiveConfigResult()) {
+                callback.error("本地直播配置解析失败");
+                return;
+            }
+            loadedLiveConfigUrl = apiUrl;
+            callback.success();
+        } catch (Throwable error) {
+            callback.error("本地直播配置读取失败");
+        }
     }
 
     private boolean hasLiveConfigResult() {

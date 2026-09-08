@@ -522,7 +522,7 @@ public class HomeActivity extends BaseActivity {
         }
         startupRouteResolved = true;
         StartDestination destination = startRoutePolicy.resolve(
-                !ApiConfig.get().getChannelGroupList().isEmpty(), recoveryMode);
+                ApiConfig.get().hasPlayableRemoteLiveConfig(), recoveryMode);
         if (destination == StartDestination.LIVE) {
             jumpActivity(LivePlayActivity.class);
             return true;

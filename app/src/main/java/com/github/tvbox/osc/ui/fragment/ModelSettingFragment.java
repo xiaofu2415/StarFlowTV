@@ -34,8 +34,10 @@ import com.github.tvbox.osc.ui.dialog.ApiDialog;
 import com.github.tvbox.osc.ui.dialog.ApiHistoryDialog;
 import com.github.tvbox.osc.ui.dialog.BackupDialog;
 import com.github.tvbox.osc.ui.dialog.DanmuApiDialog;
+import com.github.tvbox.osc.ui.dialog.LiveConfigUpdateDialog;
 import com.github.tvbox.osc.ui.dialog.SearchRemoteTvDialog;
 import com.github.tvbox.osc.ui.dialog.SelectDialog;
+import com.github.tvbox.osc.ui.dialog.TipDialog;
 import com.github.tvbox.osc.ui.dialog.XWalkInitDialog;
 import com.github.tvbox.osc.util.DanmuHelper;
 import com.github.tvbox.osc.util.FastClickCheckUtil;
@@ -45,6 +47,8 @@ import com.github.tvbox.osc.util.HistoryHelper;
 import com.github.tvbox.osc.util.LOG;
 import com.github.tvbox.osc.util.OkGoHelper;
 import com.github.tvbox.osc.util.PlayerHelper;
+import com.github.tvbox.osc.update.StarFlowUpdateManager;
+import com.github.tvbox.osc.update.UpdateManifest;
 import com.github.tvbox.osc.viewmodel.SourceViewModel;
 import com.lzy.okgo.OkGo;
 import com.lzy.okgo.callback.FileCallback;
@@ -102,6 +106,7 @@ public class ModelSettingFragment extends BaseLazyFragment {
     private boolean selectLocalLive;
     private TextView tvDanmuOpenText;
     private TextView tvDanmuApiText;
+    private TextView tvAppUpdateStatus;
 
     public static ModelSettingFragment newInstance() {
         return new ModelSettingFragment().setArguments();
@@ -168,6 +173,7 @@ public class ModelSettingFragment extends BaseLazyFragment {
         tvIjkCachePlay.setText(Hawk.get(HawkConfig.IJK_CACHE_PLAY, false) ? "开启" : "关闭");
         tvHomeDefaultShow = findViewById(R.id.tvHomeText);
         tvHomeDefaultShow.setText(Hawk.get(HawkConfig.DEFAULT_LOAD_LIVE, false) ? "直播" : "点播");
+        tvAppUpdateStatus = findViewById(R.id.tvAppUpdateStatus);
         findViewById(R.id.llDebug).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -209,6 +215,13 @@ public class ModelSettingFragment extends BaseLazyFragment {
                 FastClickCheckUtil.check(v);
                 AboutDialog dialog = new AboutDialog(mActivity);
                 dialog.show();
+            }
+        });
+        findViewById(R.id.llAppUpdate).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                FastClickCheckUtil.check(v);
+                checkForAppUpdate();
             }
         });
         findViewById(R.id.llWp).setOnClickListener(new View.OnClickListener() {
@@ -810,6 +823,107 @@ public class ModelSettingFragment extends BaseLazyFragment {
 
         findViewById(R.id.llIjkCachePlay).setOnClickListener((view -> onClickIjkCachePlay(view)));
         findViewById(R.id.llClearCache).setOnClickListener((view -> onClickClearCache(view)));
+    }
+
+    private void checkForAppUpdate() {
+        if (mActivity == null || mActivity.isFinishing()) return;
+        tvAppUpdateStatus.setText("检查中");
+        StarFlowUpdateManager.check(mActivity, new StarFlowUpdateManager.CheckListener() {
+            @Override
+            public void onChecking() {
+                tvAppUpdateStatus.setText("检查中");
+            }
+
+            @Override
+            public void onNoUpdate() {
+                tvAppUpdateStatus.setText("已是最新");
+                Toast.makeText(mContext, "当前已是最新版本", Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onUpdateAvailable(UpdateManifest manifest, UpdateManifest.Apk apk) {
+                tvAppUpdateStatus.setText("有新版本");
+                showAppUpdatePrompt(manifest, apk);
+            }
+
+            @Override
+            public void onFailure(String message) {
+                tvAppUpdateStatus.setText("检查更新");
+                Toast.makeText(mContext, message, Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    private void showAppUpdatePrompt(final UpdateManifest manifest,
+                                     final UpdateManifest.Apk apk) {
+        if (mActivity == null || mActivity.isFinishing()) return;
+        StringBuilder message = new StringBuilder("发现新版本 ")
+                .append(manifest.versionName)
+                .append("\n下载大小：")
+                .append(formatUpdateSize(apk.size));
+        if (manifest.releaseNotes != null && !manifest.releaseNotes.trim().isEmpty()) {
+            message.append("\n更新内容：\n").append(manifest.releaseNotes.trim());
+        }
+        final boolean mandatory = manifest.mandatory || manifest.forceUpdate;
+        final TipDialog[] holder = new TipDialog[1];
+        holder[0] = new TipDialog(mActivity, message.toString(), "稍后", "下载更新",
+                new TipDialog.OnListener() {
+                    @Override
+                    public void left() {
+                        if (!mandatory) holder[0].dismiss();
+                    }
+
+                    @Override
+                    public void right() {
+                        holder[0].dismiss();
+                        startAppUpdateDownload(apk);
+                    }
+
+                    @Override
+                    public void cancel() {
+                        if (!mandatory) holder[0].dismiss();
+                    }
+                });
+        holder[0].setCancelable(!mandatory);
+        holder[0].show();
+    }
+
+    private void startAppUpdateDownload(UpdateManifest.Apk apk) {
+        if (mActivity == null || mActivity.isFinishing()) return;
+        final LiveConfigUpdateDialog progressDialog =
+                new LiveConfigUpdateDialog(mActivity, "软件更新");
+        progressDialog.show();
+        progressDialog.updateProgress(0, "正在下载更新包");
+        StarFlowUpdateManager.download(mActivity, apk,
+                new StarFlowUpdateManager.DownloadListener() {
+                    @Override
+                    public void onProgress(int percent, long downloaded, long total) {
+                        if (progressDialog.isShowing()) {
+                            progressDialog.updateProgress(percent, "正在下载更新包");
+                        }
+                    }
+
+                    @Override
+                    public void onComplete() {
+                        if (progressDialog.isShowing()) progressDialog.dismiss();
+                        tvAppUpdateStatus.setText("安装中");
+                    }
+
+                    @Override
+                    public void onFailure(String message) {
+                        if (progressDialog.isShowing()) progressDialog.dismiss();
+                        tvAppUpdateStatus.setText("检查更新");
+                        Toast.makeText(mContext, message, Toast.LENGTH_SHORT).show();
+                    }
+                });
+    }
+
+    private String formatUpdateSize(long bytes) {
+        if (bytes < 1024L * 1024L) {
+            return Math.max(1L, bytes / 1024L) + " KB";
+        }
+        return String.format(java.util.Locale.US, "%.1f MB",
+                bytes / (1024.0 * 1024.0));
     }
 
     private void restartAppAfterConfigChanged() {

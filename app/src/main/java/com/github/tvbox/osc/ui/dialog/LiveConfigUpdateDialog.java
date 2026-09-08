@@ -16,10 +16,16 @@ public final class LiveConfigUpdateDialog extends BaseDialog {
     private final TextView stageText;
 
     public LiveConfigUpdateDialog(@NonNull @NotNull Context context) {
+        this(context, "更新直播源");
+    }
+
+    public LiveConfigUpdateDialog(@NonNull @NotNull Context context, String title) {
         super(context);
         setContentView(R.layout.dialog_live_config_update);
         setCanceledOnTouchOutside(false);
         setCancelable(true);
+        TextView titleText = findViewById(R.id.liveConfigTitle);
+        titleText.setText(title == null ? "更新" : title);
         progressBar = findViewById(R.id.liveConfigProgress);
         progressText = findViewById(R.id.liveConfigProgressText);
         stageText = findViewById(R.id.liveConfigStageText);

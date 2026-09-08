@@ -151,6 +151,9 @@ jobs:
           bundle="$GITHUB_WORKSPACE/release-bundle"
           install -d -m 0700 "$bundle"
           cp signed-apks/StarFlowTV-*.apk signed-apks/*-certificates.txt signed-apks/SHA256SUMS "$bundle"/
+          curl --fail --retry 3 --silent --show-error \
+            https://config.yuying.beauty/starflow/config/manifest.json \
+            --output "$bundle/manifest.json"
           version_name="$(sed -E 's/^StarFlowTV-([0-9.]+)-armeabi-v7a\.apk$/\1/' < <(find signed-apks -maxdepth 1 -type f -name 'StarFlowTV-*-armeabi-v7a.apk' -printf '%f\n' | sort | tail -1))"
           version_code="$(sed -n "s/.*versionCode \([0-9][0-9]*\).*/\1/p" app/build.gradle | head -1)"
           certificate_digest="$(sed -n 's/.*certificate SHA-256 digest: //p' signed-apks/armeabi-v7a-certificates.txt | head -1)"
@@ -195,7 +198,27 @@ jobs:
           if actual_public_key != expected_public_key:
               raise SystemExit("Ed25519 private key does not match the client public key")
 
+          signing_key_id = "starflow-production-2026-09"
           published_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+          config_path = bundle / "manifest.json"
+          config = json.loads(config_path.read_text(encoding="utf-8"))
+          if not isinstance(config.get("files"), list) or not config["files"]:
+              raise SystemExit("remote config manifest has no files")
+          config["configVersion"] = max(int(config.get("configVersion", 0)) + 1, 7)
+          config["publishedAt"] = published_at
+          config["signatureAlgorithm"] = "Ed25519"
+          config["signatureStatus"] = "ready"
+          config["keyId"] = signing_key_id
+          config_payload = (json.dumps(config, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+          config_path.write_bytes(config_payload)
+          (bundle / "manifest.sig").write_text(
+              base64.b64encode(private_key.sign(config_payload)).decode("ascii") + "\n",
+              encoding="ascii",
+          )
+          (bundle / "manifest.sha256").write_text(
+              hashlib.sha256(config_payload).hexdigest() + "  manifest.json\n",
+              encoding="ascii",
+          )
           variants = [
               ("armeabi-v7a", f"StarFlowTV-{version_name}-armeabi-v7a.apk"),
               ("arm64-v8a", f"StarFlowTV-{version_name}-arm64-v8a.apk"),
@@ -226,7 +249,7 @@ jobs:
               "versionName": version_name,
               "versionCode": version_code,
               "channel": "stable",
-              "releaseNotes": "StarFlowTV 1.4.0：新增官方直播类目和混合播放。",
+              "releaseNotes": f"StarFlowTV {version_name}：新增官方直播类目和混合播放。",
               "publishedAt": published_at,
               "minimumSdk": 23,
               "minSupportedVersionCode": 1,
@@ -234,9 +257,9 @@ jobs:
               "mandatory": False,
               "packageName": "tv.starflow.player",
               "signingStatus": "ready",
-              "signingKeyId": "starflow-production-2026-01",
+              "signingKeyId": signing_key_id,
               "signatureAlgorithm": "Ed25519",
-              "keyId": "starflow-production-2026-01",
+              "keyId": signing_key_id,
               "packages": packages,
               "apkVariants": apk_variants,
           }
@@ -244,9 +267,15 @@ jobs:
           (bundle / "latest.json").write_bytes(payload)
           (bundle / "latest.sig").write_text(base64.b64encode(private_key.sign(payload)).decode("ascii") + "\n", encoding="ascii")
           (bundle / "latest.sha256").write_text(hashlib.sha256(payload).hexdigest() + "  latest.json\n", encoding="ascii")
-          (bundle / "latest.json").chmod(0o600)
-          (bundle / "latest.sig").chmod(0o600)
-          (bundle / "latest.sha256").chmod(0o600)
+          (bundle / "OTA-SHA256SUMS").write_text(
+              "".join(
+                  f"{hashlib.sha256((bundle / name).read_bytes()).hexdigest()}  {name}\n"
+                  for name in ("manifest.json", "manifest.sig", "latest.json", "latest.sig")
+              ),
+              encoding="ascii",
+          )
+          for name in ("manifest.json", "manifest.sig", "manifest.sha256", "latest.json", "latest.sig", "latest.sha256", "OTA-SHA256SUMS"):
+              (bundle / name).chmod(0o600)
           for path in bundle.glob("*.apk"):
               path.chmod(0o600)
           for path in bundle.glob("*-certificates.txt"):
@@ -255,6 +284,7 @@ jobs:
           print(f"Generated OTA metadata for {version_name} ({version_code})")
           PY
           (cd "$bundle" && sha256sum -c SHA256SUMS)
+          (cd "$bundle" && sha256sum -c OTA-SHA256SUMS)
 
       - name: Upload signed APKs and public certificate metadata
         uses: actions/upload-artifact@v4

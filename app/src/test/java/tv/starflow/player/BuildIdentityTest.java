@@ -13,8 +13,8 @@ public final class BuildIdentityTest {
     }
 
     @Test
-    public void releaseIdentityIsVersion143() {
-        assertEquals("1.4.3", BuildConfig.VERSION_NAME);
-        assertEquals(9, BuildConfig.VERSION_CODE);
+    public void releaseIdentityIsVersion144() {
+        assertEquals("1.4.4", BuildConfig.VERSION_NAME);
+        assertEquals(10, BuildConfig.VERSION_CODE);
     }
 }

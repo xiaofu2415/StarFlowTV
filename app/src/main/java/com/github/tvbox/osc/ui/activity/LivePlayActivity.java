@@ -3643,8 +3643,14 @@ public class LivePlayActivity extends BaseActivity {
     }
 
     private boolean isNeedInputPassword(int groupIndex) {
-        return !liveChannelGroupList.get(groupIndex).getGroupPassword().isEmpty()
+        return hasGroupPassword(groupIndex)
                 && !isPasswordConfirmed(groupIndex);
+    }
+
+    private boolean hasGroupPassword(int groupIndex) {
+        if (groupIndex < 0 || groupIndex >= liveChannelGroupList.size()) return false;
+        LiveChannelGroup group = liveChannelGroupList.get(groupIndex);
+        return group != null && !TextUtils.isEmpty(group.getGroupPassword());
     }
 
     private boolean isPasswordConfirmed(int groupIndex) {
@@ -3694,7 +3700,7 @@ public class LivePlayActivity extends BaseActivity {
                         channelGroupIndex++;
                         if (channelGroupIndex >= liveChannelGroupList.size())
                             channelGroupIndex = 0;
-                    } while (!liveChannelGroupList.get(channelGroupIndex).getGroupPassword().isEmpty() || channelGroupIndex == currentChannelGroupIndex);
+                    } while (hasGroupPassword(channelGroupIndex) || channelGroupIndex == currentChannelGroupIndex);
                 }
             }
         } else {
@@ -3705,7 +3711,7 @@ public class LivePlayActivity extends BaseActivity {
                         channelGroupIndex--;
                         if (channelGroupIndex < 0)
                             channelGroupIndex = liveChannelGroupList.size() - 1;
-                    } while (!liveChannelGroupList.get(channelGroupIndex).getGroupPassword().isEmpty() || channelGroupIndex == currentChannelGroupIndex);
+                    } while (hasGroupPassword(channelGroupIndex) || channelGroupIndex == currentChannelGroupIndex);
                 }
                 liveChannelIndex = getLiveChannels(channelGroupIndex).size() - 1;
             }
@@ -3720,7 +3726,7 @@ public class LivePlayActivity extends BaseActivity {
 
     private int getFirstNoPasswordChannelGroup() {
         for (LiveChannelGroup liveChannelGroup : liveChannelGroupList) {
-            if (liveChannelGroup.getGroupPassword().isEmpty())
+            if (liveChannelGroup != null && !hasGroupPassword(liveChannelGroup.getGroupIndex()))
                 return liveChannelGroup.getGroupIndex();
         }
         return -1;

@@ -29,12 +29,19 @@ public final class ClientLiveConfigTest {
         assertFalse(ClientLiveConfig.parseAndValidate(duplicate).valid);
     }
 
-    @Test public void allowsNonCredentialStreamQueryButRejectsCredentialKeys() {
+    @Test public void allowsKnownPublicPlaybackParameters() {
         assertTrue(ClientLiveConfig.parseAndValidate(
+                VALID.replace("a.m3u8", "a.m3u8?key=txiptv&playlive=0&authid=0&id=cctv1hd")).valid);
+    }
+
+    @Test public void rejectsUnknownQueryParametersAndCredentialKeys() {
+        assertFalse(ClientLiveConfig.parseAndValidate(
                 VALID.replace("a.m3u8", "a.m3u8?encrypt=1&quality=hd")).valid);
         assertFalse(ClientLiveConfig.parseAndValidate(
                 VALID.replace("a.m3u8", "a.m3u8?auth=secret")).valid);
         assertFalse(ClientLiveConfig.parseAndValidate(
                 VALID.replace("a.m3u8", "a.m3u8?signature=secret")).valid);
+        assertFalse(ClientLiveConfig.parseAndValidate(
+                VALID.replace("a.m3u8", "a.m3u8?key=unknown")).valid);
     }
 }

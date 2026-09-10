@@ -13,7 +13,7 @@ public final class ClientLiveConfigAdapterTest {
             "{\"id\":\"cctv1\",\"name\":\"CCTV1\",\"group\":\"央视频道｜来源：iptv\"," +
             "\"logo\":\"https://logo.example/cctv1.png\",\"epgId\":\"CCTV-1\",\"sources\":[" +
             "{\"id\":\"source-a\",\"url\":\"https://live.example/a.m3u8\",\"priority\":1,\"protocol\":\"https\"}," +
-            "{\"id\":\"source-b\",\"url\":\"https://live.example/b.m3u8?key=txiptv\",\"priority\":2,\"protocol\":\"https\"}]}]}");
+            "{\"id\":\"source-b\",\"url\":\"https://live.example/b.m3u8?key=txiptv\",\"priority\":2,\"protocol\":\"https\"}]}]}";
 
     @Test
     public void preservesGroupsChannelsMetadataAndSourceOrder() {

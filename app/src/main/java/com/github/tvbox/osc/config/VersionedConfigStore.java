@@ -69,6 +69,18 @@ public final class VersionedConfigStore {
         return version <= 0 ? null : new File(new File(root, "v-" + version), "live.txt");
     }
 
+    public static File activeLiveJson(File root) {
+        int version = activeVersion(root);
+        return version <= 0 ? null : new File(new File(root, "v-" + version), "live.json");
+    }
+
+    public static File activeLiveConfig(File root) {
+        File json = activeLiveJson(root);
+        if (json != null && json.isFile()) return json;
+        File txt = activeLiveTxt(root);
+        return txt != null && txt.isFile() ? txt : null;
+    }
+
     private static void write(File file, byte[] content) throws Exception {
         try (FileOutputStream output = new FileOutputStream(file)) {
             output.write(content);

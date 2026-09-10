@@ -30,6 +30,8 @@ public final class VersionedConfigStoreTest {
         }
         assertEquals(4, VersionedConfigStore.activeVersion(root));
         assertTrue(VersionedConfigStore.activeLiveTxt(root).getName().equals("live.txt"));
+        assertEquals("live.json", VersionedConfigStore.activeLiveJson(root).getName());
+        assertEquals("live.json", VersionedConfigStore.activeLiveConfig(root).getName());
         assertFalse(new File(root, "v-1").exists());
         assertTrue(new File(root, "v-2").isDirectory());
     }

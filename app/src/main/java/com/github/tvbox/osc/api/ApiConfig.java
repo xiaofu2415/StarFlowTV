@@ -16,6 +16,7 @@ import com.github.catvod.crawler.pyLoader;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.crawler.python.IPyLoader;
 import com.github.tvbox.osc.base.App;
+import com.github.tvbox.osc.config.ClientLiveConfigAdapter;
 import com.github.tvbox.osc.config.LocalLiveConfigFile;
 import com.github.tvbox.osc.bean.LiveChannelGroup;
 import com.github.tvbox.osc.bean.IJKCode;
@@ -1053,6 +1054,10 @@ public class ApiConfig {
                     parseLiveJson(apiUrl, jsonContent);
                     return;
                 }
+                if (infoJson != null && infoJson.has("channels") && infoJson.has("schemaVersion")) {
+                    parseClientLiveJson(apiUrl, jsonContent);
+                    return;
+                }
             } catch (Throwable ignored) {
             }
         }
@@ -1112,6 +1117,17 @@ public class ApiConfig {
     }
 
     private String liveSpider="";
+
+    private void parseClientLiveJson(String apiUrl, String jsonStr) {
+        liveChannelGroupList.clear();
+        liveSpider = "";
+        initLiveSettings();
+        JsonArray livesArray = ClientLiveConfigAdapter.toTvBoxLiveGroups(jsonStr);
+        Hawk.put(HawkConfig.LIVE_GROUP_LIST, livesArray);
+        loadLives(livesArray);
+        LOG.i("echo-client-live-config-----------load:" + apiUrl);
+    }
+
     private void parseLiveJson(String apiUrl, String jsonStr) {
         liveChannelGroupList.clear();
         JsonObject infoJson = gson.fromJson(jsonStr, JsonObject.class);

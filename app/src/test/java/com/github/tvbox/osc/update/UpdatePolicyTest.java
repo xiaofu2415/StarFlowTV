@@ -21,7 +21,7 @@ public final class UpdatePolicyTest {
         value.channel = "stable";
         value.publishedAt = "2026-09-06T03:30:00Z";
         value.signatureAlgorithm = "Ed25519";
-        value.keyId = "starflow-production-2026-01";
+        value.keyId = "starflow-production-2026-09-r1";
         value.packages = new java.util.ArrayList<>();
         for (String abi : new String[]{"armeabi-v7a", "arm64-v8a", "universal"}) {
             UpdateManifest.Apk apk = new UpdateManifest.Apk();
@@ -38,36 +38,36 @@ public final class UpdatePolicyTest {
 
     @Test public void acceptsNewCompatibleSameOriginRelease() {
         assertEquals(UpdateDecision.AVAILABLE, UpdatePolicy.evaluate(
-                1, 23, "stable", "starflow-production-2026-01",
+                1, 23, "stable", "starflow-production-2026-09-r1",
                 "https://update.example/starflow/update/latest.json",
                 manifest(2, 23, "https://update.example/starflow/update/app.apk", HASH)));
     }
 
     @Test public void rejectsCrossOriginOrInvalidHash() {
         assertEquals(UpdateDecision.INVALID, UpdatePolicy.evaluate(
-                1, 23, "stable", "starflow-production-2026-01",
+                1, 23, "stable", "starflow-production-2026-09-r1",
                 "https://update.example/starflow/update/latest.json",
                 manifest(2, 23, "https://evil.example/app.apk", HASH)));
         assertEquals(UpdateDecision.INVALID, UpdatePolicy.evaluate(
-                1, 23, "stable", "starflow-production-2026-01",
+                1, 23, "stable", "starflow-production-2026-09-r1",
                 "https://update.example/starflow/update/latest.json",
                 manifest(2, 23, "https://update.example/starflow/update/app.apk", "bad")));
     }
 
     @Test public void distinguishesCurrentAndUnsupportedVersions() {
         assertEquals(UpdateDecision.NO_UPDATE, UpdatePolicy.evaluate(
-                2, 23, "stable", "starflow-production-2026-01",
+                2, 23, "stable", "starflow-production-2026-09-r1",
                 "https://update.example/starflow/update/latest.json",
                 manifest(2, 23, "https://update.example/starflow/update/app.apk", HASH)));
         assertEquals(UpdateDecision.UNSUPPORTED, UpdatePolicy.evaluate(
-                1, 23, "stable", "starflow-production-2026-01",
+                1, 23, "stable", "starflow-production-2026-09-r1",
                 "https://update.example/starflow/update/latest.json",
                 manifest(2, 29, "https://update.example/starflow/update/app.apk", HASH)));
     }
 
     @Test public void enforcesSelectedReleaseChannel() {
         assertEquals(UpdateDecision.NO_UPDATE, UpdatePolicy.evaluate(
-                1, 23, "beta", "starflow-production-2026-01",
+                1, 23, "beta", "starflow-production-2026-09-r1",
                 "https://update.example/starflow/update/latest.json",
                 manifest(2, 23, "https://update.example/starflow/update/app.apk", HASH)));
     }
@@ -77,14 +77,14 @@ public final class UpdatePolicyTest {
                 "https://update.example/starflow/update/app.apk", HASH);
         pending.signingStatus = "production-signing-pending";
         assertEquals(UpdateDecision.INVALID, UpdatePolicy.evaluate(
-                1, 23, "stable", "starflow-production-2026-01",
+                1, 23, "stable", "starflow-production-2026-09-r1",
                 "https://update.example/starflow/update/latest.json", pending));
 
         UpdateManifest wrongPackage = manifest(2, 23,
                 "https://update.example/starflow/update/app.apk", HASH);
         wrongPackage.packageName = "com.example.other";
         assertEquals(UpdateDecision.INVALID, UpdatePolicy.evaluate(
-                1, 23, "stable", "starflow-production-2026-01",
+                1, 23, "stable", "starflow-production-2026-09-r1",
                 "https://update.example/starflow/update/latest.json", wrongPackage));
     }
 }

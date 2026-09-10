@@ -158,11 +158,13 @@ jobs:
           version_code="$(sed -n "s/.*versionCode \([0-9][0-9]*\).*/\1/p" app/build.gradle | head -1)"
           certificate_digest="$(sed -n 's/.*certificate SHA-256 digest: //p' signed-apks/armeabi-v7a-certificates.txt | head -1)"
           expected_public_key="$(sed -n "s/.*starflowSigningPublicKey = project.findProperty('starflowSigningPublicKey') ?: '\([^']*\)'.*/\1/p" app/build.gradle | head -1)"
+          expected_key_id="$(sed -n "s/.*starflowSigningKeyId = project.findProperty('starflowSigningKeyId') ?: '\([^']*\)'.*/\1/p" app/build.gradle | head -1)"
           test -n "$version_name"
           test -n "$version_code"
           test -n "$certificate_digest"
           test -n "$expected_public_key"
-          python3 - "$bundle" "$version_name" "$version_code" "$certificate_digest" "$expected_public_key" <<'PY'
+          test -n "$expected_key_id"
+          python3 - "$bundle" "$version_name" "$version_code" "$certificate_digest" "$expected_public_key" "$expected_key_id" <<'PY'
           import base64
           import hashlib
           import json
@@ -179,6 +181,7 @@ jobs:
           version_code = int(sys.argv[3])
           certificate_digest = sys.argv[4]
           expected_public_key = sys.argv[5]
+          signing_key_id = sys.argv[6]
           key_bytes = base64.b64decode(os.environ["STARFLOW_ED25519_PRIVATE_KEY_B64"])
           private_key = None
           for loader in (serialization.load_der_private_key, serialization.load_pem_private_key):
@@ -198,7 +201,6 @@ jobs:
           if actual_public_key != expected_public_key:
               raise SystemExit("Ed25519 private key does not match the client public key")
 
-          signing_key_id = "starflow-production-2026-09"
           published_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
           config_path = bundle / "manifest.json"
           config = json.loads(config_path.read_text(encoding="utf-8"))

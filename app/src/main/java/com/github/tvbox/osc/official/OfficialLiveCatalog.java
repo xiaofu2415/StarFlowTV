@@ -83,6 +83,7 @@ public final class OfficialLiveCatalog {
         LiveChannelGroup group = new LiveChannelGroup();
         group.setGroupIndex(groupIndex);
         group.setGroupName(GROUP_NAME);
+        group.setGroupPassword("");
         ArrayList<LiveChannelItem> items = new ArrayList<>();
         for (int i = 0; i < BUILT_IN.size(); i++) {
             OfficialLiveChannel channel = BUILT_IN.get(i);

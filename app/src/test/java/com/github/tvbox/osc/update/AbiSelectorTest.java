@@ -13,7 +13,7 @@ public final class AbiSelectorTest {
                 "\"minSupportedVersionCode\":1,\"mandatory\":false," +
                 "\"packageName\":\"tv.starflow.player\",\"signingStatus\":\"ready\"," +
                 "\"forceUpdate\":false,\"signatureAlgorithm\":\"Ed25519\"," +
-                "\"keyId\":\"starflow-production-2026-01\",\"packages\":[" +
+                "\"keyId\":\"starflow-production-2026-09-r1\",\"packages\":[" +
                 apk("armeabi-v7a") + "," + apk("arm64-v8a") + "," + apk("universal") + "]}");
     }
 

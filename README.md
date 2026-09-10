@@ -12,7 +12,7 @@ StarFlowTV 是面向 Android TV 的个人使用播放器：启动后直接进入
 | versionName / versionCode | 1.3.1 / 5 |
 | 代码分支 | main |
 | PR | #1 merged |
-| 生产签名 | ready；keyId: starflow-production-2026-01 |
+| 生产签名 | ready；keyId: starflow-production-2026-09-r1 |
 | 配置清单 | configVersion 5，Ed25519 + SHA-256 |
 
 ## 功能

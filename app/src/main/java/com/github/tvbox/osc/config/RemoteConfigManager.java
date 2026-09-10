@@ -56,8 +56,8 @@ public final class RemoteConfigManager {
     }
 
     public static void initialize(Context context) {
-        File active = VersionedConfigStore.activeLiveTxt(root(context));
-        if (active != null && active.isFile()) {
+        File active = VersionedConfigStore.activeLiveConfig(root(context));
+        if (active != null) {
             Hawk.put(HawkConfig.LIVE_API_URL, "file://" + active.getAbsolutePath());
         }
         check(context.getApplicationContext(), null);
@@ -146,7 +146,7 @@ public final class RemoteConfigManager {
                     finish(listener, CheckResult.FAILED);
                     return;
                 }
-                File active = VersionedConfigStore.activeLiveTxt(root(context));
+                File active = VersionedConfigStore.activeLiveConfig(root(context));
                 if (active == null) {
                     finish(listener, CheckResult.FAILED);
                     return;

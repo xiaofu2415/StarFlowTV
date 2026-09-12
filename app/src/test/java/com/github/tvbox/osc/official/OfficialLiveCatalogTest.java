@@ -16,18 +16,18 @@ public class OfficialLiveCatalogTest {
 
     @Test public void allEntrancesPreserveExactIdentityAndWebOnlyGroupMetadata() {
         String[][] expected = {
-            {"cctv-1", "CCTV-1", "cctv1/"}, {"cctv-2", "CCTV-2", "cctv2/"},
-            {"cctv-3", "CCTV-3", "cctv3/"}, {"cctv-4", "CCTV-4", "cctv4/"},
-            {"cctv-5", "CCTV-5", "cctv5/"}, {"cctv-6", "CCTV-6", "cctv6/"},
-            {"cctv-7", "CCTV-7", "cctv7/"}, {"cctv-8", "CCTV-8", "cctv8/"},
-            {"cctv-9", "CCTV-9", "cctv9/"}, {"cctv-10", "CCTV-10", "cctv10/"},
-            {"cctv-11", "CCTV-11", "cctv11/"}, {"cctv-12", "CCTV-12", "cctv12/"},
-            {"cctv-13", "CCTV-13", "cctv13/"}, {"cctv-14", "CCTV-14", "cctv14/"},
-            {"cctv-15", "CCTV-15", "cctv15/"}, {"cctv-16", "CCTV-16", "cctv16/"},
-            {"cctv-17", "CCTV-17", "cctv17/"}, {"cctv-5plus", "CCTV-5+", "cctv5plus/"},
-            {"cctv-4-asia", "CCTV-4 Asia", "cctv4/"},
-            {"cctv-4-europe", "CCTV-4 Europe", "cctveurope/index.shtml"},
-            {"cctv-4-america", "CCTV-4 America", "cctvamerica/"}
+            {"cctv-1", "CCTV-1", "cctv1/m/"}, {"cctv-2", "CCTV-2", "cctv2/m/"},
+            {"cctv-3", "CCTV-3", "cctv3/m/"}, {"cctv-4", "CCTV-4", "cctv4/m/"},
+            {"cctv-5", "CCTV-5", "cctv5/m/"}, {"cctv-6", "CCTV-6", "cctv6/m/"},
+            {"cctv-7", "CCTV-7", "cctv7/m/"}, {"cctv-8", "CCTV-8", "cctv8/m/"},
+            {"cctv-9", "CCTV-9", "cctv9/m/"}, {"cctv-10", "CCTV-10", "cctv10/m/"},
+            {"cctv-11", "CCTV-11", "cctv11/m/"}, {"cctv-12", "CCTV-12", "cctv12/m/"},
+            {"cctv-13", "CCTV-13", "cctv13/m/"}, {"cctv-14", "CCTV-14", "cctv14/m/"},
+            {"cctv-15", "CCTV-15", "cctv15/m/"}, {"cctv-16", "CCTV-16", "cctv16/m/"},
+            {"cctv-17", "CCTV-17", "cctv17/m/"}, {"cctv-5plus", "CCTV-5+", "cctv5plus/m/"},
+            {"cctv-4-asia", "CCTV-4 Asia", "cctv4/m/"},
+            {"cctv-4-europe", "CCTV-4 Europe", "cctveurope/m/"},
+            {"cctv-4-america", "CCTV-4 America", "cctvamerica/m/"}
         };
         LiveChannelGroup group = OfficialLiveCatalog.toGroup(4, 12);
         assertEquals("官方直播", group.getGroupName());
@@ -123,6 +123,13 @@ public class OfficialLiveCatalogTest {
         assertEquals(21, new HashSet<String>(ids(channels)).size());
         for (OfficialLiveChannel channel : channels) {
             assertTrue(OfficialLiveUrlPolicy.isAllowedPageUrl(channel.getPageUrl()));
+        }
+    }
+
+    @Test public void catalogUsesMobileHtml5LiveEntrypoints() {
+        for (OfficialLiveChannel channel : OfficialLiveCatalog.builtIn()) {
+            assertTrue(channel.getPageUrl().startsWith("https://tv.cctv.com/live/"));
+            assertTrue(channel.getPageUrl().contains("/m/"));
         }
     }
 

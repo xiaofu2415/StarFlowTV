@@ -1212,7 +1212,9 @@ public class LivePlayActivity extends BaseActivity {
 
     @Override
     public void onBackPressed() {
-        if (tvLeftChannelListLayout.getVisibility() == View.VISIBLE) {
+        if (officialLiveController != null && officialLiveController.handleBackPressed()) {
+            return;
+        } else if (tvLeftChannelListLayout.getVisibility() == View.VISIBLE) {
             mHandler.removeCallbacks(mHideChannelListRun);
             mHandler.post(mHideChannelListRun);
         } else if (tvRightSettingLayout.getVisibility() == View.VISIBLE) {

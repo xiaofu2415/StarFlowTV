@@ -1,12 +1,15 @@
 package com.github.tvbox.osc.ui.official;
 
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.net.http.SslError;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
+import android.webkit.WebChromeClient;
 import android.webkit.RenderProcessGoneDetail;
 import android.webkit.SslErrorHandler;
 import android.webkit.WebResourceError;
@@ -46,6 +49,9 @@ public final class OfficialLiveWebViewController {
     private final LiveForegroundGate foregroundGate = new LiveForegroundGate();
     // Interception callbacks run off the UI thread and must see instance replacement.
     private volatile WebView webView;
+    private View customView;
+    private WebChromeClient.CustomViewCallback customViewCallback;
+    private int normalSystemUiVisibility;
     private boolean released;
 
     public OfficialLiveWebViewController(@NonNull Context context,
@@ -105,6 +111,7 @@ public final class OfficialLiveWebViewController {
     public void stop() {
         foregroundGate.clearPending();
         boolean hadActiveRequest = requestTracker.stop();
+        hideCustomView();
         if (webView != null) {
             webView.stopLoading();
             if (hadActiveRequest) webView.loadUrl(INTERNAL_BLANK_URL);
@@ -119,6 +126,7 @@ public final class OfficialLiveWebViewController {
         released = true;
         foregroundGate.onDestroy();
         requestTracker.stop();
+        hideCustomView();
         hideSurface();
 
         WebView view = webView;
@@ -152,13 +160,76 @@ public final class OfficialLiveWebViewController {
         settings.setAllowUniversalAccessFromFileURLs(false);
         settings.setSupportMultipleWindows(false);
         settings.setJavaScriptCanOpenWindowsAutomatically(false);
-        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        // CCTV's official player still emits legacy http:// media/API URLs.
+        // shouldInterceptRequest below constrains those mixed resources to the
+        // explicit official/CDN host allowlist; the page itself is HTTPS-only.
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         view.setBackgroundColor(Color.BLACK);
+        view.setWebChromeClient(new OfficialWebChromeClient());
         // Keep D-pad/confirm events on the Activity's existing live-control path.
         view.setFocusable(false);
         view.setFocusableInTouchMode(false);
         view.setWebViewClient(new OfficialWebViewClient());
         return view;
+    }
+
+    /** Returns true when the Back key only needs to leave HTML5 video fullscreen. */
+    public boolean handleBackPressed() {
+        if (customView == null) return false;
+        hideCustomView();
+        return true;
+    }
+
+    private void showCustomView(View view, WebChromeClient.CustomViewCallback callback) {
+        if (view == null || customView != null) {
+            if (callback != null) callback.onCustomViewHidden();
+            return;
+        }
+        if (!(context instanceof Activity)) {
+            if (callback != null) callback.onCustomViewHidden();
+            return;
+        }
+        View decorView = ((Activity) context).getWindow().getDecorView();
+        if (!(decorView instanceof ViewGroup)) {
+            if (callback != null) callback.onCustomViewHidden();
+            return;
+        }
+
+        customView = view;
+        customViewCallback = callback;
+        normalSystemUiVisibility = decorView.getSystemUiVisibility();
+        ViewParent parent = view.getParent();
+        if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(view);
+        view.setBackgroundColor(Color.BLACK);
+        ViewGroup decorGroup = (ViewGroup) decorView;
+        decorGroup.addView(view, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+        decorView.setSystemUiVisibility(fullscreenSystemUiVisibility());
+    }
+
+    private void hideCustomView() {
+        if (customView == null) return;
+        View view = customView;
+        WebChromeClient.CustomViewCallback callback = customViewCallback;
+        customView = null;
+        customViewCallback = null;
+        ViewParent parent = view.getParent();
+        if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(view);
+        if (context instanceof Activity) {
+            View decorView = ((Activity) context).getWindow().getDecorView();
+            decorView.setSystemUiVisibility(normalSystemUiVisibility);
+        }
+        if (callback != null) callback.onCustomViewHidden();
+    }
+
+    private int fullscreenSystemUiVisibility() {
+        return View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
     }
 
     private void hideSurface() {
@@ -302,6 +373,24 @@ public final class OfficialLiveWebViewController {
                 listener.onError("央视直播页面渲染进程已退出");
             }
             return true;
+        }
+    }
+
+    private final class OfficialWebChromeClient extends WebChromeClient {
+        @Override
+        public void onShowCustomView(View view, CustomViewCallback callback) {
+            showCustomView(view, callback);
+        }
+
+        @SuppressWarnings("deprecation")
+        @Override
+        public void onShowCustomView(View view, int requestedOrientation, CustomViewCallback callback) {
+            showCustomView(view, callback);
+        }
+
+        @Override
+        public void onHideCustomView() {
+            hideCustomView();
         }
     }
 }

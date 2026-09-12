@@ -369,7 +369,7 @@ jobs:
           cp "$bundle"/StarFlowTV-*.apk "$local_stage/update/"
 
           ssh "${ssh_opts[@]}" "$remote" sh -s -- "$deploy_root" "$remote_stage" <<'REMOTE_PREPARE'
-          set -euo pipefail
+          set -eu
           target="$1"
           stage="$2"
           case "$target" in
@@ -392,7 +392,7 @@ jobs:
           scp "${scp_opts[@]}" -r "$local_stage/config" "$local_stage/update" "$remote:$remote_stage/"
 
           ssh "${ssh_opts[@]}" "$remote" sh -s -- "$deploy_root" "$remote_stage" <<'REMOTE_PUBLISH'
-          set -euo pipefail
+          set -eu
           target="$1"
           stage="$2"
           install -m 0644 "$stage/config/manifest.sig" "$target/config/manifest.sig"

@@ -3,8 +3,8 @@ apply plugin: 'com.android.application'
 def starflowLiveUrl = project.findProperty('starflowLiveUrl') ?: 'https://config.yuying.beauty/starflow/config/live.txt'
 def starflowConfigManifestUrl = project.findProperty('starflowConfigManifestUrl') ?: 'https://config.yuying.beauty/starflow/config/manifest.json'
 def starflowUpdateUrl = project.findProperty('starflowUpdateUrl') ?: 'https://update.yuying.beauty/starflow/update/latest.json'
-def starflowSigningPublicKey = project.findProperty('starflowSigningPublicKey') ?: 'kBZZK4w6OTEWuAQVUrXPK7AVo4kgktUZEV0wBVvrDFM='
-def starflowSigningKeyId = project.findProperty('starflowSigningKeyId') ?: 'starflow-production-2026-09-r1'
+def starflowSigningPublicKey = project.findProperty('starflowSigningPublicKey') ?: '/HYjh73wFcp2EYVi6VekEtQ5mWASjCCRSx3rWo/WkyU='
+def starflowSigningKeyId = project.findProperty('starflowSigningKeyId') ?: 'starflow-production-2026-09-r2'
 def starflowUpdateChannel = project.findProperty('starflowUpdateChannel') ?: 'stable'
 
 android {

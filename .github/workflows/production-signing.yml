@@ -357,28 +357,39 @@ jobs:
             -o UserKnownHostsFile="$known_hosts"
           )
           remote="$STARFLOW_DEPLOY_USER@$STARFLOW_DEPLOY_HOST"
-          deploy_root="${STARFLOW_DEPLOY_PATH%/}"
-          case "$deploy_root" in
-            ''|'/') echo 'STARFLOW_DEPLOY_PATH must not be the filesystem root'; exit 1 ;;
+          config_root="${STARFLOW_DEPLOY_PATH%/}"
+          case "$config_root" in
+            */config.yuying.beauty/index/starflow/config) ;;
+            *) echo 'STARFLOW_DEPLOY_PATH must be the config.yuying.beauty StarFlow config directory'; exit 1 ;;
           esac
-          remote_stage="$deploy_root/.starflow-release-$GITHUB_RUN_ID"
+          update_root="${config_root%/config.yuying.beauty/index/starflow/config}/update.yuying.beauty/index/starflow/update"
+          case "$update_root" in
+            ''|'/') echo 'derived update deployment path is invalid'; exit 1 ;;
+          esac
+          config_stage="$config_root/.starflow-release-$GITHUB_RUN_ID"
+          update_stage="$update_root/.starflow-release-$GITHUB_RUN_ID"
 
           install -d -m 0700 "$local_stage/config" "$local_stage/update"
           cp "$bundle/manifest.json" "$bundle/manifest.sig" "$bundle/manifest.sha256" "$local_stage/config/"
           cp "$bundle/latest.json" "$bundle/latest.sig" "$bundle/latest.sha256" "$bundle/OTA-SHA256SUMS" "$local_stage/update/"
           cp "$bundle"/StarFlowTV-*.apk "$local_stage/update/"
 
-          ssh "${ssh_opts[@]}" "$remote" sh -s -- "$deploy_root" "$remote_stage" <<'REMOTE_PREPARE'
+          ssh "${ssh_opts[@]}" "$remote" sh -s -- "$config_root" "$config_stage" "$update_root" "$update_stage" <<'REMOTE_PREPARE'
           set -eu
-          target="$1"
-          stage="$2"
-          case "$target" in
-            /*) ;;
-            *) exit 1 ;;
-          esac
-          mkdir -p -- "$target/config" "$target/update" "$stage/config" "$stage/update"
-          chmod 0755 "$target/config" "$target/update"
-          chmod 0700 "$stage" "$stage/config" "$stage/update"
+          config_target="$1"
+          config_stage="$2"
+          update_target="$3"
+          update_stage="$4"
+          for path in "$config_target" "$update_target"; do
+            case "$path" in
+              /*) ;;
+              *) exit 1 ;;
+            esac
+            mkdir -p -- "$path"
+            chmod 0755 "$path"
+          done
+          mkdir -p -- "$config_stage" "$update_stage"
+          chmod 0700 "$config_stage" "$update_stage"
           REMOTE_PREPARE
 
           scp_opts=(
@@ -389,26 +400,29 @@ jobs:
             -o StrictHostKeyChecking=yes
             -o UserKnownHostsFile="$known_hosts"
           )
-          scp "${scp_opts[@]}" -r "$local_stage/config" "$local_stage/update" "$remote:$remote_stage/"
+          scp "${scp_opts[@]}" -r "$local_stage/config" "$remote:$config_stage/"
+          scp "${scp_opts[@]}" -r "$local_stage/update" "$remote:$update_stage/"
 
-          ssh "${ssh_opts[@]}" "$remote" sh -s -- "$deploy_root" "$remote_stage" <<'REMOTE_PUBLISH'
+          ssh "${ssh_opts[@]}" "$remote" sh -s -- "$config_root" "$config_stage" "$update_root" "$update_stage" <<'REMOTE_PUBLISH'
           set -eu
-          target="$1"
-          stage="$2"
-          install -m 0644 "$stage/config/manifest.sig" "$target/config/manifest.sig"
-          install -m 0644 "$stage/config/manifest.sha256" "$target/config/manifest.sha256"
-          install -m 0644 "$stage/config/manifest.json" "$target/config/manifest.json"
-          for file in "$stage/update"/*.apk; do
+          config_target="$1"
+          config_stage="$2"
+          update_target="$3"
+          update_stage="$4"
+          install -m 0644 "$config_stage/config/manifest.sig" "$config_target/manifest.sig"
+          install -m 0644 "$config_stage/config/manifest.sha256" "$config_target/manifest.sha256"
+          install -m 0644 "$config_stage/config/manifest.json" "$config_target/manifest.json"
+          for file in "$update_stage/update"/*.apk; do
             test -f "$file"
-            install -m 0644 "$file" "$target/update/$(basename "$file")"
+            install -m 0644 "$file" "$update_target/$(basename "$file")"
           done
-          install -m 0644 "$stage/update/latest.sig" "$target/update/latest.sig"
-          install -m 0644 "$stage/update/latest.sha256" "$target/update/latest.sha256"
-          install -m 0644 "$stage/update/OTA-SHA256SUMS" "$target/update/OTA-SHA256SUMS"
-          install -m 0644 "$stage/update/latest.json" "$target/update/latest.json"
-          rm -rf -- "$stage"
+          install -m 0644 "$update_stage/update/latest.sig" "$update_target/latest.sig"
+          install -m 0644 "$update_stage/update/latest.sha256" "$update_target/latest.sha256"
+          install -m 0644 "$update_stage/update/OTA-SHA256SUMS" "$update_target/OTA-SHA256SUMS"
+          install -m 0644 "$update_stage/update/latest.json" "$update_target/latest.json"
+          rm -rf -- "$config_stage" "$update_stage"
           REMOTE_PUBLISH
-          echo 'Release bundle published after host-key and SSH verification.'
+          echo 'Release bundle published to both static HTTPS roots after host-key and SSH verification.'
 
       - name: Verify public OTA endpoints
         env:

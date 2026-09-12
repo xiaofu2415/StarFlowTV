@@ -386,7 +386,6 @@ jobs:
               *) exit 1 ;;
             esac
             mkdir -p -- "$path"
-            chmod 0755 "$path"
           done
           mkdir -p -- "$config_stage" "$update_stage"
           chmod 0700 "$config_stage" "$update_stage"

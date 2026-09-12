@@ -112,12 +112,12 @@ public final class OfficialLiveCatalog {
     private static List<OfficialLiveChannel> build() {
         List<OfficialLiveChannel> channels = new ArrayList<>();
         for (int number = 1; number <= 17; number++) {
-            add(channels, "cctv-" + number, "CCTV-" + number, "cctv" + number + "/");
+            add(channels, "cctv-" + number, "CCTV-" + number, "cctv" + number + "/m/");
         }
-        add(channels, "cctv-5plus", "CCTV-5+", "cctv5plus/");
-        add(channels, "cctv-4-asia", "CCTV-4 Asia", "cctv4/");
-        add(channels, "cctv-4-europe", "CCTV-4 Europe", "cctveurope/index.shtml");
-        add(channels, "cctv-4-america", "CCTV-4 America", "cctvamerica/");
+        add(channels, "cctv-5plus", "CCTV-5+", "cctv5plus/m/");
+        add(channels, "cctv-4-asia", "CCTV-4 Asia", "cctv4/m/");
+        add(channels, "cctv-4-europe", "CCTV-4 Europe", "cctveurope/m/");
+        add(channels, "cctv-4-america", "CCTV-4 America", "cctvamerica/m/");
         return Collections.unmodifiableList(channels);
     }
 

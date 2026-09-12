@@ -39,16 +39,41 @@ public class OfficialLiveUrlPolicyTest {
         assertFalse(OfficialLiveUrlPolicy.isAllowedResourceHost("example.com"));
     }
 
-    @Test public void resourceUrlsRequireAllowlistedHttpsHosts() {
+    @Test public void resourceUrlsRequireAllowlistedHostsAndNoAmbiguousAuthority() {
         assertTrue(OfficialLiveUrlPolicy.isAllowedResourceUrl(
                 "https://p2.img.cctvpic.com/image.jpg?size=large"));
         assertTrue(OfficialLiveUrlPolicy.isAllowedResourceUrl(
                 "https://live.cctv.com/player.js"));
-        assertFalse(OfficialLiveUrlPolicy.isAllowedResourceUrl(
+        assertTrue(OfficialLiveUrlPolicy.isAllowedResourceUrl(
                 "http://live.cctv.com/player.js"));
         assertFalse(OfficialLiveUrlPolicy.isAllowedResourceUrl(
                 "https://example.com/player.js"));
         assertFalse(OfficialLiveUrlPolicy.isAllowedResourceUrl(
+                "http://example.com/player.js"));
+        assertFalse(OfficialLiveUrlPolicy.isAllowedResourceUrl(
                 "https://live.cctv.com:8443/player.js"));
+    }
+
+    @Test public void officialPlayerAndMediaCdnUrlsAreAllowlisted() {
+        assertTrue(OfficialLiveUrlPolicy.isAllowedResourceHost("js.player.cntv.cn"));
+        assertTrue(OfficialLiveUrlPolicy.isAllowedResourceHost("api.live.cntv.cn"));
+        assertTrue(OfficialLiveUrlPolicy.isAllowedResourceHost("cbox.cntv.cn"));
+        assertTrue(OfficialLiveUrlPolicy.isAllowedResourceHost("js.data.cctv.com"));
+        assertTrue(OfficialLiveUrlPolicy.isAllowedResourceHost("vdnad.apps.cntv.cn"));
+        assertTrue(OfficialLiveUrlPolicy.isAllowedResourceHost("ldncctvwbcdali.v.myalicdn.com"));
+        assertTrue(OfficialLiveUrlPolicy.isAllowedResourceHost("ldncctvwbcdbd.a.bdydns.com"));
+        assertTrue(OfficialLiveUrlPolicy.isAllowedResourceHost("ldncctvwbcdcnc.v.wscdns.com"));
+        assertTrue(OfficialLiveUrlPolicy.isAllowedResourceHost("ldncctvwbndhwy.cntv.myhwcdn.cn"));
+        assertTrue(OfficialLiveUrlPolicy.isAllowedResourceHost("ldncctvwbcdks.v.kcdnvip.com"));
+        assertTrue(OfficialLiveUrlPolicy.isAllowedResourceHost("ldncctvwbndtxy.liveplay.myqcloud.com"));
+        assertTrue(OfficialLiveUrlPolicy.isAllowedResourceUrl(
+                "https://js.player.cntv.cn/creator/liveplayer.js"));
+        assertTrue(OfficialLiveUrlPolicy.isAllowedResourceUrl(
+                "https://ldncctvwbndhwy.cntv.myhwcdn.cn/ldncctvwbnd/ldcctv1_2/index.m3u8"));
+        assertTrue(OfficialLiveUrlPolicy.isAllowedResourceUrl(
+                "http://ldncctvwbcdks.v.kcdnvip.com/ldncctvwbcd/cdrmldcctv1_1/index.m3u8"));
+        assertFalse(OfficialLiveUrlPolicy.isAllowedResourceHost("player.cntv.cn.evil.example"));
+        assertTrue(OfficialLiveUrlPolicy.isAllowedResourceUrl(
+                "http://js.player.cntv.cn/creator/liveplayer.js"));
     }
 }

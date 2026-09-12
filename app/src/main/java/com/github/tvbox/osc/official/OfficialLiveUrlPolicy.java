@@ -4,6 +4,18 @@ import java.net.URI;
 import java.util.Locale;
 
 public final class OfficialLiveUrlPolicy {
+    private static final String[] ALLOWED_RESOURCE_DOMAINS = {
+            "cctv.com",
+            "cctvpic.com",
+            "cntv.cn",
+            "myalicdn.com",
+            "bdydns.com",
+            "wscdns.com",
+            "myhwcdn.cn",
+            "kcdnvip.com",
+            "myqcloud.com"
+    };
+
     private OfficialLiveUrlPolicy() {
     }
 
@@ -35,15 +47,21 @@ public final class OfficialLiveUrlPolicy {
     public static boolean isAllowedResourceHost(String value) {
         if (value == null || value.trim().isEmpty()) return false;
         String host = value.trim().toLowerCase(Locale.US);
-        return isHostOrSubdomain(host, "cctv.com")
-                || isHostOrSubdomain(host, "cctvpic.com");
+        for (String allowedDomain : ALLOWED_RESOURCE_DOMAINS) {
+            if (isHostOrSubdomain(host, allowedDomain)) return true;
+        }
+        return false;
     }
 
     public static boolean isAllowedResourceUrl(String value) {
         if (value == null || value.trim().isEmpty()) return false;
         try {
             URI uri = new URI(value.trim());
-            return "https".equalsIgnoreCase(uri.getScheme())
+            // The official CCTV player still publishes some legacy http:// HLS,
+            // API, and worker URLs. Main-frame navigation remains HTTPS-only;
+            // mixed resources are limited to the allowlisted official/CDN hosts.
+            return ("https".equalsIgnoreCase(uri.getScheme())
+                    || "http".equalsIgnoreCase(uri.getScheme()))
                     && uri.getPort() == -1
                     && uri.getUserInfo() == null
                     && isAllowedResourceHost(uri.getHost());

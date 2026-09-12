@@ -184,7 +184,11 @@ jobs:
           signing_key_id = sys.argv[6]
           key_bytes = base64.b64decode(os.environ["STARFLOW_ED25519_PRIVATE_KEY_B64"])
           private_key = None
-          for loader in (serialization.load_der_private_key, serialization.load_pem_private_key):
+          loaders = [serialization.load_der_private_key, serialization.load_pem_private_key]
+          load_ssh_private_key = getattr(serialization, "load_ssh_private_key", None)
+          if load_ssh_private_key is not None:
+              loaders.append(load_ssh_private_key)
+          for loader in loaders:
               try:
                   candidate = loader(key_bytes, password=None)
                   if isinstance(candidate, Ed25519PrivateKey):

@@ -295,7 +295,157 @@ jobs:
           retention-days: 14
           path: release-bundle/
 
-      - name: State the remaining deployment gate
+      - name: Publish release bundle to 1Panel static HTTPS root
+        env:
+          STARFLOW_DEPLOY_HOST: ${{ secrets.STARFLOW_DEPLOY_HOST }}
+          STARFLOW_DEPLOY_PORT: ${{ secrets.STARFLOW_DEPLOY_PORT }}
+          STARFLOW_DEPLOY_USER: ${{ secrets.STARFLOW_DEPLOY_USER }}
+          STARFLOW_DEPLOY_KEY: ${{ secrets.STARFLOW_DEPLOY_KEY }}
+          STARFLOW_DEPLOY_PATH: ${{ secrets.STARFLOW_DEPLOY_PATH }}
+          EXPECTED_HOST_FINGERPRINT: 'SHA256:ApZXBfoZmCk6ziV1udZGaSInz3ZtsxHTdBf7L3LBq+s'
         run: |
-          echo 'APK and OTA metadata signing completed only when all preceding steps pass.'
-          echo 'Deploy release-bundle contents to the verified HTTPS update endpoint only after human review.'
+          set -euo pipefail
+          bundle="$GITHUB_WORKSPACE/release-bundle"
+          test -s "$bundle/latest.json"
+          test -s "$bundle/latest.sig"
+          test -s "$bundle/manifest.json"
+          test -s "$bundle/manifest.sig"
+          test -n "$STARFLOW_DEPLOY_HOST"
+          test -n "$STARFLOW_DEPLOY_PORT"
+          test -n "$STARFLOW_DEPLOY_USER"
+          test -n "$STARFLOW_DEPLOY_KEY"
+          test -n "$STARFLOW_DEPLOY_PATH"
+          case "$STARFLOW_DEPLOY_PORT" in
+            ''|*[!0-9]*) echo 'STARFLOW_DEPLOY_PORT must be numeric'; exit 1 ;;
+          esac
+          case "$STARFLOW_DEPLOY_PATH" in
+            /*) ;;
+            *) echo 'STARFLOW_DEPLOY_PATH must be an absolute directory'; exit 1 ;;
+          esac
+          case "$STARFLOW_DEPLOY_USER" in
+            *[!A-Za-z0-9._-]*) echo 'STARFLOW_DEPLOY_USER contains unsupported characters'; exit 1 ;;
+          esac
+          case "$STARFLOW_DEPLOY_HOST" in
+            *[!A-Za-z0-9._:-]*) echo 'STARFLOW_DEPLOY_HOST contains unsupported characters'; exit 1 ;;
+          esac
+
+          key_file="$(mktemp)"
+          known_hosts="$(mktemp)"
+          local_stage="$(mktemp -d)"
+          trap 'rm -rf "$local_stage" "$key_file" "$known_hosts"' EXIT
+          umask 077
+          printf '%s\n' "$STARFLOW_DEPLOY_KEY" > "$key_file"
+          chmod 600 "$key_file"
+          ssh-keygen -y -f "$key_file" >/dev/null
+
+          scanned_keys="$(ssh-keyscan -4 -T 10 -p "$STARFLOW_DEPLOY_PORT" -t ed25519 "$STARFLOW_DEPLOY_HOST" 2>/dev/null)"
+          test -n "$scanned_keys"
+          printf '%s\n' "$scanned_keys" > "$known_hosts"
+          actual_fingerprint="$(ssh-keygen -lf "$known_hosts" -E sha256 | awk 'NR == 1 { print $2 }')"
+          test "$actual_fingerprint" = "$EXPECTED_HOST_FINGERPRINT"
+
+          ssh_opts=(
+            -i "$key_file"
+            -p "$STARFLOW_DEPLOY_PORT"
+            -o BatchMode=yes
+            -o IdentitiesOnly=yes
+            -o StrictHostKeyChecking=yes
+            -o UserKnownHostsFile="$known_hosts"
+          )
+          remote="$STARFLOW_DEPLOY_USER@$STARFLOW_DEPLOY_HOST"
+          deploy_root="${STARFLOW_DEPLOY_PATH%/}"
+          case "$deploy_root" in
+            ''|'/') echo 'STARFLOW_DEPLOY_PATH must not be the filesystem root'; exit 1 ;;
+          esac
+          remote_stage="$deploy_root/.starflow-release-$GITHUB_RUN_ID"
+
+          install -d -m 0700 "$local_stage/config" "$local_stage/update"
+          cp "$bundle/manifest.json" "$bundle/manifest.sig" "$bundle/manifest.sha256" "$local_stage/config/"
+          cp "$bundle/latest.json" "$bundle/latest.sig" "$bundle/latest.sha256" "$bundle/OTA-SHA256SUMS" "$local_stage/update/"
+          cp "$bundle"/StarFlowTV-*.apk "$local_stage/update/"
+
+          ssh "${ssh_opts[@]}" "$remote" sh -s -- "$deploy_root" "$remote_stage" <<'REMOTE_PREPARE'
+          set -euo pipefail
+          target="$1"
+          stage="$2"
+          case "$target" in
+            /*) ;;
+            *) exit 1 ;;
+          esac
+          mkdir -p -- "$target/config" "$target/update" "$stage/config" "$stage/update"
+          chmod 0755 "$target/config" "$target/update"
+          chmod 0700 "$stage" "$stage/config" "$stage/update"
+          REMOTE_PREPARE
+
+          scp_opts=(
+            -i "$key_file"
+            -P "$STARFLOW_DEPLOY_PORT"
+            -o BatchMode=yes
+            -o IdentitiesOnly=yes
+            -o StrictHostKeyChecking=yes
+            -o UserKnownHostsFile="$known_hosts"
+          )
+          scp "${scp_opts[@]}" -r "$local_stage/config" "$local_stage/update" "$remote:$remote_stage/"
+
+          ssh "${ssh_opts[@]}" "$remote" sh -s -- "$deploy_root" "$remote_stage" <<'REMOTE_PUBLISH'
+          set -euo pipefail
+          target="$1"
+          stage="$2"
+          install -m 0644 "$stage/config/manifest.sig" "$target/config/manifest.sig"
+          install -m 0644 "$stage/config/manifest.sha256" "$target/config/manifest.sha256"
+          install -m 0644 "$stage/config/manifest.json" "$target/config/manifest.json"
+          for file in "$stage/update"/*.apk; do
+            test -f "$file"
+            install -m 0644 "$file" "$target/update/$(basename "$file")"
+          done
+          install -m 0644 "$stage/update/latest.sig" "$target/update/latest.sig"
+          install -m 0644 "$stage/update/latest.sha256" "$target/update/latest.sha256"
+          install -m 0644 "$stage/update/OTA-SHA256SUMS" "$target/update/OTA-SHA256SUMS"
+          install -m 0644 "$stage/update/latest.json" "$target/update/latest.json"
+          rm -rf -- "$stage"
+          REMOTE_PUBLISH
+          echo 'Release bundle published after host-key and SSH verification.'
+
+      - name: Verify public OTA endpoints
+        env:
+          STARFLOW_UPDATE_ROOT: https://update.yuying.beauty/starflow/update
+          STARFLOW_CONFIG_ROOT: https://config.yuying.beauty/starflow/config
+        run: |
+          set -euo pipefail
+          bundle="$GITHUB_WORKSPACE/release-bundle"
+          probe="$(mktemp -d)"
+          trap 'rm -rf "$probe"' EXIT
+          for name in latest.json latest.sig; do
+            curl --fail --retry 5 --retry-delay 2 --silent --show-error --location \
+              "$STARFLOW_UPDATE_ROOT/$name" --output "$probe/$name"
+            cmp "$bundle/$name" "$probe/$name"
+          done
+          for name in manifest.json manifest.sig; do
+            curl --fail --retry 5 --retry-delay 2 --silent --show-error --location \
+              "$STARFLOW_CONFIG_ROOT/$name" --output "$probe/$name"
+            cmp "$bundle/$name" "$probe/$name"
+          done
+          while IFS= read -r apk_url; do
+            test -n "$apk_url"
+            curl --fail --retry 5 --retry-delay 2 --silent --show-error --location \
+              --head "$apk_url" >/dev/null
+          done < <(python3 - "$bundle/latest.json" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          data = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          for package in data["packages"]:
+              print(package["downloadUrl"])
+          PY
+          )
+          python3 - "$probe/latest.json" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          data = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          print(f"public_ota_version={data['versionName']} ({data['versionCode']})")
+          print(f"public_ota_signing_status={data['signingStatus']}")
+          print(f"public_ota_key_id={data['keyId']}")
+          PY

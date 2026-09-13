@@ -67,8 +67,8 @@ jobs:
           test -f "app/build/outputs/apk/java/release/StarFlowTV-${version_name}-java-release.apk"
           test -f "app/build/outputs/apk/java32/release/StarFlowTV-${version_name}-java32-release.apk"
           test -f "app/build/outputs/apk/java64/release/StarFlowTV-${version_name}-java64-release.apk"
-          unzip -l "app/build/outputs/apk/java32/release/StarFlowTV-${version_name}-java32-release.apk" \
-            | grep -F 'assets/official_live_fullscreen.js'
+          unzip -Z1 "app/build/outputs/apk/java32/release/StarFlowTV-${version_name}-java32-release.apk" \
+            | grep -Fx 'assets/official_live_fullscreen.js'
 
       - name: Record APK checksums and signing state
         run: |

@@ -409,6 +409,8 @@ public final class OfficialLiveWebViewController {
             if (view != webView) return true;
             boolean notifyListener = !released && requestTracker.isActive();
             requestTracker.stop();
+            hideCustomView();
+            webFullscreenActive = false;
             webView = null;
             hideSurface();
             destroyCrashedWebView(view);

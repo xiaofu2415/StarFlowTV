@@ -12,8 +12,9 @@
 
   var observer = null;
   var retryTimer = null;
-  var nativeFullscreenRequested = false;
+  var nativeFullscreenAttempted = false;
   var boundVideo = null;
+  var fullscreenActive = false;
 
   function findPlayer() {
     return document.getElementById('player')
@@ -28,43 +29,47 @@
     style.id = STYLE_ID;
     style.textContent = [
       'html.' + ROOT_CLASS + ',html.' + ROOT_CLASS + ' body{margin:0!important;padding:0!important;width:100%!important;height:100%!important;overflow:hidden!important;background:#000!important;}',
-      'html.' + ROOT_CLASS + ' #player{position:fixed!important;inset:0!important;left:0!important;top:0!important;width:100vw!important;height:100vh!important;max-width:none!important;margin:0!important;padding:0!important;z-index:2147483646!important;background:#000!important;}',
-      'html.' + ROOT_CLASS + ' #player,html.' + ROOT_CLASS + ' #player *{box-sizing:border-box!important;max-width:none!important;}',
-      'html.' + ROOT_CLASS + ' #player>div,html.' + ROOT_CLASS + ' #html5Player_live,html.' + ROOT_CLASS + ' #html5Player,html.' + ROOT_CLASS + ' #html5VideoBack,html.' + ROOT_CLASS + ' #html5ControlDiv,html.' + ROOT_CLASS + ' #h5canvas_player{width:100%!important;height:100%!important;margin:0!important;}',
-      'html.' + ROOT_CLASS + ' #player video,html.' + ROOT_CLASS + ' #player canvas,html.' + ROOT_CLASS + ' #player object,html.' + ROOT_CLASS + ' #player embed{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;object-fit:contain!important;background:#000!important;}'
+      'html.' + ROOT_CLASS + ' [data-starflow-fullscreen="true"]{position:fixed!important;inset:0!important;left:0!important;top:0!important;width:100vw!important;height:100vh!important;max-width:none!important;margin:0!important;padding:0!important;z-index:2147483646!important;background:#000!important;}',
+      'html.' + ROOT_CLASS + ' [data-starflow-fullscreen="true"],html.' + ROOT_CLASS + ' [data-starflow-fullscreen="true"] *{box-sizing:border-box!important;max-width:none!important;}',
+      'html.' + ROOT_CLASS + ' [data-starflow-fullscreen="true"]>div,html.' + ROOT_CLASS + ' [data-starflow-fullscreen="true"] #html5Player_live,html.' + ROOT_CLASS + ' [data-starflow-fullscreen="true"] #html5Player,html.' + ROOT_CLASS + ' [data-starflow-fullscreen="true"] #html5VideoBack,html.' + ROOT_CLASS + ' [data-starflow-fullscreen="true"] #html5ControlDiv,html.' + ROOT_CLASS + ' [data-starflow-fullscreen="true"] #h5canvas_player{width:100%!important;height:100%!important;margin:0!important;}',
+      'html.' + ROOT_CLASS + ' [data-starflow-fullscreen="true"] video,html.' + ROOT_CLASS + ' [data-starflow-fullscreen="true"] canvas,html.' + ROOT_CLASS + ' [data-starflow-fullscreen="true"] object,html.' + ROOT_CLASS + ' [data-starflow-fullscreen="true"] embed{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;object-fit:contain!important;background:#000!important;}'
     ].join('');
     document.head.appendChild(style);
     return style;
   }
 
   function requestNativeFullscreen(video) {
-    if (!video || nativeFullscreenRequested
+    if (!fullscreenActive || !video || video !== boundVideo || nativeFullscreenAttempted
         || document.fullscreenElement || document.webkitFullscreenElement) return;
     var request = video.requestFullscreen || video.webkitRequestFullscreen;
     if (typeof request !== 'function') return;
-    nativeFullscreenRequested = true;
+    nativeFullscreenAttempted = true;
     try {
       var result = request.call(video);
       if (result && typeof result.catch === 'function') {
-        result.catch(function () {
-          nativeFullscreenRequested = false;
-        });
+        result.catch(function () {});
       }
     } catch (ignored) {
-      nativeFullscreenRequested = false;
+      // CSS fullscreen remains active when native fullscreen is unavailable.
     }
   }
 
   function promotePlayer() {
+    if (!fullscreenActive) return false;
     ensureStyle();
     document.documentElement.classList.add(ROOT_CLASS);
     var player = findPlayer();
     if (!player) return false;
+    if (retryTimer) {
+      clearInterval(retryTimer);
+      retryTimer = null;
+    }
     player.setAttribute('data-starflow-fullscreen', 'true');
 
     var video = player.querySelector('video');
     if (video && video !== boundVideo) {
       boundVideo = video;
+      nativeFullscreenAttempted = false;
       video.removeAttribute('playsinline');
       video.removeAttribute('webkit-playsinline');
       video.addEventListener('playing', function () {
@@ -79,8 +84,13 @@
   }
 
   function enter() {
+    if (!fullscreenActive) {
+      fullscreenActive = true;
+      nativeFullscreenAttempted = false;
+      boundVideo = null;
+    }
     ensureStyle();
-    promotePlayer();
+    var promoted = promotePlayer();
     if (!observer && typeof MutationObserver === 'function') {
       observer = new MutationObserver(promotePlayer);
       observer.observe(document.body || document.documentElement, {
@@ -88,10 +98,11 @@
         subtree: true
       });
     }
-    if (!retryTimer) retryTimer = setInterval(promotePlayer, 500);
+    if (!promoted && !retryTimer) retryTimer = setInterval(promotePlayer, 500);
   }
 
   function exit() {
+    fullscreenActive = false;
     document.documentElement.classList.remove(ROOT_CLASS);
     var player = findPlayer();
     if (player) player.removeAttribute('data-starflow-fullscreen');
@@ -103,7 +114,7 @@
       clearInterval(retryTimer);
       retryTimer = null;
     }
-    nativeFullscreenRequested = false;
+    nativeFullscreenAttempted = false;
     boundVideo = null;
     var exitFullscreen = document.exitFullscreen || document.webkitExitFullscreen;
     if ((document.fullscreenElement || document.webkitFullscreenElement)

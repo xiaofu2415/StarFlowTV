@@ -144,6 +144,8 @@ jobs:
             "$aapt" dump badging "$target" | grep -F "package: name='tv.starflow.player'"
             "$apksigner" verify --print-certs "$target" | tee "$out/$abi-certificates.txt"
           done
+          unzip -Z1 "$out/StarFlowTV-$version_name-armeabi-v7a.apk" \
+            | grep -Fx 'assets/official_live_fullscreen.js'
           (cd "$out" && sha256sum StarFlowTV-*.apk > SHA256SUMS)
 
       - name: Generate OTA manifest and Ed25519 signature

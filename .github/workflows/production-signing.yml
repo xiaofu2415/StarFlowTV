@@ -1,9 +1,6 @@
 name: Production signing (manual)
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       release_ref:
@@ -39,7 +36,6 @@ jobs:
           FETCH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          RELEASE_REF="${RELEASE_REF:-main}"
           case "$RELEASE_REF" in
             main|refs/heads/main)
               NORMALIZED_REF='refs/heads/main'

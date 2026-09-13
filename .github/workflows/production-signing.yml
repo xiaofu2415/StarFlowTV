@@ -81,6 +81,9 @@ jobs:
       - name: Configure Android SDK path
         run: printf 'sdk.dir=%s\n' "$ANDROID_SDK_ROOT" > local.properties
 
+      - name: Test official live fullscreen script
+        run: node --test app/src/test/js/official-live-fullscreen.test.js
+
       - name: Require signing secrets
         env:
           KEYSTORE_B64: ${{ secrets.STARFLOW_ANDROID_KEYSTORE_B64 }}

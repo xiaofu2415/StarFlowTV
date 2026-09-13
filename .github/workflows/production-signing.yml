@@ -265,7 +265,7 @@ jobs:
               "versionName": version_name,
               "versionCode": version_code,
               "channel": "stable",
-              "releaseNotes": f"StarFlowTV {version_name}：新增官方直播类目和混合播放。",
+              "releaseNotes": f"StarFlowTV {version_name}：新增设置页手动检查更新、直播页定时检查和更新失败提示。",
               "publishedAt": published_at,
               "minimumSdk": 23,
               "minSupportedVersionCode": 1,

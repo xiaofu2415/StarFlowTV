@@ -13,8 +13,8 @@ android {
     defaultConfig {
         applicationId 'tv.starflow.player'
         targetSdkVersion 28
-        versionCode 10
-        versionName '1.4.4'
+        versionCode 11
+        versionName '1.4.5'
         buildConfigField 'String', 'STARFLOW_LIVE_URL', '"' + starflowLiveUrl + '"'
         buildConfigField 'String', 'STARFLOW_CONFIG_MANIFEST_URL', '"' + starflowConfigManifestUrl + '"'
         buildConfigField 'String', 'STARFLOW_UPDATE_URL', '"' + starflowUpdateUrl + '"'

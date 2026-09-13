@@ -28,10 +28,16 @@ import com.github.tvbox.osc.official.LiveForegroundGate;
 import com.github.tvbox.osc.official.OfficialLiveUrlPolicy;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
 public final class OfficialLiveWebViewController {
     private static final String INTERNAL_BLANK_URL = "about:blank";
+    private static final String FULLSCREEN_ASSET = "official_live_fullscreen.js";
+    private static final String EXIT_WEB_FULLSCREEN_SCRIPT =
+            "window.__starflowOfficialFullscreen&&window.__starflowOfficialFullscreen.exit();";
 
     public interface Listener {
         void onLoading(String url);
@@ -45,6 +51,7 @@ public final class OfficialLiveWebViewController {
     private final ViewGroup container;
     private final View loadingView;
     private final Listener listener;
+    private final String enterWebFullscreenScript;
     private final OfficialLiveRequestTracker requestTracker = new OfficialLiveRequestTracker();
     private final LiveForegroundGate foregroundGate = new LiveForegroundGate();
     // Interception callbacks run off the UI thread and must see instance replacement.
@@ -52,6 +59,7 @@ public final class OfficialLiveWebViewController {
     private View customView;
     private WebChromeClient.CustomViewCallback customViewCallback;
     private int normalSystemUiVisibility;
+    private boolean webFullscreenActive;
     private boolean released;
 
     public OfficialLiveWebViewController(@NonNull Context context,
@@ -61,6 +69,7 @@ public final class OfficialLiveWebViewController {
         this.container = container;
         this.listener = listener;
         this.loadingView = container.findViewById(R.id.officialLiveWebLoading);
+        this.enterWebFullscreenScript = readAsset(context, FULLSCREEN_ASSET);
         hideSurface();
     }
 
@@ -82,6 +91,8 @@ public final class OfficialLiveWebViewController {
         // WebView callbacks have no reliable per-load token, even for identical URLs.
         // Invalidate and destroy A before creating B so stale callbacks cannot act on B.
         requestTracker.stop();
+        hideCustomView();
+        webFullscreenActive = false;
         WebView oldView = webView;
         webView = null;
         destroyWebView(oldView);
@@ -112,6 +123,7 @@ public final class OfficialLiveWebViewController {
         foregroundGate.clearPending();
         boolean hadActiveRequest = requestTracker.stop();
         hideCustomView();
+        webFullscreenActive = false;
         if (webView != null) {
             webView.stopLoading();
             if (hadActiveRequest) webView.loadUrl(INTERNAL_BLANK_URL);
@@ -127,6 +139,7 @@ public final class OfficialLiveWebViewController {
         foregroundGate.onDestroy();
         requestTracker.stop();
         hideCustomView();
+        webFullscreenActive = false;
         hideSurface();
 
         WebView view = webView;
@@ -173,10 +186,27 @@ public final class OfficialLiveWebViewController {
         return view;
     }
 
-    /** Returns true when the Back key only needs to leave HTML5 video fullscreen. */
+    /** Returns true when the Back key only needs to leave official video fullscreen. */
     public boolean handleBackPressed() {
-        if (customView == null) return false;
-        hideCustomView();
+        if (customView != null) {
+            hideCustomView();
+            exitWebFullscreen();
+            return true;
+        }
+        return exitWebFullscreen();
+    }
+
+    private void enterWebFullscreen(WebView view) {
+        if (enterWebFullscreenScript.isEmpty() || view != webView) return;
+        webFullscreenActive = true;
+        view.evaluateJavascript(enterWebFullscreenScript, null);
+    }
+
+    private boolean exitWebFullscreen() {
+        if (!webFullscreenActive) return false;
+        webFullscreenActive = false;
+        WebView view = webView;
+        if (view != null) view.evaluateJavascript(EXIT_WEB_FULLSCREEN_SCRIPT, null);
         return true;
     }
 
@@ -271,6 +301,18 @@ public final class OfficialLiveWebViewController {
                 new ByteArrayInputStream(new byte[0]));
     }
 
+    private static String readAsset(Context context, String name) {
+        try (InputStream input = context.getAssets().open(name);
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[4096];
+            int count;
+            while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+            return new String(output.toByteArray(), StandardCharsets.UTF_8);
+        } catch (IOException ignored) {
+            return "";
+        }
+    }
+
     private void destroyWebView(@Nullable WebView view) {
         if (view == null) return;
         view.stopLoading();
@@ -335,6 +377,7 @@ public final class OfficialLiveWebViewController {
             if (view != webView) return;
             if (!requestTracker.matches(url)) return;
             setLoadingVisible(false);
+            enterWebFullscreen(view);
             listener.onReady();
         }
 
@@ -366,6 +409,8 @@ public final class OfficialLiveWebViewController {
             if (view != webView) return true;
             boolean notifyListener = !released && requestTracker.isActive();
             requestTracker.stop();
+            hideCustomView();
+            webFullscreenActive = false;
             webView = null;
             hideSurface();
             destroyCrashedWebView(view);

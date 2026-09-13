@@ -84,6 +84,11 @@ jobs:
       - name: Test official live fullscreen script
         run: node --test app/src/test/js/official-live-fullscreen.test.js
 
+      - name: Run OTA update unit tests
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:testJavaDebugUnitTest --stacktrace
+
       - name: Require signing secrets
         env:
           KEYSTORE_B64: ${{ secrets.STARFLOW_ANDROID_KEYSTORE_B64 }}

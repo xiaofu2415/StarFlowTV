@@ -37,6 +37,7 @@ import com.github.tvbox.osc.ui.dialog.DanmuApiDialog;
 import com.github.tvbox.osc.ui.dialog.SearchRemoteTvDialog;
 import com.github.tvbox.osc.ui.dialog.SelectDialog;
 import com.github.tvbox.osc.ui.dialog.XWalkInitDialog;
+import com.github.tvbox.osc.update.StarFlowUpdateManager;
 import com.github.tvbox.osc.util.DanmuHelper;
 import com.github.tvbox.osc.util.FastClickCheckUtil;
 import com.github.tvbox.osc.util.FileUtils;
@@ -193,6 +194,13 @@ public class ModelSettingFragment extends BaseLazyFragment {
                     });
                     dialog.show();
                 }
+            }
+        });
+        findViewById(R.id.llCheckUpdate).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                FastClickCheckUtil.check(v);
+                StarFlowUpdateManager.checkNow(mActivity);
             }
         });
         findViewById(R.id.llBackup).setOnClickListener(new View.OnClickListener() {

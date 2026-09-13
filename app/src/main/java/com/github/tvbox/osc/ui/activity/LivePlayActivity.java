@@ -169,6 +169,17 @@ public class LivePlayActivity extends BaseActivity {
 
     public static  int currentChannelGroupIndex = 0;
     private Handler mHandler = new Handler();
+    private static final long UPDATE_CHECK_INTERVAL = 30L * 60L * 1000L;
+    private final Runnable mUpdateCheckRun = new Runnable() {
+        @Override
+        public void run() {
+            if (isFinishing() || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1 && isDestroyed())) {
+                return;
+            }
+            StarFlowUpdateManager.check(LivePlayActivity.this);
+            mHandler.postDelayed(this, UPDATE_CHECK_INTERVAL);
+        }
+    };
     private int resolutionInfoRetryCount = 0;
     private boolean resolutionInfoPending = false;
     private boolean exitingLivePlay = false;
@@ -477,7 +488,7 @@ public class LivePlayActivity extends BaseActivity {
         initLiveChannelList();
         initLiveSettingGroupList();
         Hawk.put(HawkConfig.PLAYER_IS_LIVE,true);
-        mHandler.postDelayed(() -> StarFlowUpdateManager.check(this), 5000L);
+        mHandler.postDelayed(mUpdateCheckRun, 5000L);
     }
     //获取EPG并存储 // 百川epg  DIYP epg   51zmt epg ------- 自建EPG格式输出格式请参考 51zmt
     private List<Epginfo> epgdata = new ArrayList<>();
@@ -1455,6 +1466,7 @@ public class LivePlayActivity extends BaseActivity {
         mHandler.removeCallbacks(mLoadEpgRun);
         mHandler.removeCallbacks(mUpdateResolutionInfoRun);
         mHandler.removeCallbacks(mHideResolutionInfoRun);
+        mHandler.removeCallbacks(mUpdateCheckRun);
     }
 
     private void showChannelList() {

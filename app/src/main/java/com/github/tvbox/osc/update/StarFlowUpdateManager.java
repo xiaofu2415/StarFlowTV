@@ -6,6 +6,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.widget.Toast;
 
 import androidx.core.content.FileProvider;
 
@@ -42,17 +43,47 @@ public final class StarFlowUpdateManager {
     }
 
     public static void check(Activity activity) {
+        check(activity, null);
+    }
+
+    public static void checkNow(Activity activity) {
+        Toast.makeText(activity, "正在检查更新…", Toast.LENGTH_SHORT).show();
+        check(activity, result -> {
+            if (result.status == UpdateCheckResult.Status.UPDATE_AVAILABLE) return;
+            Toast.makeText(activity, UpdateCheckResult.message(result.status, result.versionName),
+                    Toast.LENGTH_SHORT).show();
+        });
+    }
+
+    private static void check(Activity activity, CheckListener listener) {
         final String manifestUrl = BuildConfig.STARFLOW_UPDATE_URL;
-        if (!DistributionEndpoints.isSafeHttps(manifestUrl)
-                || !CHECK_STARTED.compareAndSet(false, true)) return;
+        if (!DistributionEndpoints.isSafeHttps(manifestUrl)) {
+            complete(activity, listener, UpdateCheckResult.Status.INVALID_MANIFEST, null);
+            return;
+        }
+        if (!CHECK_STARTED.compareAndSet(false, true)) {
+            complete(activity, listener, UpdateCheckResult.Status.BUSY, null);
+            return;
+        }
         fetch(manifestUrl, MAX_MANIFEST_BYTES, manifestBytes -> {
-            if (manifestBytes == null) { CHECK_STARTED.set(false); return; }
+            if (manifestBytes == null) {
+                CHECK_STARTED.set(false);
+                complete(activity, listener, UpdateCheckResult.Status.NETWORK_ERROR, null);
+                return;
+            }
             fetch(sibling(manifestUrl, "latest.sig"), 2048, signatureBytes -> {
+                if (signatureBytes == null) {
+                    CHECK_STARTED.set(false);
+                    complete(activity, listener, UpdateCheckResult.Status.SIGNATURE_INVALID, null);
+                    return;
+                }
                 String signature = signatureBytes == null ? "" :
                         new String(signatureBytes, StandardCharsets.US_ASCII).trim();
                 if (!Ed25519Verifier.verify(manifestBytes, signature,
                         BuildConfig.STARFLOW_SIGNING_PUBLIC_KEY_B64)) {
-                    CHECK_STARTED.set(false); return;
+                    CHECK_STARTED.set(false);
+                    complete(activity, listener, UpdateCheckResult.Status.SIGNATURE_INVALID, null);
+                    return;
                 }
                 try {
                     UpdateManifest manifest = UpdateManifest.parse(
@@ -62,17 +93,47 @@ public final class StarFlowUpdateManager {
                     UpdateDecision decision = UpdatePolicy.evaluate(
                             DefaultConfig.getAppVersionCode(activity), Build.VERSION.SDK_INT,
                             channel, BuildConfig.STARFLOW_SIGNING_KEY_ID, manifestUrl, manifest);
-                    UpdateManifest.Apk apk = AbiSelector.select(manifest, Build.SUPPORTED_ABIS);
-                    if (decision == UpdateDecision.AVAILABLE && apk != null) {
-                        activity.runOnUiThread(() -> prompt(activity, manifest, apk));
+                    if (decision == UpdateDecision.NO_UPDATE) {
+                        complete(activity, listener, UpdateCheckResult.Status.NO_UPDATE,
+                                manifest.versionName);
+                    } else if (decision == UpdateDecision.UNSUPPORTED) {
+                        complete(activity, listener, UpdateCheckResult.Status.UNSUPPORTED,
+                                manifest.versionName);
+                    } else if (decision == UpdateDecision.INVALID) {
+                        complete(activity, listener, UpdateCheckResult.Status.INVALID_MANIFEST,
+                                manifest.versionName);
+                    } else if (decision == UpdateDecision.AVAILABLE) {
+                        UpdateManifest.Apk apk = AbiSelector.select(manifest, Build.SUPPORTED_ABIS);
+                        if (apk == null) {
+                            complete(activity, listener, UpdateCheckResult.Status.ABI_UNAVAILABLE,
+                                    manifest.versionName);
+                        } else {
+                            complete(activity, listener, UpdateCheckResult.Status.UPDATE_AVAILABLE,
+                                    manifest.versionName);
+                            activity.runOnUiThread(() -> prompt(activity, manifest, apk));
+                        }
+                    } else {
+                        complete(activity, listener, UpdateCheckResult.Status.INVALID_MANIFEST,
+                                manifest.versionName);
                     }
                 } catch (Exception error) {
                     LOG.e("Invalid StarFlow update manifest: " + error.getClass().getSimpleName());
+                    complete(activity, listener, UpdateCheckResult.Status.INVALID_MANIFEST, null);
                 } finally {
                     CHECK_STARTED.set(false);
                 }
             });
         });
+    }
+
+    private static void complete(Activity activity, CheckListener listener,
+                                 UpdateCheckResult.Status status, String versionName) {
+        if (listener == null) return;
+        activity.runOnUiThread(() -> listener.onResult(new UpdateCheckResult(status, versionName)));
+    }
+
+    private interface CheckListener {
+        void onResult(UpdateCheckResult result);
     }
 
     private static void prompt(Activity activity, UpdateManifest manifest, UpdateManifest.Apk apk) {
@@ -98,6 +159,7 @@ public final class StarFlowUpdateManager {
         OkHttp.client().newCall(request).enqueue(new Callback() {
             @Override public void onFailure(Call call, java.io.IOException error) {
                 LOG.e("StarFlow APK download failed: " + error.getClass().getSimpleName());
+                showMessage(activity, "更新下载失败，请检查网络连接");
             }
 
             @Override public void onResponse(Call call, Response response) {
@@ -107,7 +169,10 @@ public final class StarFlowUpdateManager {
                 try (ResponseBody body = response.body()) {
                     if (!response.isSuccessful() || body == null
                             || body.contentLength() <= 0 || body.contentLength() > MAX_APK_BYTES
-                            || body.contentLength() != apk.size) return;
+                            || body.contentLength() != apk.size) {
+                        showMessage(activity, "更新文件大小校验失败");
+                        return;
+                    }
                     MessageDigest digest = MessageDigest.getInstance("SHA-256");
                     long copied = 0;
                     try (InputStream input = body.byteStream();
@@ -124,15 +189,21 @@ public final class StarFlowUpdateManager {
                     if (copied != apk.size || !hex(digest.digest()).equalsIgnoreCase(apk.sha256)
                             || !verifyArchive(activity, target, apk.certificateSha256)) {
                         target.delete();
+                        showMessage(activity, "更新文件校验失败，已取消安装");
                         return;
                     }
                     activity.runOnUiThread(() -> install(activity, target));
                 } catch (Exception error) {
                     target.delete();
                     LOG.e("StarFlow APK verification failed: " + error.getClass().getSimpleName());
+                    showMessage(activity, "更新下载失败，请稍后重试");
                 }
             }
         });
+    }
+
+    private static void showMessage(Activity activity, String message) {
+        activity.runOnUiThread(() -> Toast.makeText(activity, message, Toast.LENGTH_SHORT).show());
     }
 
     private static boolean verifyArchive(Activity activity, File apk, String expectedCertificate) {

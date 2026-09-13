@@ -8,9 +8,9 @@ import static org.junit.Assert.assertEquals;
 
 public final class SigningConfigurationTest {
     @Test public void embedsRotatedProductionSigningConfiguration() {
-        assertEquals("kBZZK4w6OTEWuAQVUrXPK7AVo4kgktUZEV0wBVvrDFM=",
+        assertEquals("/HYjh73wFcp2EYVi6VekEtQ5mWASjCCRSx3rWo/WkyU=",
                 BuildConfig.STARFLOW_SIGNING_PUBLIC_KEY_B64);
-        assertEquals("starflow-production-2026-09-r1",
+        assertEquals("starflow-production-2026-09-r2",
                 BuildConfig.STARFLOW_SIGNING_KEY_ID);
     }
 }

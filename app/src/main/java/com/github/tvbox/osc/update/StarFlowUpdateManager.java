@@ -74,7 +74,7 @@ public final class StarFlowUpdateManager {
             fetch(sibling(manifestUrl, "latest.sig"), 2048, signatureBytes -> {
                 if (signatureBytes == null) {
                     CHECK_STARTED.set(false);
-                    complete(activity, listener, UpdateCheckResult.Status.SIGNATURE_INVALID, null);
+                    complete(activity, listener, UpdateCheckResult.Status.NETWORK_ERROR, null);
                     return;
                 }
                 String signature = signatureBytes == null ? "" :
@@ -223,31 +223,36 @@ public final class StarFlowUpdateManager {
     }
 
     private static void fetch(String url, int maximum, BytesCallback callback) {
-        OkHttp.client().newCall(new Request.Builder().url(url).get().build()).enqueue(new Callback() {
-            @Override public void onFailure(Call call, java.io.IOException error) {
-                callback.complete(null);
-            }
-
-            @Override public void onResponse(Call call, Response response) {
-                try (ResponseBody body = response.body()) {
-                    if (!response.isSuccessful() || body == null || body.contentLength() > maximum) {
-                        callback.complete(null); return;
-                    }
-                    try (InputStream input = body.byteStream();
-                         java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream()) {
-                        byte[] buffer = new byte[8192];
-                        int read;
-                        while ((read = input.read(buffer)) >= 0) {
-                            if (output.size() + read > maximum) { callback.complete(null); return; }
-                            output.write(buffer, 0, read);
-                        }
-                        callback.complete(output.toByteArray());
-                    }
-                } catch (Exception error) {
+        try {
+            OkHttp.client().newCall(new Request.Builder().url(url).get().build()).enqueue(new Callback() {
+                @Override public void onFailure(Call call, java.io.IOException error) {
                     callback.complete(null);
                 }
-            }
-        });
+
+                @Override public void onResponse(Call call, Response response) {
+                    try (ResponseBody body = response.body()) {
+                        if (!response.isSuccessful() || body == null || body.contentLength() > maximum) {
+                            callback.complete(null); return;
+                        }
+                        try (InputStream input = body.byteStream();
+                             java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream()) {
+                            byte[] buffer = new byte[8192];
+                            int read;
+                            while ((read = input.read(buffer)) >= 0) {
+                                if (output.size() + read > maximum) { callback.complete(null); return; }
+                                output.write(buffer, 0, read);
+                            }
+                            callback.complete(output.toByteArray());
+                        }
+                    } catch (Exception error) {
+                        callback.complete(null);
+                    }
+                }
+            });
+        } catch (Exception error) {
+            LOG.e("StarFlow update request failed: " + error.getClass().getSimpleName());
+            callback.complete(null);
+        }
     }
 
     private interface BytesCallback { void complete(byte[] value); }

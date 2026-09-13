@@ -19,4 +19,9 @@ public final class UpdateCheckResultTest {
         assertEquals("更新签名校验失败，请稍后重试", UpdateCheckResult.message(
                 UpdateCheckResult.Status.SIGNATURE_INVALID, null));
     }
+
+    @Test public void describesNetworkFailure() {
+        assertEquals("更新检查失败，请检查网络连接", UpdateCheckResult.message(
+                UpdateCheckResult.Status.NETWORK_ERROR, null));
+    }
 }

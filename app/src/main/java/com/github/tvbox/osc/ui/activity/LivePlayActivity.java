@@ -169,6 +169,7 @@ public class LivePlayActivity extends BaseActivity {
 
     public static  int currentChannelGroupIndex = 0;
     private Handler mHandler = new Handler();
+    private static final long UPDATE_CHECK_INITIAL_DELAY = 5000L;
     private static final long UPDATE_CHECK_INTERVAL = 30L * 60L * 1000L;
     private final Runnable mUpdateCheckRun = new Runnable() {
         @Override
@@ -488,7 +489,11 @@ public class LivePlayActivity extends BaseActivity {
         initLiveChannelList();
         initLiveSettingGroupList();
         Hawk.put(HawkConfig.PLAYER_IS_LIVE,true);
-        mHandler.postDelayed(mUpdateCheckRun, 5000L);
+    }
+
+    private void scheduleUpdateCheck() {
+        mHandler.removeCallbacks(mUpdateCheckRun);
+        mHandler.postDelayed(mUpdateCheckRun, UPDATE_CHECK_INITIAL_DELAY);
     }
     //获取EPG并存储 // 百川epg  DIYP epg   51zmt epg ------- 自建EPG格式输出格式请参考 51zmt
     private List<Epginfo> epgdata = new ArrayList<>();
@@ -1422,6 +1427,7 @@ public class LivePlayActivity extends BaseActivity {
     protected void onResume() {
         super.onResume();
         exitingLivePlay = false;
+        scheduleUpdateCheck();
         if (officialLiveController != null) officialLiveController.onResume();
         liveForegroundGate.onResume();
         int sourceIndex = currentLiveChannelItem == null ? -1 : currentLiveChannelItem.getSourceIndex();
@@ -1437,6 +1443,7 @@ public class LivePlayActivity extends BaseActivity {
 
     @Override
     protected void onPause() {
+        mHandler.removeCallbacks(mUpdateCheckRun);
         liveForegroundGate.onPause();
         officialErrorGate.onPause();
         super.onPause();

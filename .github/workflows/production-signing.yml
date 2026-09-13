@@ -130,7 +130,9 @@ jobs:
           out="$GITHUB_WORKSPACE/signed-apks"
           install -d -m 0700 "$out"
           version_name="$(basename "$(find app/build/outputs/apk/java32/release -maxdepth 1 -type f -name 'StarFlowTV-*-java32-release.apk' | sort | tail -1)" | sed -E 's/^StarFlowTV-(.*)-java32-release\.apk$/\1/')"
+          version_code="$(sed -n "s/.*versionCode \([0-9][0-9]*\).*/\1/p" app/build.gradle | head -1)"
           test -n "$version_name"
+          test -n "$version_code"
           declare -A inputs=(
             [armeabi-v7a]="app/build/outputs/apk/java32/release/StarFlowTV-$version_name-java32-release.apk"
             [arm64-v8a]="app/build/outputs/apk/java64/release/StarFlowTV-$version_name-java64-release.apk"
@@ -146,7 +148,7 @@ jobs:
               --ks-pass env:STARFLOW_ANDROID_KEYSTORE_PASSWORD --key-pass env:STARFLOW_ANDROID_KEY_PASSWORD \
               --out "$target" "$aligned"
             "$apksigner" verify --verbose "$target"
-            "$aapt" dump badging "$target" | grep -F "package: name='tv.starflow.player'"
+            "$aapt" dump badging "$target" | grep -F "package: name='tv.starflow.player' versionCode='$version_code' versionName='$version_name'"
             "$apksigner" verify --print-certs "$target" | tee "$out/$abi-certificates.txt"
           done
           unzip -Z1 "$out/StarFlowTV-$version_name-armeabi-v7a.apk" \

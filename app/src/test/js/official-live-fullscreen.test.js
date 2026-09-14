@@ -264,3 +264,16 @@ test('auto quality leaves the official player adaptive choice untouched', () => 
 
   assert.deepEqual(harness.qualityClicks, []);
 });
+
+
+test('reports actual video resolution from the official player', () => {
+  const source = fs.readFileSync(scriptPath, 'utf8');
+  const harness = createHarness({ videoWidth: 1920, videoHeight: 1080 });
+
+  vm.runInNewContext(source, harness.context);
+
+  assert.equal(
+    harness.context.window.__starflowOfficialFullscreen.getResolution(),
+    '1920×1080'
+  );
+});

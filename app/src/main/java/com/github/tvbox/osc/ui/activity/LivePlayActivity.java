@@ -2886,40 +2886,40 @@ public class LivePlayActivity extends BaseActivity {
         });
     }
 
-private void ensureOfficialQualitySettingGroup() {
-    if (liveSettingGroupList.size() > OFFICIAL_QUALITY_GROUP_INDEX) return;
-    if (liveSettingGroupList.size() != OFFICIAL_QUALITY_GROUP_INDEX) return;
-    LiveSettingGroup group = new LiveSettingGroup();
-    group.setGroupIndex(OFFICIAL_QUALITY_GROUP_INDEX);
-    group.setGroupName("官方源画质");
-    ArrayList<LiveSettingItem> items = new ArrayList<>();
-    for (int i = 0; i < OFFICIAL_QUALITY_LABELS.length; i++) {
-        LiveSettingItem item = new LiveSettingItem();
-        item.setItemIndex(i);
-        item.setItemName(OFFICIAL_QUALITY_LABELS[i]);
-        items.add(item);
-    }
-    group.setLiveSettingItems(items);
-    liveSettingGroupList.add(group);
-}
-
-private int getOfficialQualityIndex(String value) {
-    if (value != null) {
-        for (int i = 0; i < OFFICIAL_QUALITY_VALUES.length; i++) {
-            if (OFFICIAL_QUALITY_VALUES[i].equals(value)) return i;
+    private void ensureOfficialQualitySettingGroup() {
+        if (liveSettingGroupList.size() > OFFICIAL_QUALITY_GROUP_INDEX) return;
+        if (liveSettingGroupList.size() != OFFICIAL_QUALITY_GROUP_INDEX) return;
+        LiveSettingGroup group = new LiveSettingGroup();
+        group.setGroupIndex(OFFICIAL_QUALITY_GROUP_INDEX);
+        group.setGroupName("官方源画质");
+        ArrayList<LiveSettingItem> items = new ArrayList<>();
+        for (int i = 0; i < OFFICIAL_QUALITY_LABELS.length; i++) {
+            LiveSettingItem item = new LiveSettingItem();
+            item.setItemIndex(i);
+            item.setItemName(OFFICIAL_QUALITY_LABELS[i]);
+            items.add(item);
         }
+        group.setLiveSettingItems(items);
+        liveSettingGroupList.add(group);
     }
-    return 0;
-}
 
-private void applyOfficialQualitySelection(int position) {
-    if (position < 0 || position >= OFFICIAL_QUALITY_VALUES.length) return;
-    String value = OFFICIAL_QUALITY_VALUES[position];
-    Hawk.put(HawkConfig.LIVE_OFFICIAL_QUALITY, value);
-    liveSettingItemAdapter.selectItem(position, true, true);
-    if (officialLiveController != null) officialLiveController.setQualityPreference(value);
-    Toast.makeText(this, "官方源画质：" + OFFICIAL_QUALITY_LABELS[position], Toast.LENGTH_SHORT).show();
-}
+    private int getOfficialQualityIndex(String value) {
+        if (value != null) {
+            for (int i = 0; i < OFFICIAL_QUALITY_VALUES.length; i++) {
+                if (OFFICIAL_QUALITY_VALUES[i].equals(value)) return i;
+            }
+        }
+        return 0;
+    }
+
+    private void applyOfficialQualitySelection(int position) {
+        if (position < 0 || position >= OFFICIAL_QUALITY_VALUES.length) return;
+        String value = OFFICIAL_QUALITY_VALUES[position];
+        Hawk.put(HawkConfig.LIVE_OFFICIAL_QUALITY, value);
+        liveSettingItemAdapter.selectItem(position, true, true);
+        if (officialLiveController != null) officialLiveController.setQualityPreference(value);
+        Toast.makeText(this, "官方源画质：" + OFFICIAL_QUALITY_LABELS[position], Toast.LENGTH_SHORT).show();
+    }
 
     private void clickSettingItem(int position) {
         int settingGroupIndex = liveSettingGroupAdapter.getSelectedGroupIndex();

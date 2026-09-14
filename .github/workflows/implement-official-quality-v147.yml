@@ -193,7 +193,7 @@ jobs:
         run: |
           git config user.name 'starflow-quality-bot'
           git config user.email 'actions@users.noreply.github.com'
-          git add app/src/main/java/com/github/tvbox/osc/ui/activity/LivePlayActivity.java app/build.gradle .github/workflows/production-signing.yml README.md
+          git add app/src/main/java/com/github/tvbox/osc/ui/activity/LivePlayActivity.java app/build.gradle README.md
           git diff --cached --check
           git commit -m 'feat: add official live quality settings [quality-impl]'
           git push origin HEAD:feat/official-quality-v147

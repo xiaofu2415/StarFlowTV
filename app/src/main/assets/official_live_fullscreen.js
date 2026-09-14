@@ -16,7 +16,7 @@
   var retryTimer = null;
   var qualityRetryTimer = null;
   var qualityRetryCount = 0;
-  var qualityPreference = 'highest';
+  var qualityPreference = 'auto';
   var qualityAppliedPreference = null;
   var nativeFullscreenAttempted = false;
   var boundVideo = null;

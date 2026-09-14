@@ -2,18 +2,19 @@
 
 StarFlowTV 是面向 Android TV 的个人使用播放器：启动后直接进入直播，支持遥控器换台、多线路、自动换源与本地缓存；影视作为二级入口接入 TVBoxOS 点播能力。
 
-> 当前稳定版本：**v1.3.1**（versionCode 5）。PR #1 已合并到 main，生产签名和在线更新清单已就绪。
+> 当前稳定版本：**v1.4.6**（versionCode 12）。生产签名、在线配置和 OTA 发布链路均已启用。
 
 ## 当前状态
 
 | 项目 | 状态 |
 | --- | --- |
 | applicationId | tv.starflow.player |
-| versionName / versionCode | 1.3.1 / 5 |
+| versionName / versionCode | 1.4.6 / 12 |
 | 代码分支 | main |
-| PR | #1 merged |
-| 生产签名 | ready；keyId: starflow-production-2026-09-r1 |
-| 配置清单 | configVersion 5，Ed25519 + SHA-256 |
+| 生产签名 | ready；keyId: starflow-production-2026-09-r2 |
+| APK 架构 | armeabi-v7a / arm64-v8a / universal |
+| 软件更新 | 设置页手动检查 + 直播页后台定时检查 |
+| 官方直播 | CCTV 官方网页入口支持自动进入沉浸式全屏播放 |
 
 ## 功能
 
@@ -21,8 +22,11 @@ StarFlowTV 是面向 Android TV 的个人使用播放器：启动后直接进入
 - 多线路健康策略：首帧超时、播放中断、失败熔断、恢复探测和自动换源。
 - 本地优先：启动先使用最后一个可用配置；远程配置在后台检查。
 - 配置安全：HTTPS、Ed25519 签名、SHA-256、Schema 校验、原子替换、失败回滚，保留最近 3 个版本。
+- 官方直播：保留普通直播线路，同时提供央视官方入口；官方网页播放器加载后自动尝试进入全屏/沉浸式播放。
 - 影视入口：通过 TVBoxOS 配置进入点播页面；直播仍是默认首页。
 - APK 更新：按设备 ABI 选择 armeabi-v7a / arm64-v8a，无法匹配时回退 universal；拒绝降级、包名错误、签名证书错误和 SHA-256 错误。
+- OTA 检查：设置页提供“检查更新”；进入直播页后约 5 秒首次检查，前台播放期间约每 30 分钟复查一次。
+- OTA 反馈：手动检查会显示“已是最新版”“网络错误”“签名错误”“设备 ABI 不支持”等结果，不再静默失败。
 
 ## 在线配置与软件更新
 
@@ -31,19 +35,26 @@ StarFlowTV 是面向 Android TV 的个人使用播放器：启动后直接进入
 - 直播配置：https://config.yuying.beauty/starflow/config/manifest.json
 - 软件更新：https://update.yuying.beauty/starflow/update/latest.json
 
-当前已部署的在线配置包含 live.json、live.m3u、live.txt、tvbox-live.json、epg.xml、manifest.json、manifest.sig 和 checksums.sha256。当前 OTA 清单为 v1.3.1 / versionCode 5，包含 armeabi-v7a、arm64-v8a 和 universal 三个生产签名 APK。
+在线配置包含 live.json、live.m3u、live.txt、tvbox-live.json、epg.xml、manifest.json、manifest.sig 和 checksums.sha256。当前生产 OTA 由 GitHub Actions 构建、生产密钥签名并发布到 1Panel 静态 HTTPS 目录，同时生成 latest.json / latest.sig / latest.sha256 和三种 ABI 的生产 APK。
 
-在线更新会先校验 HTTPS、Ed25519、SHA-256、Schema 和版本策略，再原子切换；下载或校验失败不会破坏当前版本。
+在线更新会先校验 HTTPS、Ed25519、SHA-256、版本策略、包名和 APK 签名证书，再进入 Android 系统安装确认页；下载或校验失败不会破坏当前版本。
+
+## v1.4.5 → v1.4.6 说明
+
+v1.4.6 新增设置页“检查更新”、直播页周期检查，并修复 release 构建中 OTA 清单解析/生命周期处理。若电视仍停留在 v1.4.5 且没有“检查更新”入口、也收不到自动更新，请手动安装一次生产签名的 v1.4.6；从 v1.4.6 开始，后续版本即可继续走应用内 OTA 更新。
 
 ## 设备与安装
 
-- TCL 65T8G Max 65 英寸：优先使用 arm64-v8a；若系统为 32 位则使用 armeabi-v7a。
+- TCL 65T8G Max 65 英寸：优先使用 arm64-v8a；若系统用户空间为 32 位则使用 armeabi-v7a。
 - 小米电视 4X 55 英寸：根据系统 ABI 选择 armeabi-v7a 或 universal。
-- 旧的 debug 版不能覆盖生产签名版。若电视上仍安装 1.3.0 debug，请先卸载旧应用，再安装生产签名的 v1.3.1 APK；后续版本即可通过 OTA 升级。
+- 旧 debug 版不能直接覆盖生产签名版；生产版之间要求 applicationId 与签名证书保持一致。
+- 若 Android 系统安装器/包验证器拒绝 ADB 安装，可将已签名 APK 复制到电视并从系统文件管理器发起安装；这不影响 OTA 文件本身的签名和校验状态。
 
 ## 构建与验证
 
-Android CI 会构建三种 ABI 的 debug/release 产物；生产发布作业会重新签名、验证证书、生成 SHA256SUMS 和 OTA 清单。
+Android CI 会构建三种 ABI 的 debug/release 产物；生产发布作业会重新签名、验证 APK 包名/versionCode/versionName、生成 SHA256SUMS、生成 Ed25519 OTA 清单，并在发布后从公网重新读取 latest.json、latest.sig、manifest.json、manifest.sig 进行逐字节比对，同时检查三个 APK 下载地址可访问。
+
+官方直播自动全屏脚本与 OTA 更新策略均有独立测试，并纳入生产发布工作流。
 
 Sources pipeline 会执行候选源审查、去重、网络检测、ffprobe 画质检测、排序、manifest 和 checksums 校验。逐条 URL、来源、地域范围和检测记录只保存在私有 StarFlowTV-Sources 仓库。
 

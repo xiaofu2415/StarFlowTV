@@ -6,6 +6,7 @@ on:
       - feat/official-quality-v147
     paths:
       - .github/workflows/implement-official-quality-v147.yml
+      - app/src/main/assets/official_live_fullscreen.js
 
 permissions:
   contents: write

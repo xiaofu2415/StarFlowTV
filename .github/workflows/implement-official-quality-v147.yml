@@ -1,0 +1,195 @@
+name: Apply official quality v1.4.7 integration
+
+on:
+  push:
+    branches:
+      - feat/official-quality-v147
+    paths:
+      - .github/workflows/implement-official-quality-v147.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/official-quality-v147
+
+      - name: Patch Android live settings and release metadata
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          activity_path = Path('app/src/main/java/com/github/tvbox/osc/ui/activity/LivePlayActivity.java')
+          text = activity_path.read_text(encoding='utf-8')
+
+          def replace_once(old, new, label):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected 1 match, found {count}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              '    private List<LiveSettingGroup> liveSettingGroupList = new ArrayList<>();\n',
+              '    private List<LiveSettingGroup> liveSettingGroupList = new ArrayList<>();\n'
+              '    private static final int OFFICIAL_QUALITY_GROUP_INDEX = 7;\n'
+              '    private static final String[] OFFICIAL_QUALITY_LABELS = {"最高", "自动", "1080P", "720P", "流畅"};\n'
+              '    private static final String[] OFFICIAL_QUALITY_VALUES = {"highest", "auto", "1080p", "720p", "smooth"};\n',
+              'quality constants')
+
+          replace_once(
+              '                    @Override public void onReady() {\n'
+              '                        if (isOfficialWebPlayback()) officialRetryState.onReady();\n'
+              '                    }\n\n'
+              '                    @Override public void onError(String message) {\n',
+              '                    @Override public void onReady() {\n'
+              '                        if (isOfficialWebPlayback()) officialRetryState.onReady();\n'
+              '                    }\n\n'
+              '                    @Override public void onResolution(String resolution) {\n'
+              '                        if (!isOfficialWebPlayback() || tvResolution == null || TextUtils.isEmpty(resolution)) return;\n'
+              '                        tvResolution.setText("官方 " + resolution);\n'
+              '                        tvResolution.setVisibility(View.VISIBLE);\n'
+              '                        mHandler.removeCallbacks(mHideResolutionInfoRun);\n'
+              '                        mHandler.postDelayed(mHideResolutionInfoRun, RESOLUTION_INFO_HIDE_DELAY);\n'
+              '                    }\n\n'
+              '                    @Override public void onError(String message) {\n',
+              'resolution listener')
+
+          replace_once(
+              '                    @Override public void onError(String message) {\n'
+              '                        handleOfficialPageError();\n'
+              '                    }\n'
+              '                });\n\n'
+              '        tvLeftChannelListLayout = findViewById(R.id.tvLeftChannnelListLayout);\n',
+              '                    @Override public void onError(String message) {\n'
+              '                        handleOfficialPageError();\n'
+              '                    }\n'
+              '                });\n'
+              '        officialLiveController.setQualityPreference(Hawk.get(HawkConfig.LIVE_OFFICIAL_QUALITY, "highest"));\n\n'
+              '        tvLeftChannelListLayout = findViewById(R.id.tvLeftChannnelListLayout);\n',
+              'initial quality bridge')
+
+          replace_once(
+              '            int groupIndex = group.getGroupIndex();\n'
+              '            if (!showChannelOptions && groupIndex >= 0 && groupIndex <= 2) continue;\n'
+              '            visibleGroups.add(group);\n',
+              '            int groupIndex = group.getGroupIndex();\n'
+              '            if (!showChannelOptions && groupIndex >= 0 && groupIndex <= 2) continue;\n'
+              '            if (groupIndex == OFFICIAL_QUALITY_GROUP_INDEX && !isOfficialWebPlayback()) continue;\n'
+              '            visibleGroups.add(group);\n',
+              'quality group visibility')
+
+          replace_once(
+              '    private void initLiveSettingGroupList() {\n'
+              '        liveSettingGroupList=ApiConfig.get().getLiveSettingGroupList();\n'
+              '        if (liveSettingGroupList.size() < 7) return;\n',
+              '    private void initLiveSettingGroupList() {\n'
+              '        liveSettingGroupList=ApiConfig.get().getLiveSettingGroupList();\n'
+              '        if (liveSettingGroupList.size() < 7) return;\n'
+              '        ensureOfficialQualitySettingGroup();\n'
+              '        int qualityIndex = getOfficialQualityIndex(Hawk.get(HawkConfig.LIVE_OFFICIAL_QUALITY, "highest"));\n'
+              '        liveSettingGroupList.get(OFFICIAL_QUALITY_GROUP_INDEX).getLiveSettingItems().get(qualityIndex).setItemSelected(true);\n',
+              'quality group initialization')
+
+          helper_marker = '    private void clickSettingItem(int position) {\n'
+          helper_code = '''    private void ensureOfficialQualitySettingGroup() {
+              if (liveSettingGroupList.size() > OFFICIAL_QUALITY_GROUP_INDEX) return;
+              if (liveSettingGroupList.size() != OFFICIAL_QUALITY_GROUP_INDEX) return;
+              LiveSettingGroup group = new LiveSettingGroup();
+              group.setGroupIndex(OFFICIAL_QUALITY_GROUP_INDEX);
+              group.setGroupName("官方源画质");
+              ArrayList<LiveSettingItem> items = new ArrayList<>();
+              for (int i = 0; i < OFFICIAL_QUALITY_LABELS.length; i++) {
+                  LiveSettingItem item = new LiveSettingItem();
+                  item.setItemIndex(i);
+                  item.setItemName(OFFICIAL_QUALITY_LABELS[i]);
+                  items.add(item);
+              }
+              group.setLiveSettingItems(items);
+              liveSettingGroupList.add(group);
+          }
+
+          private int getOfficialQualityIndex(String value) {
+              if (value != null) {
+                  for (int i = 0; i < OFFICIAL_QUALITY_VALUES.length; i++) {
+                      if (OFFICIAL_QUALITY_VALUES[i].equals(value)) return i;
+                  }
+              }
+              return 0;
+          }
+
+          private void applyOfficialQualitySelection(int position) {
+              if (position < 0 || position >= OFFICIAL_QUALITY_VALUES.length) return;
+              String value = OFFICIAL_QUALITY_VALUES[position];
+              Hawk.put(HawkConfig.LIVE_OFFICIAL_QUALITY, value);
+              liveSettingItemAdapter.selectItem(position, true, true);
+              if (officialLiveController != null) officialLiveController.setQualityPreference(value);
+              Toast.makeText(this, "官方源画质：" + OFFICIAL_QUALITY_LABELS[position], Toast.LENGTH_SHORT).show();
+          }
+
+'''
+          replace_once(helper_marker, helper_code + helper_marker, 'quality helper methods')
+
+          replace_once(
+              '    private void clickSettingItem(int position) {\n'
+              '        int settingGroupIndex = liveSettingGroupAdapter.getSelectedGroupIndex();\n'
+              '        if (isOfficialWebPlayback() && (settingGroupIndex == 1 || settingGroupIndex == 2)) return;\n',
+              '    private void clickSettingItem(int position) {\n'
+              '        int settingGroupIndex = liveSettingGroupAdapter.getSelectedGroupIndex();\n'
+              '        if (settingGroupIndex == OFFICIAL_QUALITY_GROUP_INDEX) {\n'
+              '            applyOfficialQualitySelection(position);\n'
+              '            return;\n'
+              '        }\n'
+              '        if (isOfficialWebPlayback() && (settingGroupIndex == 1 || settingGroupIndex == 2)) return;\n',
+              'quality item click')
+
+          activity_path.write_text(text, encoding='utf-8')
+
+          gradle = Path('app/build.gradle')
+          build = gradle.read_text(encoding='utf-8')
+          if "versionCode 12" not in build or "versionName '1.4.6'" not in build:
+              raise SystemExit('unexpected app version before v1.4.7 bump')
+          build = build.replace('versionCode 12', 'versionCode 13', 1)
+          build = build.replace("versionName '1.4.6'", "versionName '1.4.7'", 1)
+          gradle.write_text(build, encoding='utf-8')
+
+          workflow = Path('.github/workflows/production-signing.yml')
+          release = workflow.read_text(encoding='utf-8')
+          old_note = '"releaseNotes": f"StarFlowTV {version_name}：新增设置页手动检查更新、直播页定时检查和更新失败提示。",'
+          new_note = '"releaseNotes": f"StarFlowTV {version_name}：官方源新增最高/自动/1080P/720P/流畅画质切换，并显示实际播放分辨率。",'
+          if old_note not in release:
+              raise SystemExit('production release note marker not found')
+          workflow.write_text(release.replace(old_note, new_note, 1), encoding='utf-8')
+
+          readme = Path('README.md')
+          doc = readme.read_text(encoding='utf-8')
+          doc = doc.replace('当前稳定版本：**v1.4.6**（versionCode 12）', '当前稳定版本：**v1.4.7**（versionCode 13）', 1)
+          doc = doc.replace('| versionName / versionCode | 1.4.6 / 12 |', '| versionName / versionCode | 1.4.7 / 13 |', 1)
+          feature = '- 官方源画质：直播设置中可选最高 / 自动 / 1080P / 720P / 流畅；指定档位不可用时向下回退，并短暂显示实际播放分辨率。\n'
+          marker = '- 官方直播：保留普通直播线路，同时提供央视官方入口；官方网页播放器加载后自动尝试进入全屏/沉浸式播放。\n'
+          if feature not in doc:
+              if marker not in doc:
+                  raise SystemExit('README official live marker not found')
+              doc = doc.replace(marker, marker + feature, 1)
+          readme.write_text(doc, encoding='utf-8')
+          PY
+
+      - name: Verify focused tests and compile
+        run: |
+          node --test app/src/test/js/official-live-fullscreen.test.js
+          printf 'sdk.dir=%s\n' "$ANDROID_SDK_ROOT" > local.properties
+          chmod +x gradlew
+          ./gradlew :app:testJava32DebugUnitTest :app:assembleJava32Debug --stacktrace
+
+      - name: Commit integration
+        run: |
+          git config user.name 'starflow-quality-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add app/src/main/java/com/github/tvbox/osc/ui/activity/LivePlayActivity.java app/build.gradle .github/workflows/production-signing.yml README.md
+          git diff --cached --check
+          git commit -m 'feat: add official live quality settings [quality-impl]'
+          git push origin HEAD:feat/official-quality-v147

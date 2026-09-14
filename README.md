@@ -2,14 +2,14 @@
 
 StarFlowTV 是面向 Android TV 的个人使用播放器：启动后直接进入直播，支持遥控器换台、多线路、自动换源与本地缓存；影视作为二级入口接入 TVBoxOS 点播能力。
 
-> 当前稳定版本：**v1.4.6**（versionCode 12）。生产签名、在线配置和 OTA 发布链路均已启用。
+> 当前稳定版本：**v1.4.7**（versionCode 13）。生产签名、在线配置和 OTA 发布链路均已启用。
 
 ## 当前状态
 
 | 项目 | 状态 |
 | --- | --- |
 | applicationId | tv.starflow.player |
-| versionName / versionCode | 1.4.6 / 12 |
+| versionName / versionCode | 1.4.7 / 13 |
 | 代码分支 | main |
 | 生产签名 | ready；keyId: starflow-production-2026-09-r2 |
 | APK 架构 | armeabi-v7a / arm64-v8a / universal |
@@ -23,6 +23,7 @@ StarFlowTV 是面向 Android TV 的个人使用播放器：启动后直接进入
 - 本地优先：启动先使用最后一个可用配置；远程配置在后台检查。
 - 配置安全：HTTPS、Ed25519 签名、SHA-256、Schema 校验、原子替换、失败回滚，保留最近 3 个版本。
 - 官方直播：保留普通直播线路，同时提供央视官方入口；官方网页播放器加载后自动尝试进入全屏/沉浸式播放。
+- 官方源画质：直播设置中可选最高 / 自动 / 1080P / 720P / 流畅；指定档位不可用时向下回退，并短暂显示实际播放分辨率。
 - 影视入口：通过 TVBoxOS 配置进入点播页面；直播仍是默认首页。
 - APK 更新：按设备 ABI 选择 armeabi-v7a / arm64-v8a，无法匹配时回退 universal；拒绝降级、包名错误、签名证书错误和 SHA-256 错误。
 - OTA 检查：设置页提供“检查更新”；进入直播页后约 5 秒首次检查，前台播放期间约每 30 分钟复查一次。

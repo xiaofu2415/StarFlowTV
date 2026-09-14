@@ -166,6 +166,9 @@ public class LivePlayActivity extends BaseActivity {
     private LiveSettingGroupAdapter liveSettingGroupAdapter;
     private LiveSettingItemAdapter liveSettingItemAdapter;
     private List<LiveSettingGroup> liveSettingGroupList = new ArrayList<>();
+    private static final int OFFICIAL_QUALITY_GROUP_INDEX = 7;
+    private static final String[] OFFICIAL_QUALITY_LABELS = {"最高", "自动", "1080P", "720P", "流畅"};
+    private static final String[] OFFICIAL_QUALITY_VALUES = {"highest", "auto", "1080p", "720p", "smooth"};
 
     public static  int currentChannelGroupIndex = 0;
     private Handler mHandler = new Handler();
@@ -318,10 +321,19 @@ public class LivePlayActivity extends BaseActivity {
                         if (isOfficialWebPlayback()) officialRetryState.onReady();
                     }
 
+                    @Override public void onResolution(String resolution) {
+                        if (!isOfficialWebPlayback() || tvResolution == null || TextUtils.isEmpty(resolution)) return;
+                        tvResolution.setText("官方 " + resolution);
+                        tvResolution.setVisibility(View.VISIBLE);
+                        mHandler.removeCallbacks(mHideResolutionInfoRun);
+                        mHandler.postDelayed(mHideResolutionInfoRun, RESOLUTION_INFO_HIDE_DELAY);
+                    }
+
                     @Override public void onError(String message) {
                         handleOfficialPageError();
                     }
                 });
+        officialLiveController.setQualityPreference(Hawk.get(HawkConfig.LIVE_OFFICIAL_QUALITY, "highest"));
 
         tvLeftChannelListLayout = findViewById(R.id.tvLeftChannnelListLayout);
         mChannelGroupView = findViewById(R.id.mGroupGridView);
@@ -2874,8 +2886,47 @@ public class LivePlayActivity extends BaseActivity {
         });
     }
 
+    private void ensureOfficialQualitySettingGroup() {
+        if (liveSettingGroupList.size() > OFFICIAL_QUALITY_GROUP_INDEX) return;
+        if (liveSettingGroupList.size() != OFFICIAL_QUALITY_GROUP_INDEX) return;
+        LiveSettingGroup group = new LiveSettingGroup();
+        group.setGroupIndex(OFFICIAL_QUALITY_GROUP_INDEX);
+        group.setGroupName("官方源画质");
+        ArrayList<LiveSettingItem> items = new ArrayList<>();
+        for (int i = 0; i < OFFICIAL_QUALITY_LABELS.length; i++) {
+            LiveSettingItem item = new LiveSettingItem();
+            item.setItemIndex(i);
+            item.setItemName(OFFICIAL_QUALITY_LABELS[i]);
+            items.add(item);
+        }
+        group.setLiveSettingItems(items);
+        liveSettingGroupList.add(group);
+    }
+
+    private int getOfficialQualityIndex(String value) {
+        if (value != null) {
+            for (int i = 0; i < OFFICIAL_QUALITY_VALUES.length; i++) {
+                if (OFFICIAL_QUALITY_VALUES[i].equals(value)) return i;
+            }
+        }
+        return 0;
+    }
+
+    private void applyOfficialQualitySelection(int position) {
+        if (position < 0 || position >= OFFICIAL_QUALITY_VALUES.length) return;
+        String value = OFFICIAL_QUALITY_VALUES[position];
+        Hawk.put(HawkConfig.LIVE_OFFICIAL_QUALITY, value);
+        liveSettingItemAdapter.selectItem(position, true, true);
+        if (officialLiveController != null) officialLiveController.setQualityPreference(value);
+        Toast.makeText(this, "官方源画质：" + OFFICIAL_QUALITY_LABELS[position], Toast.LENGTH_SHORT).show();
+    }
+
     private void clickSettingItem(int position) {
         int settingGroupIndex = liveSettingGroupAdapter.getSelectedGroupIndex();
+        if (settingGroupIndex == OFFICIAL_QUALITY_GROUP_INDEX) {
+            applyOfficialQualitySelection(position);
+            return;
+        }
         if (isOfficialWebPlayback() && (settingGroupIndex == 1 || settingGroupIndex == 2)) return;
         if (settingGroupIndex >= 0 && settingGroupIndex < 3 && !isCurrentLiveChannelValid()) {
             return;
@@ -3462,6 +3513,7 @@ public class LivePlayActivity extends BaseActivity {
             if (group == null) continue;
             int groupIndex = group.getGroupIndex();
             if (!showChannelOptions && groupIndex >= 0 && groupIndex <= 2) continue;
+            if (groupIndex == OFFICIAL_QUALITY_GROUP_INDEX && !isOfficialWebPlayback()) continue;
             visibleGroups.add(group);
         }
         return visibleGroups;
@@ -3470,6 +3522,9 @@ public class LivePlayActivity extends BaseActivity {
     private void initLiveSettingGroupList() {
         liveSettingGroupList=ApiConfig.get().getLiveSettingGroupList();
         if (liveSettingGroupList.size() < 7) return;
+        ensureOfficialQualitySettingGroup();
+        int qualityIndex = getOfficialQualityIndex(Hawk.get(HawkConfig.LIVE_OFFICIAL_QUALITY, "highest"));
+        liveSettingGroupList.get(OFFICIAL_QUALITY_GROUP_INDEX).getLiveSettingItems().get(qualityIndex).setItemSelected(true);
         liveSettingGroupList.get(3).getLiveSettingItems().get(Hawk.get(HawkConfig.LIVE_CONNECT_TIMEOUT, 1)).setItemSelected(true);
         liveSettingGroupList.get(4).getLiveSettingItems().get(0).setItemSelected(Hawk.get(HawkConfig.LIVE_SHOW_TIME, false));
         liveSettingGroupList.get(4).getLiveSettingItems().get(1).setItemSelected(Hawk.get(HawkConfig.LIVE_SHOW_NET_SPEED, false));

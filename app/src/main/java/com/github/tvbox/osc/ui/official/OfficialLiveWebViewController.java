@@ -38,11 +38,14 @@ public final class OfficialLiveWebViewController {
     private static final String FULLSCREEN_ASSET = "official_live_fullscreen.js";
     private static final String EXIT_WEB_FULLSCREEN_SCRIPT =
             "window.__starflowOfficialFullscreen&&window.__starflowOfficialFullscreen.exit();";
+    private static final long RESOLUTION_REPORT_DELAY_MS = 1200L;
 
     public interface Listener {
         void onLoading(String url);
 
         void onReady();
+
+        void onResolution(String resolution);
 
         void onError(String message);
     }
@@ -61,6 +64,7 @@ public final class OfficialLiveWebViewController {
     private int normalSystemUiVisibility;
     private boolean webFullscreenActive;
     private boolean released;
+    private String qualityPreference = "highest";
 
     public OfficialLiveWebViewController(@NonNull Context context,
                                          @NonNull ViewGroup container,
@@ -71,6 +75,15 @@ public final class OfficialLiveWebViewController {
         this.loadingView = container.findViewById(R.id.officialLiveWebLoading);
         this.enterWebFullscreenScript = readAsset(context, FULLSCREEN_ASSET);
         hideSurface();
+    }
+
+    public void setQualityPreference(String preference) {
+        qualityPreference = normalizeQualityPreference(preference);
+        WebView view = webView;
+        if (view != null && requestTracker.isActive()) {
+            applyQualityPreference(view);
+            scheduleResolutionReport(view);
+        }
     }
 
     public void load(String pageUrl) {
@@ -200,6 +213,43 @@ public final class OfficialLiveWebViewController {
         if (enterWebFullscreenScript.isEmpty() || view != webView) return;
         webFullscreenActive = true;
         view.evaluateJavascript(enterWebFullscreenScript, null);
+    }
+
+    private void applyQualityPreference(WebView view) {
+        if (view == null || view != webView) return;
+        view.evaluateJavascript(
+                "window.__starflowOfficialFullscreen&&window.__starflowOfficialFullscreen.setQuality('"
+                        + qualityPreference + "');", null);
+    }
+
+    private void scheduleResolutionReport(WebView view) {
+        if (view == null) return;
+        view.postDelayed(() -> {
+            if (view != webView || !requestTracker.isActive()) return;
+            view.evaluateJavascript(
+                    "(window.__starflowOfficialFullscreen&&window.__starflowOfficialFullscreen.getResolution&&window.__starflowOfficialFullscreen.getResolution())||''",
+                    value -> {
+                        String resolution = decodeJavascriptString(value);
+                        if (!resolution.isEmpty()) listener.onResolution(resolution);
+                    });
+        }, RESOLUTION_REPORT_DELAY_MS);
+    }
+
+    private static String normalizeQualityPreference(String preference) {
+        if ("auto".equals(preference) || "1080p".equals(preference)
+                || "720p".equals(preference) || "smooth".equals(preference)) {
+            return preference;
+        }
+        return "highest";
+    }
+
+    private static String decodeJavascriptString(String value) {
+        if (value == null || "null".equals(value)) return "";
+        String result = value.trim();
+        if (result.length() >= 2 && result.startsWith("\"") && result.endsWith("\"")) {
+            result = result.substring(1, result.length() - 1);
+        }
+        return result.replace("\\u00d7", "×").replace("\\u00D7", "×");
     }
 
     private boolean exitWebFullscreen() {
@@ -378,6 +428,8 @@ public final class OfficialLiveWebViewController {
             if (!requestTracker.matches(url)) return;
             setLoadingVisible(false);
             enterWebFullscreen(view);
+            applyQualityPreference(view);
+            scheduleResolutionReport(view);
             listener.onReady();
         }
 

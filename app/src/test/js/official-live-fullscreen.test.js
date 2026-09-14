@@ -16,9 +16,12 @@ function createHarness(options = {}) {
   let fullscreenRequests = 0;
   let observerCount = 0;
   let intervalCount = 0;
+  const qualityClicks = [];
 
   const video = {
     paused: options.videoPaused === true,
+    videoWidth: options.videoWidth || 1920,
+    videoHeight: options.videoHeight || 1080,
     removeAttribute() {},
     addEventListener(name, callback) {
       listeners.set(name, callback);
@@ -42,6 +45,21 @@ function createHarness(options = {}) {
       return selector === 'video' ? video : null;
     },
   };
+  const qualityElements = (options.qualities || []).map((label) => ({
+    textContent: label,
+    innerText: label,
+    hidden: false,
+    offsetParent: {},
+    click() {
+      qualityClicks.push(label);
+    },
+    getAttribute() {
+      return '';
+    },
+    matches() {
+      return false;
+    },
+  }));
   const documentElement = {
     classList: {
       add(name) {
@@ -77,6 +95,9 @@ function createHarness(options = {}) {
       if (options.fallbackPlayer === true && selector === '.video_box') return player;
       return null;
     },
+    querySelectorAll() {
+      return qualityElements;
+    },
   };
   class MutationObserver {
     constructor(callback) {
@@ -92,11 +113,17 @@ function createHarness(options = {}) {
     document,
     MutationObserver,
     Promise,
+    JSON,
     setInterval() {
       intervalCount += 1;
       return intervalCount;
     },
     clearInterval() {},
+    setTimeout(callback) {
+      callback();
+      return 1;
+    },
+    clearTimeout() {},
   };
   context.window = context;
 
@@ -104,6 +131,8 @@ function createHarness(options = {}) {
     context,
     documentElement,
     player,
+    video,
+    qualityClicks,
     get fullscreenRequests() {
       return fullscreenRequests;
     },
@@ -204,4 +233,34 @@ test('a rejected native fullscreen request is not retried on every mutation', as
   await Promise.resolve();
 
   assert.equal(harness.fullscreenRequests, 1);
+});
+
+test('highest quality selects the best quality label exposed by the official player', () => {
+  const source = fs.readFileSync(scriptPath, 'utf8');
+  const harness = createHarness({ qualities: ['流畅', '高清', '超清'] });
+
+  vm.runInNewContext(source, harness.context);
+  harness.context.window.__starflowOfficialFullscreen.setQuality('highest');
+
+  assert.equal(harness.qualityClicks.at(-1), '超清');
+});
+
+test('1080p preference degrades to the best available lower official quality', () => {
+  const source = fs.readFileSync(scriptPath, 'utf8');
+  const harness = createHarness({ qualities: ['流畅', '高清'] });
+
+  vm.runInNewContext(source, harness.context);
+  harness.context.window.__starflowOfficialFullscreen.setQuality('1080p');
+
+  assert.equal(harness.qualityClicks.at(-1), '高清');
+});
+
+test('auto quality leaves the official player adaptive choice untouched', () => {
+  const source = fs.readFileSync(scriptPath, 'utf8');
+  const harness = createHarness({ qualities: ['流畅', '高清', '超清'] });
+
+  vm.runInNewContext(source, harness.context);
+  harness.context.window.__starflowOfficialFullscreen.setQuality('auto');
+
+  assert.deepEqual(harness.qualityClicks, []);
 });

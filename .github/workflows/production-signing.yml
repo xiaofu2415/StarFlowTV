@@ -8,6 +8,11 @@ on:
         required: true
         default: main
         type: string
+      release_notes:
+        description: "Release notes written to the stable OTA manifest"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -158,6 +163,7 @@ jobs:
       - name: Generate OTA manifest and Ed25519 signature
         env:
           STARFLOW_ED25519_PRIVATE_KEY_B64: ${{ secrets.STARFLOW_ED25519_PRIVATE_KEY_B64 }}
+          STARFLOW_RELEASE_NOTES: ${{ inputs.release_notes }}
         run: |
           set -euo pipefail
           bundle="$GITHUB_WORKSPACE/release-bundle"
@@ -194,6 +200,9 @@ jobs:
           certificate_digest = sys.argv[4]
           expected_public_key = sys.argv[5]
           signing_key_id = sys.argv[6]
+          release_notes = os.environ.get("STARFLOW_RELEASE_NOTES", "").strip()
+          if not release_notes:
+              release_notes = f"StarFlowTV {version_name} release"
           key_bytes = base64.b64decode(os.environ["STARFLOW_ED25519_PRIVATE_KEY_B64"])
           private_key = None
           loaders = [serialization.load_der_private_key, serialization.load_pem_private_key]
@@ -267,7 +276,7 @@ jobs:
               "versionName": version_name,
               "versionCode": version_code,
               "channel": "stable",
-              "releaseNotes": f"StarFlowTV {version_name}：新增设置页手动检查更新、直播页定时检查和更新失败提示。",
+              "releaseNotes": release_notes,
               "publishedAt": published_at,
               "minimumSdk": 23,
               "minSupportedVersionCode": 1,

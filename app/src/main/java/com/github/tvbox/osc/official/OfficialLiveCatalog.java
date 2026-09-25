@@ -41,15 +41,16 @@ public final class OfficialLiveCatalog {
         return true;
     }
 
+    /** Keep the built-in official group first and align group indices with list positions. */
     public static void ensureTrustedGroup(List<LiveChannelGroup> groups) {
         if (groups == null) return;
-        int nextGroupIndex = 0;
+        int trustedGroupIndex = -1;
         int nextChannelNumber = 0;
-        boolean hasTrusted = false;
-        for (LiveChannelGroup group : groups) {
+        for (int i = 0; i < groups.size(); i++) {
+            LiveChannelGroup group = groups.get(i);
             if (group == null) continue;
             boolean trusted = isTrustedGroup(group);
-            hasTrusted |= trusted;
+            if (trusted && trustedGroupIndex < 0) trustedGroupIndex = i;
             if (GROUP_NAME.equals(group.getGroupName()) && !trusted) {
                 group.setGroupName(GROUP_NAME + "（IPTV）");
                 if (group.getLiveChannels() != null) for (LiveChannelItem item : group.getLiveChannels()) {
@@ -60,12 +61,19 @@ public final class OfficialLiveCatalog {
                     item.setChannelSourceModes(null);
                 }
             }
-            nextGroupIndex = Math.max(nextGroupIndex, group.getGroupIndex() + 1);
             if (group.getLiveChannels() != null) for (LiveChannelItem item : group.getLiveChannels()) {
                 if (item != null) nextChannelNumber = Math.max(nextChannelNumber, item.getChannelNum());
             }
         }
-        if (!hasTrusted) groups.add(toGroup(nextGroupIndex, nextChannelNumber));
+        if (trustedGroupIndex < 0) {
+            groups.add(0, toGroup(0, nextChannelNumber));
+        } else if (trustedGroupIndex > 0) {
+            groups.add(0, groups.remove(trustedGroupIndex));
+        }
+        for (int i = 0; i < groups.size(); i++) {
+            LiveChannelGroup group = groups.get(i);
+            if (group != null) group.setGroupIndex(i);
+        }
     }
 
     /** A failed proxy is not a channel group; fallback is ready for direct UI application. */

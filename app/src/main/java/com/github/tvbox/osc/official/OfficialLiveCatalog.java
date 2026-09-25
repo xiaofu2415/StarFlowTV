@@ -112,7 +112,11 @@ public final class OfficialLiveCatalog {
     private static List<OfficialLiveChannel> build() {
         List<OfficialLiveChannel> channels = new ArrayList<>();
         for (int number = 1; number <= 17; number++) {
-            add(channels, "cctv-" + number, "CCTV-" + number, "cctv" + number + "/m/");
+            String pagePath;
+            if (number == 9) pagePath = "cctvjilu/";
+            else if (number == 14) pagePath = "cctvchild/";
+            else pagePath = "cctv" + number + "/m/";
+            add(channels, "cctv-" + number, "CCTV-" + number, pagePath);
         }
         add(channels, "cctv-5plus", "CCTV-5+", "cctv5plus/m/");
         add(channels, "cctv-4-asia", "CCTV-4 Asia", "cctv4/m/");

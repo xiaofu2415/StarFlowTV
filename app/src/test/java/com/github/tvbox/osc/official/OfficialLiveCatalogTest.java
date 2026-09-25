@@ -20,9 +20,9 @@ public class OfficialLiveCatalogTest {
             {"cctv-3", "CCTV-3", "cctv3/m/"}, {"cctv-4", "CCTV-4", "cctv4/m/"},
             {"cctv-5", "CCTV-5", "cctv5/m/"}, {"cctv-6", "CCTV-6", "cctv6/m/"},
             {"cctv-7", "CCTV-7", "cctv7/m/"}, {"cctv-8", "CCTV-8", "cctv8/m/"},
-            {"cctv-9", "CCTV-9", "cctv9/m/"}, {"cctv-10", "CCTV-10", "cctv10/m/"},
+            {"cctv-9", "CCTV-9", "cctvjilu/"}, {"cctv-10", "CCTV-10", "cctv10/m/"},
             {"cctv-11", "CCTV-11", "cctv11/m/"}, {"cctv-12", "CCTV-12", "cctv12/m/"},
-            {"cctv-13", "CCTV-13", "cctv13/m/"}, {"cctv-14", "CCTV-14", "cctv14/m/"},
+            {"cctv-13", "CCTV-13", "cctv13/m/"}, {"cctv-14", "CCTV-14", "cctvchild/"},
             {"cctv-15", "CCTV-15", "cctv15/m/"}, {"cctv-16", "CCTV-16", "cctv16/m/"},
             {"cctv-17", "CCTV-17", "cctv17/m/"}, {"cctv-5plus", "CCTV-5+", "cctv5plus/m/"},
             {"cctv-4-asia", "CCTV-4 Asia", "cctv4/m/"},
@@ -72,8 +72,10 @@ public class OfficialLiveCatalogTest {
         assertEquals("", forged.getLiveChannels().get(0).getOfficialChannelId());
         assertEquals("https://example.com/live.m3u8", forged.getLiveChannels().get(0).getUrl());
         assertEquals(OfficialLivePlaybackMode.NONE, forged.getLiveChannels().get(0).getSourcePlaybackMode());
-        assertTrue(OfficialLiveCatalog.isTrustedGroup(groups.get(2)));
-        assertEquals(2, groups.get(2).getGroupIndex());
+        assertTrue(OfficialLiveCatalog.isTrustedGroup(groups.get(0)));
+        assertEquals(0, groups.get(0).getGroupIndex());
+        assertEquals(1, forged.getGroupIndex());
+        assertEquals(2, empty.getGroupIndex());
     }
 
     @Test public void offlineFallbackReplacesUnresolvedProxyAndCanBeAppliedWithoutAnotherLoad() {
@@ -102,7 +104,9 @@ public class OfficialLiveCatalogTest {
             groups.add(group);
             OfficialLiveCatalog.ensureTrustedGroup(groups);
             assertEquals(2, groups.size());
-            assertTrue(OfficialLiveCatalog.isTrustedGroup(groups.get(1)));
+            assertTrue(OfficialLiveCatalog.isTrustedGroup(groups.get(0)));
+            assertEquals(0, groups.get(0).getGroupIndex());
+            assertEquals(1, group.getGroupIndex());
         }
     }
 
@@ -126,10 +130,17 @@ public class OfficialLiveCatalogTest {
         }
     }
 
-    @Test public void catalogUsesMobileHtml5LiveEntrypoints() {
+    @Test public void onlyCctvNineAndFourteenUseNonMobileOfficialLivePages() {
+        String base = "https://tv.cctv.com/live/";
         for (OfficialLiveChannel channel : OfficialLiveCatalog.builtIn()) {
-            assertTrue(channel.getPageUrl().startsWith("https://tv.cctv.com/live/"));
-            assertTrue(channel.getPageUrl().contains("/m/"));
+            if ("cctv-9".equals(channel.getId())) {
+                assertEquals(base + "cctvjilu/", channel.getPageUrl());
+            } else if ("cctv-14".equals(channel.getId())) {
+                assertEquals(base + "cctvchild/", channel.getPageUrl());
+            } else {
+                assertTrue(channel.getPageUrl().startsWith(base));
+                assertTrue(channel.getPageUrl().contains("/m/"));
+            }
         }
     }
 

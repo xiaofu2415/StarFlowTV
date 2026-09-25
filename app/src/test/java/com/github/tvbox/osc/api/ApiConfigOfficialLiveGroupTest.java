@@ -2,6 +2,7 @@ package com.github.tvbox.osc.api;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import com.github.tvbox.osc.bean.LiveChannelGroup;
@@ -24,11 +25,41 @@ public final class ApiConfigOfficialLiveGroupTest {
 
     @Test public void normalRemoteGroupAndOfficialGroupRepresentRemoteLiveConfigSuccess() {
         List<LiveChannelGroup> groups = new ArrayList<>();
-        groups.add(remoteGroupWithChannel());
+        LiveChannelGroup remote = remoteGroupWithChannel();
+        groups.add(remote);
         ApiConfig.ensureOfficialLiveGroup(groups);
 
         assertTrue(ApiConfig.hasRemoteLiveConfigResult(groups));
         assertEquals(2, groups.size());
+        assertTrue(OfficialLiveCatalog.isTrustedGroup(groups.get(0)));
+        assertSame(remote, groups.get(1));
+        assertEquals(0, groups.get(0).getGroupIndex());
+        assertEquals(1, groups.get(1).getGroupIndex());
+    }
+
+    @Test public void existingOfficialGroupMovesToTopWithoutReorderingRemoteGroups() {
+        LiveChannelGroup firstRemote = remoteGroupWithChannel();
+        firstRemote.setGroupName("远程一");
+        firstRemote.setGroupIndex(8);
+        LiveChannelGroup secondRemote = remoteGroupWithChannel();
+        secondRemote.setGroupName("远程二");
+        secondRemote.setGroupIndex(3);
+        LiveChannelGroup official = OfficialLiveCatalog.toGroup(2, 99);
+        List<LiveChannelGroup> groups = new ArrayList<>();
+        groups.add(firstRemote);
+        groups.add(secondRemote);
+        groups.add(official);
+
+        ApiConfig.ensureOfficialLiveGroup(groups);
+        ApiConfig.ensureOfficialLiveGroup(groups);
+
+        assertEquals(3, groups.size());
+        assertSame(official, groups.get(0));
+        assertSame(firstRemote, groups.get(1));
+        assertSame(secondRemote, groups.get(2));
+        assertEquals(0, official.getGroupIndex());
+        assertEquals(1, firstRemote.getGroupIndex());
+        assertEquals(2, secondRemote.getGroupIndex());
     }
 
     @Test public void emptyRemoteGroupDoesNotRepresentRemoteLiveConfigSuccess() {
@@ -86,7 +117,10 @@ public final class ApiConfigOfficialLiveGroupTest {
         assertEquals(2, groups.size());
         assertEquals("官方直播（IPTV）", remoteOfficialGroup.getGroupName());
         assertEquals("https://example.com/live.m3u8", remoteOfficialGroup.getLiveChannels().get(0).getUrl());
-        assertEquals(21, groups.get(1).getLiveChannels().size());
+        assertTrue(OfficialLiveCatalog.isTrustedGroup(groups.get(0)));
+        assertEquals(0, groups.get(0).getGroupIndex());
+        assertEquals(1, remoteOfficialGroup.getGroupIndex());
+        assertEquals(21, groups.get(0).getLiveChannels().size());
     }
 
     @Test public void emptySameNameGroupCannotHideBuiltInCatalog() {
@@ -98,7 +132,10 @@ public final class ApiConfigOfficialLiveGroupTest {
         ApiConfig.ensureOfficialLiveGroup(groups);
         assertEquals(2, groups.size());
         assertEquals("官方直播（IPTV）", empty.getGroupName());
-        assertEquals(21, groups.get(1).getLiveChannels().size());
+        assertTrue(OfficialLiveCatalog.isTrustedGroup(groups.get(0)));
+        assertEquals(0, groups.get(0).getGroupIndex());
+        assertEquals(1, empty.getGroupIndex());
+        assertEquals(21, groups.get(0).getLiveChannels().size());
     }
 
     @Test public void forgedMetadataOrPlaybackUrlCannotHideBuiltInCatalog() {
@@ -108,6 +145,9 @@ public final class ApiConfigOfficialLiveGroupTest {
         groups.add(forged);
         ApiConfig.ensureOfficialLiveGroup(groups);
         assertEquals(2, groups.size());
+        assertTrue(OfficialLiveCatalog.isTrustedGroup(groups.get(0)));
+        assertEquals(0, groups.get(0).getGroupIndex());
+        assertEquals(1, forged.getGroupIndex());
         assertEquals("官方直播（IPTV）", forged.getGroupName());
         assertFalse(forged.getLiveChannels().get(0).isOfficialLive());
     }

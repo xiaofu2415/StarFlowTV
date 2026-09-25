@@ -27,4 +27,4 @@ jobs:
             "repos/${GITHUB_REPOSITORY}/actions/workflows/production-signing.yml/dispatches" \
             -f ref=main \
             -f 'inputs[release_ref]=main' \
-            -f 'inputs[release_notes]=修正内置 CCTV-9 和 CCTV-14 的央视官方网页入口。'
+            -f 'inputs[release_notes]=修正内置 CCTV-9 和 CCTV-14 的央视官方网页入口，并将官方直播分组置顶。'

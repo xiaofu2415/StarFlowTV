@@ -72,8 +72,10 @@ public class OfficialLiveCatalogTest {
         assertEquals("", forged.getLiveChannels().get(0).getOfficialChannelId());
         assertEquals("https://example.com/live.m3u8", forged.getLiveChannels().get(0).getUrl());
         assertEquals(OfficialLivePlaybackMode.NONE, forged.getLiveChannels().get(0).getSourcePlaybackMode());
-        assertTrue(OfficialLiveCatalog.isTrustedGroup(groups.get(2)));
-        assertEquals(2, groups.get(2).getGroupIndex());
+        assertTrue(OfficialLiveCatalog.isTrustedGroup(groups.get(0)));
+        assertEquals(0, groups.get(0).getGroupIndex());
+        assertEquals(1, forged.getGroupIndex());
+        assertEquals(2, empty.getGroupIndex());
     }
 
     @Test public void offlineFallbackReplacesUnresolvedProxyAndCanBeAppliedWithoutAnotherLoad() {
@@ -102,7 +104,9 @@ public class OfficialLiveCatalogTest {
             groups.add(group);
             OfficialLiveCatalog.ensureTrustedGroup(groups);
             assertEquals(2, groups.size());
-            assertTrue(OfficialLiveCatalog.isTrustedGroup(groups.get(1)));
+            assertTrue(OfficialLiveCatalog.isTrustedGroup(groups.get(0)));
+            assertEquals(0, groups.get(0).getGroupIndex());
+            assertEquals(1, group.getGroupIndex());
         }
     }
 

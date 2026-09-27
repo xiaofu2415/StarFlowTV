@@ -226,7 +226,7 @@
     if (!candidate) {
       var lower = qualityCandidates().filter(function (item) {
         return item.rank > 0 && item.rank < selectedQualityRank;
-      }).sort(function (a, b) { return a.rank - b.rank; });
+      }).sort(function (a, b) { return b.rank - a.rank; });
       candidate = lower.length ? lower[0] : null;
     }
     qualityFallbackCount += 1;

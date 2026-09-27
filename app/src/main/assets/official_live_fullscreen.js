@@ -415,9 +415,15 @@
       video.addEventListener('waiting', function () { markVideoUnstable(video); });
       video.addEventListener('stalled', function () { markVideoUnstable(video); });
       if (typeof video.requestVideoFrameCallback === 'function') {
+        var frameCallbackScheduled = false;
         try {
-          video.requestVideoFrameCallback(function () { markFirstVideoFrame(video); });
+          var frameCallbackId = video.requestVideoFrameCallback(
+            function () { markFirstVideoFrame(video); });
+          frameCallbackScheduled = typeof frameCallbackId === 'number';
         } catch (ignored) {
+          frameCallbackScheduled = false;
+        }
+        if (!frameCallbackScheduled) {
           video.addEventListener('loadeddata', function () { markFirstVideoFrame(video); }, { once: true });
         }
       } else {

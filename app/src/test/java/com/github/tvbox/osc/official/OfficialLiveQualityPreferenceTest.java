@@ -5,7 +5,7 @@ import static org.junit.Assert.assertEquals;
 import org.junit.Test;
 
 public final class OfficialLiveQualityPreferenceTest {
-    @Test public void unsetQualityDefaultsToAdaptiveMode() {
+    @Test public void unsetQualityDefaultsToHighestQuality() {
         assertEquals("highest", OfficialLiveQualityPreference.DEFAULT);
         assertEquals("highest", OfficialLiveQualityPreference.normalize(null));
         assertEquals("highest", OfficialLiveQualityPreference.normalize(""));
@@ -18,7 +18,7 @@ public final class OfficialLiveQualityPreferenceTest {
         assertEquals("smooth", OfficialLiveQualityPreference.normalize("smooth"));
     }
 
-    @Test public void unsupportedPreferenceFallsBackToAdaptiveMode() {
+    @Test public void unsupportedPreferenceFallsBackToHighestQuality() {
         assertEquals("highest", OfficialLiveQualityPreference.normalize("invalid"));
     }
 }

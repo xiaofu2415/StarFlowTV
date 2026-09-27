@@ -75,13 +75,6 @@
     return -1;
   }
 
-  function qualityTargetRank(preference) {
-    if (preference === '1080p') return 400;
-    if (preference === '720p') return 300;
-    if (preference === 'smooth') return 100;
-    return 999;
-  }
-
   function qualityCandidates() {
     var selector = [
       '[data-quality]', '[data-definition]', '[data-clarity]',
@@ -424,7 +417,11 @@
           frameCallbackScheduled = false;
         }
         if (!frameCallbackScheduled) {
-          video.addEventListener('loadeddata', function () { markFirstVideoFrame(video); }, { once: true });
+          if (video.readyState >= 2) {
+            markFirstVideoFrame(video);
+          } else {
+            video.addEventListener('loadeddata', function () { markFirstVideoFrame(video); }, { once: true });
+          }
         }
       } else {
         video.addEventListener('loadeddata', function () { markFirstVideoFrame(video); }, { once: true });

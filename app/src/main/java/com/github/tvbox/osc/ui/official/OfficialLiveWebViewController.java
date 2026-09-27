@@ -23,6 +23,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.github.tvbox.osc.R;
+import com.github.tvbox.osc.official.OfficialLiveQualityPreference;
 import com.github.tvbox.osc.official.OfficialLiveRequestTracker;
 import com.github.tvbox.osc.official.LiveForegroundGate;
 import com.github.tvbox.osc.official.OfficialLiveUrlPolicy;
@@ -299,11 +300,7 @@ public final class OfficialLiveWebViewController {
     }
 
     private static String normalizeQualityPreference(String preference) {
-        if ("auto".equals(preference) || "1080p".equals(preference)
-                || "720p".equals(preference) || "smooth".equals(preference)) {
-            return preference;
-        }
-        return "highest";
+        return OfficialLiveQualityPreference.normalize(preference);
     }
 
     private static String decodeJavascriptString(String value) {

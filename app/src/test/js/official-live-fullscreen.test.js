@@ -17,14 +17,36 @@ function createHarness(options = {}) {
   let observerCount = 0;
   let intervalCount = 0;
   const qualityClicks = [];
+  let pendingVideoFrameCallback = null;
+  const intervalCallbacks = new Map();
+  let clockMs = 0;
+  let totalFrames = 0;
+  let droppedFrames = 0;
 
   const video = {
     paused: options.videoPaused === true,
     videoWidth: options.videoWidth || 1920,
     videoHeight: options.videoHeight || 1080,
+    currentTime: 0,
+    readyState: options.readyState === undefined ? 4 : options.readyState,
+    buffered: {
+      length: 1,
+      start() { return 0; },
+      end() { return video.currentTime + 2; },
+    },
+    getVideoPlaybackQuality() {
+      return { totalVideoFrames: totalFrames, droppedVideoFrames: droppedFrames };
+    },
     removeAttribute() {},
     addEventListener(name, callback) {
       listeners.set(name, callback);
+    },
+    requestVideoFrameCallback(callback) {
+      if (options.supportsVideoFrameCallback !== false) {
+        pendingVideoFrameCallback = callback;
+        return 1;
+      }
+      return undefined;
     },
     requestFullscreen() {
       fullscreenRequests += 1;
@@ -52,6 +74,8 @@ function createHarness(options = {}) {
     offsetParent: {},
     click() {
       qualityClicks.push(label);
+      const heights = { '流畅': 360, '标清': 480, '高清': 720, '超清': 1080, '1080P': 1080, '4K': 2160, '2160P': 2160 };
+      if (heights[label]) video.videoHeight = heights[label];
     },
     getAttribute() {
       return '';
@@ -114,11 +138,15 @@ function createHarness(options = {}) {
     MutationObserver,
     Promise,
     JSON,
-    setInterval() {
+    Date: { now: () => clockMs },
+    setInterval(callback) {
       intervalCount += 1;
+      intervalCallbacks.set(intervalCount, callback);
       return intervalCount;
     },
-    clearInterval() {},
+    clearInterval(id) {
+      intervalCallbacks.delete(id);
+    },
     setTimeout(callback) {
       callback();
       return 1;
@@ -151,6 +179,25 @@ function createHarness(options = {}) {
     },
     triggerMutation() {
       if (harnessObserver) harnessObserver.callback();
+    },
+    triggerFirstFrame() {
+      const callback = pendingVideoFrameCallback;
+      pendingVideoFrameCallback = null;
+      if (callback) callback(0, {});
+    },
+    advanceStableSeconds(seconds) {
+      for (let i = 0; i < seconds; i += 1) {
+        clockMs += 1000;
+        video.currentTime += 1;
+        totalFrames += 30;
+        Array.from(intervalCallbacks.values()).forEach((callback) => callback());
+      }
+    },
+    advanceWithoutPlayback(seconds) {
+      for (let i = 0; i < seconds; i += 1) {
+        clockMs += 1000;
+        Array.from(intervalCallbacks.values()).forEach((callback) => callback());
+      }
     },
   };
 }
@@ -235,24 +282,67 @@ test('a rejected native fullscreen request is not retried on every mutation', as
   assert.equal(harness.fullscreenRequests, 1);
 });
 
-test('highest quality selects the best quality label exposed by the official player', () => {
+test('highest quality ramps one step at a time after stable playback', () => {
   const source = fs.readFileSync(scriptPath, 'utf8');
-  const harness = createHarness({ qualities: ['流畅', '高清', '超清'] });
+  const harness = createHarness({ videoHeight: 480, qualities: ['流畅', '高清', '超清'] });
 
   vm.runInNewContext(source, harness.context);
   harness.context.window.__starflowOfficialFullscreen.setQuality('highest');
 
-  assert.equal(harness.qualityClicks.at(-1), '超清');
+  assert.deepEqual(harness.qualityClicks, [], 'highest must not replace the adaptive stream before a frame is shown');
+  harness.triggerFirstFrame();
+  harness.advanceStableSeconds(7);
+  assert.deepEqual(harness.qualityClicks, [], 'the first quality step must wait for a stable window');
+  harness.advanceStableSeconds(1);
+  assert.deepEqual(harness.qualityClicks, ['高清']);
+  harness.advanceStableSeconds(8);
+  assert.deepEqual(harness.qualityClicks, ['高清', '超清']);
+});
+
+test('highest quality does not downgrade a stream already at the best visible rank', () => {
+  const source = fs.readFileSync(scriptPath, 'utf8');
+  const harness = createHarness({ videoHeight: 480, qualities: ['流畅', '高清', '超清'] });
+
+  vm.runInNewContext(source, harness.context);
+  harness.context.window.__starflowOfficialFullscreen.setQuality('highest');
+  harness.video.videoHeight = 1080;
+  harness.triggerFirstFrame();
+  harness.advanceStableSeconds(20);
+
+  assert.deepEqual(harness.qualityClicks, []);
 });
 
 test('1080p preference degrades to the best available lower official quality', () => {
   const source = fs.readFileSync(scriptPath, 'utf8');
-  const harness = createHarness({ qualities: ['流畅', '高清'] });
+  const harness = createHarness({ videoHeight: 360, qualities: ['流畅', '高清'] });
 
   vm.runInNewContext(source, harness.context);
   harness.context.window.__starflowOfficialFullscreen.setQuality('1080p');
 
+  assert.deepEqual(harness.qualityClicks, [], 'fixed quality must wait until the first frame');
+  harness.triggerFirstFrame();
+  harness.advanceStableSeconds(8);
   assert.equal(harness.qualityClicks.at(-1), '高清');
+});
+
+test('changing the quality preference applies the new ceiling after a stable window', () => {
+  const source = fs.readFileSync(scriptPath, 'utf8');
+  const harness = createHarness({ videoHeight: 480, qualities: ['高清', '超清', '4K'] });
+
+  vm.runInNewContext(source, harness.context);
+  const player = harness.context.window.__starflowOfficialFullscreen;
+  player.setQuality('highest');
+  harness.triggerFirstFrame();
+  harness.advanceStableSeconds(8);
+  harness.advanceStableSeconds(8);
+  harness.advanceStableSeconds(8);
+  assert.deepEqual(harness.qualityClicks, ['高清', '超清', '4K']);
+
+  player.setQuality('720p');
+  harness.advanceStableSeconds(7);
+  assert.deepEqual(harness.qualityClicks, ['高清', '超清', '4K']);
+  harness.advanceStableSeconds(1);
+  assert.deepEqual(harness.qualityClicks, ['高清', '超清', '4K', '高清']);
 });
 
 test('auto quality leaves the official player adaptive choice untouched', () => {
@@ -262,9 +352,65 @@ test('auto quality leaves the official player adaptive choice untouched', () => 
   vm.runInNewContext(source, harness.context);
   harness.context.window.__starflowOfficialFullscreen.setQuality('auto');
 
+  harness.triggerFirstFrame();
+  harness.advanceStableSeconds(20);
   assert.deepEqual(harness.qualityClicks, []);
 });
 
+test('highest quality waits for loadeddata and stable playback when frame callbacks are unavailable', () => {
+  const source = fs.readFileSync(scriptPath, 'utf8');
+  const harness = createHarness({ supportsVideoFrameCallback: false, readyState: 0, videoHeight: 480, qualities: ['高清'] });
+
+  vm.runInNewContext(source, harness.context);
+  harness.context.window.__starflowOfficialFullscreen.setQuality('highest');
+  assert.deepEqual(harness.qualityClicks, []);
+  harness.trigger('loadeddata');
+  harness.advanceStableSeconds(8);
+  assert.equal(harness.qualityClicks.at(-1), '高清');
+});
+
+
+test('a stall after a quality upgrade falls back to adaptive playback', () => {
+  const source = fs.readFileSync(scriptPath, 'utf8');
+  const harness = createHarness({ videoHeight: 480, qualities: ['自动', '高清', '超清'] });
+
+  vm.runInNewContext(source, harness.context);
+  harness.context.window.__starflowOfficialFullscreen.setQuality('highest');
+  harness.triggerFirstFrame();
+  harness.advanceStableSeconds(8);
+  assert.equal(harness.qualityClicks.at(-1), '高清');
+
+  harness.trigger('waiting');
+  assert.equal(harness.qualityClicks.at(-1), '自动');
+});
+
+test('fallback uses the nearest lower rank when auto is unavailable', () => {
+  const source = fs.readFileSync(scriptPath, 'utf8');
+  const harness = createHarness({ videoHeight: 480, qualities: ['流畅', '标清', '高清', '超清'] });
+
+  vm.runInNewContext(source, harness.context);
+  harness.context.window.__starflowOfficialFullscreen.setQuality('highest');
+  harness.triggerFirstFrame();
+  harness.advanceStableSeconds(8);
+  assert.equal(harness.qualityClicks.at(-1), '高清');
+
+  harness.trigger('waiting');
+  assert.deepEqual(harness.qualityClicks, ['高清', '标清']);
+});
+
+test('a stalled media clock falls back to adaptive playback', () => {
+  const source = fs.readFileSync(scriptPath, 'utf8');
+  const harness = createHarness({ videoHeight: 480, qualities: ['自动', '高清'] });
+
+  vm.runInNewContext(source, harness.context);
+  harness.context.window.__starflowOfficialFullscreen.setQuality('highest');
+  harness.triggerFirstFrame();
+  harness.advanceStableSeconds(8);
+  assert.equal(harness.qualityClicks.at(-1), '高清');
+
+  harness.advanceWithoutPlayback(3);
+  assert.equal(harness.qualityClicks.at(-1), '自动');
+});
 
 test('reports actual video resolution from the official player', () => {
   const source = fs.readFileSync(scriptPath, 'utf8');

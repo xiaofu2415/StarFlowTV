@@ -1,9 +1,12 @@
 package com.github.tvbox.osc.update;
 
 import android.app.Activity;
+import android.app.ProgressDialog;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.widget.Toast;
@@ -27,6 +30,7 @@ import java.security.MessageDigest;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import okhttp3.Call;
 import okhttp3.Callback;
@@ -155,10 +159,27 @@ public final class StarFlowUpdateManager {
     }
 
     private static void download(Activity activity, UpdateManifest manifest, UpdateManifest.Apk apk) {
+        activity.runOnUiThread(() -> downloadOnUiThread(activity, apk));
+    }
+
+    private static void downloadOnUiThread(Activity activity, UpdateManifest.Apk apk) {
+        if (activity.isFinishing() || activity.isDestroyed()) return;
+        ProgressDialog progress = new ProgressDialog(activity);
+        progress.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
+        progress.setTitle("正在下载更新");
+        progress.setMessage("准备下载…");
+        progress.setMax(100);
+        progress.setProgress(0);
+        progress.setIndeterminate(false);
+        progress.setCancelable(false);
+        progress.show();
+
+        AtomicInteger lastReportedPercent = new AtomicInteger(-1);
         Request request = new Request.Builder().url(apk.downloadUrl).get().build();
         OkHttp.client().newCall(request).enqueue(new Callback() {
             @Override public void onFailure(Call call, java.io.IOException error) {
                 LOG.e("StarFlow APK download failed: " + error.getClass().getSimpleName());
+                dismissDownloadProgress(activity, progress);
                 showMessage(activity, "更新下载失败，请检查网络连接");
             }
 
@@ -170,6 +191,7 @@ public final class StarFlowUpdateManager {
                     if (!response.isSuccessful() || body == null
                             || body.contentLength() <= 0 || body.contentLength() > MAX_APK_BYTES
                             || body.contentLength() != apk.size) {
+                        dismissDownloadProgress(activity, progress);
                         showMessage(activity, "更新文件大小校验失败");
                         return;
                     }
@@ -184,21 +206,65 @@ public final class StarFlowUpdateManager {
                             if (copied > MAX_APK_BYTES) throw new java.io.IOException("APK too large");
                             digest.update(buffer, 0, read);
                             output.write(buffer, 0, read);
+                            int percent = ApkDownloadProgress.percent(copied, apk.size);
+                            if (lastReportedPercent.getAndSet(percent) != percent) {
+                                long downloaded = copied;
+                                updateDownloadProgress(activity, progress, percent, downloaded, apk.size);
+                            }
                         }
                     }
+                    setDownloadStatus(activity, progress, "下载完成，正在校验文件…", 100);
                     if (copied != apk.size || !hex(digest.digest()).equalsIgnoreCase(apk.sha256)
                             || !verifyArchive(activity, target, apk.certificateSha256)) {
                         target.delete();
+                        dismissDownloadProgress(activity, progress);
                         showMessage(activity, "更新文件校验失败，已取消安装");
                         return;
                     }
-                    activity.runOnUiThread(() -> install(activity, target));
+                    activity.runOnUiThread(() -> {
+                        if (activity.isFinishing() || activity.isDestroyed()) {
+                            dismissDownloadProgress(activity, progress);
+                            return;
+                        }
+                        setDownloadStatus(activity, progress, "校验通过，正在打开系统安装器…", 100);
+                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                            dismissDownloadProgress(activity, progress);
+                            install(activity, target);
+                        }, 500);
+                    });
                 } catch (Exception error) {
                     target.delete();
                     LOG.e("StarFlow APK verification failed: " + error.getClass().getSimpleName());
+                    dismissDownloadProgress(activity, progress);
                     showMessage(activity, "更新下载失败，请稍后重试");
                 }
             }
+        });
+    }
+
+    private static void updateDownloadProgress(Activity activity, ProgressDialog progress,
+                                              int percent, long downloaded, long total) {
+        activity.runOnUiThread(() -> {
+            if (!progress.isShowing()) return;
+            progress.setProgress(percent);
+            progress.setMessage(String.format(Locale.getDefault(),
+                    "已下载 %.1f / %.1f MB",
+                    downloaded / (1024.0 * 1024.0), total / (1024.0 * 1024.0)));
+        });
+    }
+
+    private static void setDownloadStatus(Activity activity, ProgressDialog progress,
+                                          String message, int percent) {
+        activity.runOnUiThread(() -> {
+            if (!progress.isShowing()) return;
+            progress.setProgress(percent);
+            progress.setMessage(message);
+        });
+    }
+
+    private static void dismissDownloadProgress(Activity activity, ProgressDialog progress) {
+        activity.runOnUiThread(() -> {
+            if (progress.isShowing()) progress.dismiss();
         });
     }
 

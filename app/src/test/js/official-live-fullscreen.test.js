@@ -74,6 +74,8 @@ function createHarness(options = {}) {
     offsetParent: {},
     click() {
       qualityClicks.push(label);
+      const heights = { '流畅': 360, '标清': 480, '高清': 720, '超清': 1080, '1080P': 1080, '4K': 2160, '2160P': 2160 };
+      if (heights[label]) video.videoHeight = heights[label];
     },
     getAttribute() {
       return '';
@@ -321,6 +323,26 @@ test('1080p preference degrades to the best available lower official quality', (
   harness.triggerFirstFrame();
   harness.advanceStableSeconds(8);
   assert.equal(harness.qualityClicks.at(-1), '高清');
+});
+
+test('changing the quality preference applies the new ceiling after a stable window', () => {
+  const source = fs.readFileSync(scriptPath, 'utf8');
+  const harness = createHarness({ videoHeight: 480, qualities: ['高清', '超清', '4K'] });
+
+  vm.runInNewContext(source, harness.context);
+  const player = harness.context.window.__starflowOfficialFullscreen;
+  player.setQuality('highest');
+  harness.triggerFirstFrame();
+  harness.advanceStableSeconds(8);
+  harness.advanceStableSeconds(8);
+  harness.advanceStableSeconds(8);
+  assert.deepEqual(harness.qualityClicks, ['高清', '超清', '4K']);
+
+  player.setQuality('720p');
+  harness.advanceStableSeconds(7);
+  assert.deepEqual(harness.qualityClicks, ['高清', '超清', '4K']);
+  harness.advanceStableSeconds(1);
+  assert.deepEqual(harness.qualityClicks, ['高清', '超清', '4K', '高清']);
 });
 
 test('auto quality leaves the official player adaptive choice untouched', () => {

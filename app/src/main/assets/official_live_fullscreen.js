@@ -350,6 +350,9 @@
       if (adaptive && typeof adaptive.node.click === 'function') adaptive.node.click();
       manuallySelectedQuality = false;
       selectedQualityRank = resolutionRank(boundVideo.videoHeight);
+    } else if (normalized !== 'auto' && manuallySelectedQuality && boundVideo) {
+      selectedQualityRank = resolutionRank(boundVideo.videoHeight);
+      manuallySelectedQuality = false;
     }
     if (firstFrameSeen) {
       qualityStableSince = Date.now();

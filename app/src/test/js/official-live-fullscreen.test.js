@@ -191,6 +191,12 @@ function createHarness(options = {}) {
         Array.from(intervalCallbacks.values()).forEach((callback) => callback());
       }
     },
+    advanceWithoutPlayback(seconds) {
+      for (let i = 0; i < seconds; i += 1) {
+        clockMs += 1000;
+        Array.from(intervalCallbacks.values()).forEach((callback) => callback());
+      }
+    },
   };
 }
 
@@ -340,6 +346,20 @@ test('a stall after a quality upgrade falls back to adaptive playback', () => {
   assert.equal(harness.qualityClicks.at(-1), '高清');
 
   harness.trigger('waiting');
+  assert.equal(harness.qualityClicks.at(-1), '自动');
+});
+
+test('a stalled media clock falls back to adaptive playback', () => {
+  const source = fs.readFileSync(scriptPath, 'utf8');
+  const harness = createHarness({ videoHeight: 480, qualities: ['自动', '高清'] });
+
+  vm.runInNewContext(source, harness.context);
+  harness.context.window.__starflowOfficialFullscreen.setQuality('highest');
+  harness.triggerFirstFrame();
+  harness.advanceStableSeconds(8);
+  assert.equal(harness.qualityClicks.at(-1), '高清');
+
+  harness.advanceWithoutPlayback(3);
   assert.equal(harness.qualityClicks.at(-1), '自动');
 });
 

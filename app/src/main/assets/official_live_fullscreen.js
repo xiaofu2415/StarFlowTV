@@ -208,6 +208,7 @@
     firstFrameSeen = true;
     videoWaiting = false;
     nonAdvancingPollCount = 0;
+    selectedQualityRank = resolutionRank(video.videoHeight);
     qualityStableSince = Date.now();
     lastObservedCurrentTime = Number(video.currentTime) || 0;
     var stats = readFrameStats(video);

@@ -6,9 +6,9 @@ import org.junit.Test;
 
 public final class OfficialLiveQualityPreferenceTest {
     @Test public void unsetQualityDefaultsToAdaptiveMode() {
-        assertEquals("auto", OfficialLiveQualityPreference.DEFAULT);
-        assertEquals("auto", OfficialLiveQualityPreference.normalize(null));
-        assertEquals("auto", OfficialLiveQualityPreference.normalize(""));
+        assertEquals("highest", OfficialLiveQualityPreference.DEFAULT);
+        assertEquals("highest", OfficialLiveQualityPreference.normalize(null));
+        assertEquals("highest", OfficialLiveQualityPreference.normalize(""));
     }
 
     @Test public void keepsExplicitUserQualityChoices() {
@@ -19,6 +19,6 @@ public final class OfficialLiveQualityPreferenceTest {
     }
 
     @Test public void unsupportedPreferenceFallsBackToAdaptiveMode() {
-        assertEquals("auto", OfficialLiveQualityPreference.normalize("invalid"));
+        assertEquals("highest", OfficialLiveQualityPreference.normalize("invalid"));
     }
 }

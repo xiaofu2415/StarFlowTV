@@ -28,7 +28,7 @@ function createHarness(options = {}) {
     videoWidth: options.videoWidth || 1920,
     videoHeight: options.videoHeight || 1080,
     currentTime: 0,
-    readyState: 4,
+    readyState: options.readyState === undefined ? 4 : options.readyState,
     buffered: {
       length: 1,
       start() { return 0; },
@@ -318,7 +318,7 @@ test('auto quality leaves the official player adaptive choice untouched', () => 
 
 test('highest quality waits for loadeddata and stable playback when frame callbacks are unavailable', () => {
   const source = fs.readFileSync(scriptPath, 'utf8');
-  const harness = createHarness({ supportsVideoFrameCallback: false, videoHeight: 480, qualities: ['高清'] });
+  const harness = createHarness({ supportsVideoFrameCallback: false, readyState: 0, videoHeight: 480, qualities: ['高清'] });
 
   vm.runInNewContext(source, harness.context);
   harness.context.window.__starflowOfficialFullscreen.setQuality('highest');

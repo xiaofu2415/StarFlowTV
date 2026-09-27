@@ -1,4 +1,4 @@
-name: Dispatch StarFlowTV v1.4.8 production OTA
+name: Dispatch StarFlowTV v1.4.9 production OTA
 
 on:
   push:
@@ -9,6 +9,7 @@ on:
       - .github/workflows/production-signing.yml
       - app/build.gradle
       - app/src/main/java/com/github/tvbox/osc/official/OfficialLiveCatalog.java
+      - app/src/main/java/com/github/tvbox/osc/official/OfficialLiveUrlPolicy.java
 
 permissions:
   actions: write
@@ -27,4 +28,4 @@ jobs:
             "repos/${GITHUB_REPOSITORY}/actions/workflows/production-signing.yml/dispatches" \
             -f ref=main \
             -f 'inputs[release_ref]=main' \
-            -f 'inputs[release_notes]=修正内置 CCTV-9 和 CCTV-14 的央视官方网页入口，并将官方直播分组置顶。'
+            -f 'inputs[release_notes]=修复 CCTV-6、CCTV-7、CCTV-8、CCTV-9 官方直播兼容性：放行央视 cctv.cn 官方资源域名，并将 CCTV-9 切换到移动直播页。'

@@ -34,6 +34,10 @@ public class OfficialLiveUrlPolicyTest {
         assertTrue(OfficialLiveUrlPolicy.isAllowedNavigationUrl("https://tv.cctv.com/live/cctv1/"));
         assertTrue(OfficialLiveUrlPolicy.isAllowedResourceHost("p2.img.cctvpic.com"));
         assertTrue(OfficialLiveUrlPolicy.isAllowedResourceHost("live.cctv.com"));
+        assertTrue(OfficialLiveUrlPolicy.isAllowedResourceHost("tv.cctv.cn"));
+        assertTrue(OfficialLiveUrlPolicy.isAllowedResourceHost("local.cctv.cn"));
+        assertTrue(OfficialLiveUrlPolicy.isAllowedResourceHost("app.cctv.cn"));
+        assertTrue(OfficialLiveUrlPolicy.isAllowedResourceHost("vip.sports.cctv.cn"));
         assertFalse(OfficialLiveUrlPolicy.isAllowedNavigationUrl("https://example.com/redirect"));
         assertFalse(OfficialLiveUrlPolicy.isAllowedResourceHost("p2.img.cctvpic.com.evil.example"));
         assertFalse(OfficialLiveUrlPolicy.isAllowedResourceHost("example.com"));
@@ -44,6 +48,8 @@ public class OfficialLiveUrlPolicyTest {
                 "https://p2.img.cctvpic.com/image.jpg?size=large"));
         assertTrue(OfficialLiveUrlPolicy.isAllowedResourceUrl(
                 "https://live.cctv.com/player.js"));
+        assertTrue(OfficialLiveUrlPolicy.isAllowedResourceUrl(
+                "https://tv.cctv.cn/live/cctv9/player.js"));
         assertTrue(OfficialLiveUrlPolicy.isAllowedResourceUrl(
                 "http://live.cctv.com/player.js"));
         assertFalse(OfficialLiveUrlPolicy.isAllowedResourceUrl(

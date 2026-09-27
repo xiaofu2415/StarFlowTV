@@ -297,6 +297,19 @@ test('highest quality ramps one step at a time after stable playback', () => {
   assert.deepEqual(harness.qualityClicks, ['高清', '超清']);
 });
 
+test('highest quality does not downgrade a stream already at the best visible rank', () => {
+  const source = fs.readFileSync(scriptPath, 'utf8');
+  const harness = createHarness({ videoHeight: 480, qualities: ['流畅', '高清', '超清'] });
+
+  vm.runInNewContext(source, harness.context);
+  harness.context.window.__starflowOfficialFullscreen.setQuality('highest');
+  harness.video.videoHeight = 1080;
+  harness.triggerFirstFrame();
+  harness.advanceStableSeconds(20);
+
+  assert.deepEqual(harness.qualityClicks, []);
+});
+
 test('1080p preference degrades to the best available lower official quality', () => {
   const source = fs.readFileSync(scriptPath, 'utf8');
   const harness = createHarness({ videoHeight: 360, qualities: ['流畅', '高清'] });

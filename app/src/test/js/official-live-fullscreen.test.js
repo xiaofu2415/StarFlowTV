@@ -384,6 +384,20 @@ test('a stall after a quality upgrade falls back to adaptive playback', () => {
   assert.equal(harness.qualityClicks.at(-1), '自动');
 });
 
+test('fallback uses the nearest lower rank when auto is unavailable', () => {
+  const source = fs.readFileSync(scriptPath, 'utf8');
+  const harness = createHarness({ videoHeight: 480, qualities: ['流畅', '标清', '高清', '超清'] });
+
+  vm.runInNewContext(source, harness.context);
+  harness.context.window.__starflowOfficialFullscreen.setQuality('highest');
+  harness.triggerFirstFrame();
+  harness.advanceStableSeconds(8);
+  assert.equal(harness.qualityClicks.at(-1), '高清');
+
+  harness.trigger('waiting');
+  assert.deepEqual(harness.qualityClicks, ['高清', '标清']);
+});
+
 test('a stalled media clock falls back to adaptive playback', () => {
   const source = fs.readFileSync(scriptPath, 'utf8');
   const harness = createHarness({ videoHeight: 480, qualities: ['自动', '高清'] });

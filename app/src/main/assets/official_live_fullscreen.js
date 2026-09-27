@@ -9,6 +9,7 @@
   var QUALITY_STABILITY_MS = 8000;
   var QUALITY_MONITOR_MS = 1000;
   var QUALITY_FALLBACK_COOLDOWN_MS = 30000;
+  var QUALITY_STALL_POLL_THRESHOLD = 3;
 
   if (window[API_NAME]) {
     window[API_NAME].enter();
@@ -28,6 +29,7 @@
   var lastTotalFrames = null;
   var lastDroppedFrames = null;
   var videoWaiting = false;
+  var nonAdvancingPollCount = 0;
   var selectedQualityRank = 0;
   var manuallySelectedQuality = false;
   var qualityCooldownUntil = 0;
@@ -189,6 +191,7 @@
     lastTotalFrames = null;
     lastDroppedFrames = null;
     videoWaiting = !!(video && video.paused);
+    nonAdvancingPollCount = 0;
     selectedQualityRank = resolutionRank(video && video.videoHeight);
     manuallySelectedQuality = false;
     qualityCooldownUntil = 0;
@@ -204,6 +207,7 @@
     if (!fullscreenActive || !video || video !== boundVideo || firstFrameSeen) return;
     firstFrameSeen = true;
     videoWaiting = false;
+    nonAdvancingPollCount = 0;
     qualityStableSince = Date.now();
     lastObservedCurrentTime = Number(video.currentTime) || 0;
     var stats = readFrameStats(video);
@@ -242,6 +246,7 @@
   function markVideoUnstable(video) {
     if (!video || video !== boundVideo) return;
     videoWaiting = true;
+    nonAdvancingPollCount = 0;
     qualityStableSince = null;
     fallbackAfterStall(video);
   }
@@ -254,6 +259,12 @@
     var advancing = lastObservedCurrentTime !== null
       && isFinite(currentTime) && currentTime > lastObservedCurrentTime + 0.02;
     lastObservedCurrentTime = isFinite(currentTime) ? currentTime : null;
+    nonAdvancingPollCount = advancing ? 0 : nonAdvancingPollCount + 1;
+    if (nonAdvancingPollCount >= QUALITY_STALL_POLL_THRESHOLD && manuallySelectedQuality) {
+      nonAdvancingPollCount = 0;
+      qualityStableSince = null;
+      fallbackAfterStall(video);
+    }
 
     var stable = advancing && !videoWaiting;
     var stats = readFrameStats(video);
@@ -306,6 +317,7 @@
     clearQualityRetry();
     selectedQualityRank = candidate.rank;
     manuallySelectedQuality = true;
+    nonAdvancingPollCount = 0;
     qualityStableSince = now;
     lastObservedCurrentTime = Number(boundVideo.currentTime) || 0;
     var stats = readFrameStats(boundVideo);

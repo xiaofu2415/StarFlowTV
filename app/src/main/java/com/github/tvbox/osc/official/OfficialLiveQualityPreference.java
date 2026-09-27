@@ -2,7 +2,7 @@ package com.github.tvbox.osc.official;
 
 /** Quality preference used only by the built-in official WebView player. */
 public final class OfficialLiveQualityPreference {
-    public static final String DEFAULT = "auto";
+    public static final String DEFAULT = "highest";
 
     private OfficialLiveQualityPreference() {
     }

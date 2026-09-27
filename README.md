@@ -2,14 +2,14 @@
 
 StarFlowTV 是面向 Android TV 的个人使用播放器：启动后直接进入直播，支持遥控器换台、多线路、自动换源与本地缓存；影视作为二级入口接入 TVBoxOS 点播能力。
 
-> 当前稳定版本：**v1.4.7**（versionCode 13）。生产签名、在线配置和 OTA 发布链路均已启用。
+> 当前稳定版本：**v1.4.9**（versionCode 15）。生产签名、在线配置和 OTA 发布链路均已启用。
 
 ## 当前状态
 
 | 项目 | 状态 |
 | --- | --- |
 | applicationId | tv.starflow.player |
-| versionName / versionCode | 1.4.7 / 13 |
+| versionName / versionCode | 1.4.9 / 15 |
 | 代码分支 | main |
 | 生产签名 | ready；keyId: starflow-production-2026-09-r2 |
 | APK 架构 | armeabi-v7a / arm64-v8a / universal |

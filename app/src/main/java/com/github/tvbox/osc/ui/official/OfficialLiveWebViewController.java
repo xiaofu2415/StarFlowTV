@@ -59,10 +59,14 @@ public final class OfficialLiveWebViewController {
     private final LiveForegroundGate foregroundGate = new LiveForegroundGate();
     // Interception callbacks run off the UI thread and must see instance replacement.
     private volatile WebView webView;
+    // Keep one blank WebView warm while an official channel is playing. This
+    // avoids paying WebView construction cost on every D-pad channel switch.
+    private WebView standbyWebView;
     private View customView;
     private WebChromeClient.CustomViewCallback customViewCallback;
     private int normalSystemUiVisibility;
     private boolean webFullscreenActive;
+    private boolean readyNotified;
     private boolean released;
     private String qualityPreference = "highest";
 
@@ -101,15 +105,25 @@ public final class OfficialLiveWebViewController {
             return;
         }
 
-        // WebView callbacks have no reliable per-load token, even for identical URLs.
-        // Invalidate and destroy A before creating B so stale callbacks cannot act on B.
-        requestTracker.stop();
+        // Official-to-official switching rotates between two WebView instances.
+        // Callbacks from the parked instance are rejected by the existing
+        // "view != webView" guard, while the next channel avoids cold WebView setup.
+        boolean replacingActivePage = requestTracker.stop();
         hideCustomView();
         webFullscreenActive = false;
-        WebView oldView = webView;
-        webView = null;
-        destroyWebView(oldView);
-        ensureWebView();
+        readyNotified = false;
+
+        if (replacingActivePage && webView != null) {
+            WebView oldView = webView;
+            WebView nextView = standbyWebView;
+            standbyWebView = null;
+            if (nextView == null) nextView = createAttachedWebView();
+            webView = nextView;
+            parkAsStandby(oldView);
+        } else {
+            ensureWebView();
+        }
+
         WebView view = webView;
         String requestedUrl = pageUrl.trim();
         requestTracker.begin(requestedUrl);
@@ -143,6 +157,11 @@ public final class OfficialLiveWebViewController {
             webView.onPause();
             webView.setVisibility(View.GONE);
         }
+        // Leaving the official group should not keep an extra renderer alive.
+        WebView standby = standbyWebView;
+        standbyWebView = null;
+        destroyWebView(standby);
+        readyNotified = false;
         hideSurface();
     }
 
@@ -156,8 +175,11 @@ public final class OfficialLiveWebViewController {
         hideSurface();
 
         WebView view = webView;
+        WebView standby = standbyWebView;
         webView = null;
+        standbyWebView = null;
         destroyWebView(view);
+        destroyWebView(standby);
     }
 
     public boolean isShowing() {
@@ -167,10 +189,35 @@ public final class OfficialLiveWebViewController {
 
     private void ensureWebView() {
         if (webView != null || released) return;
-        webView = createWebView(context);
-        container.addView(webView, 0, new ViewGroup.LayoutParams(
+        webView = createAttachedWebView();
+    }
+
+    private WebView createAttachedWebView() {
+        WebView view = createWebView(context);
+        container.addView(view, 0, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
+        view.setVisibility(View.GONE);
+        view.onPause();
+        return view;
+    }
+
+    private void ensureStandbyWebView() {
+        if (released || standbyWebView != null) return;
+        standbyWebView = createAttachedWebView();
+    }
+
+    private void parkAsStandby(@Nullable WebView view) {
+        if (view == null || view == webView) return;
+        view.stopLoading();
+        view.loadUrl(INTERNAL_BLANK_URL);
+        view.onPause();
+        view.setVisibility(View.GONE);
+        WebView previousStandby = standbyWebView;
+        standbyWebView = view;
+        if (previousStandby != null && previousStandby != view) {
+            destroyWebView(previousStandby);
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -180,6 +227,8 @@ public final class OfficialLiveWebViewController {
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
+        // Preserve the Chromium HTTP cache between official channel switches.
+        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
         settings.setAllowFileAccessFromFileURLs(false);
@@ -220,6 +269,20 @@ public final class OfficialLiveWebViewController {
         view.evaluateJavascript(
                 "window.__starflowOfficialFullscreen&&window.__starflowOfficialFullscreen.setQuality('"
                         + qualityPreference + "');", null);
+    }
+
+    private void bootstrapVisiblePage(WebView view) {
+        if (view == null || view != webView || !requestTracker.isActive()) return;
+        setLoadingVisible(false);
+        enterWebFullscreen(view);
+        applyQualityPreference(view);
+        scheduleResolutionReport(view);
+        if (!readyNotified) {
+            readyNotified = true;
+            listener.onReady();
+        }
+        // Prepare the next official channel switch after the visible page has committed.
+        view.post(this::ensureStandbyWebView);
     }
 
     private void scheduleResolutionReport(WebView view) {
@@ -423,14 +486,20 @@ public final class OfficialLiveWebViewController {
         }
 
         @Override
+        public void onPageCommitVisible(WebView view, String url) {
+            if (view != webView) return;
+            if (!requestTracker.matches(url)) return;
+            // Do not wait for recommendation images/analytics/subresources to finish.
+            // The injected script already retries until the actual player/video exists.
+            bootstrapVisiblePage(view);
+        }
+
+        @Override
         public void onPageFinished(WebView view, String url) {
             if (view != webView) return;
             if (!requestTracker.matches(url)) return;
-            setLoadingVisible(false);
-            enterWebFullscreen(view);
-            applyQualityPreference(view);
-            scheduleResolutionReport(view);
-            listener.onReady();
+            // Fallback for WebView implementations where commit-visible is delayed.
+            bootstrapVisiblePage(view);
         }
 
         @Override
@@ -458,7 +527,13 @@ public final class OfficialLiveWebViewController {
 
         @Override
         public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
-            if (view != webView) return true;
+            if (view != webView) {
+                if (view == standbyWebView) {
+                    standbyWebView = null;
+                    destroyCrashedWebView(view);
+                }
+                return true;
+            }
             boolean notifyListener = !released && requestTracker.isActive();
             requestTracker.stop();
             hideCustomView();

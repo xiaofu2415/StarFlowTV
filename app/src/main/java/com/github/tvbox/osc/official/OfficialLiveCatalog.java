@@ -121,7 +121,7 @@ public final class OfficialLiveCatalog {
         List<OfficialLiveChannel> channels = new ArrayList<>();
         for (int number = 1; number <= 17; number++) {
             String pagePath;
-            if (number == 9) pagePath = "cctvjilu/";
+            if (number == 9) pagePath = "cctvjilu/m/";
             else if (number == 14) pagePath = "cctvchild/";
             else pagePath = "cctv" + number + "/m/";
             add(channels, "cctv-" + number, "CCTV-" + number, pagePath);

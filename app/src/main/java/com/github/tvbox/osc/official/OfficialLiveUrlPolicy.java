@@ -6,6 +6,7 @@ import java.util.Locale;
 public final class OfficialLiveUrlPolicy {
     private static final String[] ALLOWED_RESOURCE_DOMAINS = {
             "cctv.com",
+            "cctv.cn",
             "cctvpic.com",
             "cntv.cn",
             "myalicdn.com",

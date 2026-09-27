@@ -20,7 +20,7 @@ public class OfficialLiveCatalogTest {
             {"cctv-3", "CCTV-3", "cctv3/m/"}, {"cctv-4", "CCTV-4", "cctv4/m/"},
             {"cctv-5", "CCTV-5", "cctv5/m/"}, {"cctv-6", "CCTV-6", "cctv6/m/"},
             {"cctv-7", "CCTV-7", "cctv7/m/"}, {"cctv-8", "CCTV-8", "cctv8/m/"},
-            {"cctv-9", "CCTV-9", "cctvjilu/"}, {"cctv-10", "CCTV-10", "cctv10/m/"},
+            {"cctv-9", "CCTV-9", "cctvjilu/m/"}, {"cctv-10", "CCTV-10", "cctv10/m/"},
             {"cctv-11", "CCTV-11", "cctv11/m/"}, {"cctv-12", "CCTV-12", "cctv12/m/"},
             {"cctv-13", "CCTV-13", "cctv13/m/"}, {"cctv-14", "CCTV-14", "cctvchild/"},
             {"cctv-15", "CCTV-15", "cctv15/m/"}, {"cctv-16", "CCTV-16", "cctv16/m/"},
@@ -130,11 +130,12 @@ public class OfficialLiveCatalogTest {
         }
     }
 
-    @Test public void onlyCctvNineAndFourteenUseNonMobileOfficialLivePages() {
+    @Test public void cctvNineUsesMobileDocumentaryPageAndFourteenUsesChildPage() {
         String base = "https://tv.cctv.com/live/";
         for (OfficialLiveChannel channel : OfficialLiveCatalog.builtIn()) {
             if ("cctv-9".equals(channel.getId())) {
-                assertEquals(base + "cctvjilu/", channel.getPageUrl());
+                assertEquals(base + "cctvjilu/m/", channel.getPageUrl());
+                assertTrue(channel.getPageUrl().contains("/m/"));
             } else if ("cctv-14".equals(channel.getId())) {
                 assertEquals(base + "cctvchild/", channel.getPageUrl());
             } else {

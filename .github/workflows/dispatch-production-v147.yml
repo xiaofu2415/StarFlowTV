@@ -1,4 +1,4 @@
-name: Dispatch StarFlowTV v1.4.9 production OTA
+name: Dispatch StarFlowTV v1.4.10 production OTA
 
 on:
   push:
@@ -10,6 +10,11 @@ on:
       - app/build.gradle
       - app/src/main/java/com/github/tvbox/osc/official/OfficialLiveCatalog.java
       - app/src/main/java/com/github/tvbox/osc/official/OfficialLiveUrlPolicy.java
+      - app/src/main/java/com/github/tvbox/osc/official/OfficialLiveQualityPreference.java
+      - app/src/main/java/com/github/tvbox/osc/ui/official/OfficialLiveWebViewController.java
+      - app/src/main/java/com/github/tvbox/osc/update/StarFlowUpdateManager.java
+      - app/src/main/java/com/github/tvbox/osc/update/ApkDownloadProgress.java
+      - app/src/main/assets/official_live_fullscreen.js
 
 permissions:
   actions: write
@@ -28,4 +33,4 @@ jobs:
             "repos/${GITHUB_REPOSITORY}/actions/workflows/production-signing.yml/dispatches" \
             -f ref=main \
             -f 'inputs[release_ref]=main' \
-            -f 'inputs[release_notes]=修复 CCTV-6、CCTV-7、CCTV-8、CCTV-9 官方直播兼容性：放行央视 cctv.cn 官方资源域名，并将 CCTV-9 切换到移动直播页。'
+            -f 'inputs[release_notes]=官方直播先自适应呈现首帧，播放稳定后逐档提升画质，卡顿时回退以减少换台等待；OTA 下载显示进度、文件大小和校验状态。普通 IPTV 播放与换台逻辑保持原样。'
